@@ -9,7 +9,7 @@
 <title>MathNotes</title>
 <style>
 /* ============================================================
-   MathNotes v4.0 "Samsung Edition"
+   MathNotes v5.1 "S-Class 5" - Samsung Notes feature parity
    Single-file handwriting notes for iPad 3 (iOS 9.3.5 / Safari 9).
    All CSS below is Safari 9 safe: flexbox without spacing props,
    plain values, rgba shadows, no custom properties, no grid.
@@ -74,13 +74,26 @@ input { font: inherit; }
   text-align: center;
 }
 .note-card {
+  position: relative;
   display: inline-block; width: 46%; margin: 1.6%;
   background: #FFFFFF; border-radius: 16px;
   padding: 14px 16px; text-align: left;
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   vertical-align: top; min-height: 96px;
+  cursor: pointer;
 }
 .note-card:active { background: #F7F9FB; }
+.star-btn {
+  position: absolute; right: 6px; top: 6px;
+  width: 38px; height: 38px;
+  display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center;
+  -webkit-justify-content: center; justify-content: center;
+  color: #C0C4C8; border-radius: 50%;
+}
+.star-btn:active { background: #F0F2F5; }
+.star-btn.on { color: #F58300; }
+.star-btn.on svg path { fill: #F58300; }
 .note-card .nc-title {
   font-size: 16px; font-weight: 600; color: #1B1B1B;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -147,7 +160,7 @@ input { font: inherit; }
 
 /* ---------- floating tool capsule (Samsung Tab style) ---------- */
 #toolbar {
-  position: absolute; right: 10px; top: 50%; margin-top: -150px;
+  position: absolute; right: 10px; top: 50%; margin-top: -198px;
   width: 54px; border-radius: 27px;
   background: rgba(255,255,255,0.97);
   box-shadow: 0 4px 16px rgba(0,0,0,0.14);
@@ -287,13 +300,141 @@ input { font: inherit; }
   background: rgba(255,255,255,0.16); border-radius: 18px; padding: 10px 26px;
 }
 
-/* scroll position pill (bottom-left, Samsung style) */
+/* scroll position + zoom pill (bottom-left, Samsung style).
+   Lives OUTSIDE canvasWrap so taps are not swallowed by the
+   canvas touch handlers (tap = go to page). */
 #scrollPill {
   position: absolute; left: 14px; bottom: 14px;
   background: rgba(38,38,38,0.85); color: #FFFFFF;
   font-size: 12px; padding: 5px 12px; border-radius: 12px;
-  z-index: 14; display: none; pointer-events: none;
+  z-index: 14; display: none;
 }
+
+/* search bar (home) */
+#searchBar {
+  position: absolute; top: 56px; left: 0; right: 0; height: 54px;
+  background: #FFFFFF; border-bottom: 1px solid #E5E5E5;
+  display: none; padding: 9px 14px; z-index: 12;
+}
+#searchInput {
+  display: block; height: 36px; width: 100%;
+  background: #F1F2F4; border: 0; outline: 0;
+  border-radius: 10px; padding: 0 64px 0 12px;
+  font-size: 15px; color: #1B1B1B;
+}
+#searchCancelBtn {
+  position: absolute; right: 14px; top: 16px;
+  color: #0381FE; font-size: 14px; font-weight: 600;
+  padding: 0 2px;
+}
+
+/* ---------- shape assist row (pen palette) ---------- */
+#shapeRow { margin-top: 12px; }
+#shapeRow .sh-h { font-size: 12px; color: #8C8C8C; margin-bottom: 6px; }
+.sh-modes { display: -webkit-flex; display: flex; }
+.sh-mode {
+  -webkit-flex: 1; flex: 1; height: 34px; border-radius: 10px;
+  background: #F4F6F8; color: #474747; font-size: 13px; font-weight: 600;
+}
+.sh-mode.first { border-radius: 10px 3px 3px 10px; margin-right: 2px; }
+.sh-mode.mid { margin: 0 2px; }
+.sh-mode.last { border-radius: 3px 10px 10px 3px; }
+.sh-mode.on { background: rgba(3,129,254,0.12); color: #0381FE; }
+
+/* ---------- selection floating action bar ---------- */
+#selBar {
+  position: absolute; display: none; z-index: 26;
+  height: 44px; border-radius: 22px;
+  background: rgba(255,255,255,0.97);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+  border: 1px solid rgba(0,0,0,0.05);
+  padding: 0 4px;
+}
+#selBar button {
+  height: 36px; padding: 0 15px; border-radius: 18px;
+  font-size: 13px; font-weight: 600; color: #474747;
+}
+#selBar button:active { background: #EFF0F2; }
+#selDelBtn { color: #E2231A; }
+#selBar button.selz { width: 34px; padding: 0; font-size: 17px; font-weight: 700; color: #0381FE; }
+
+/* ---------- text editor overlay ---------- */
+#textOverlay {
+  position: absolute; display: none; z-index: 28;
+  width: 284px; background: #FFFFFF; border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+  border: 1px solid rgba(0,0,0,0.06);
+  padding: 10px 12px 6px 12px;
+}
+#textArea {
+  display: block; width: 100%; height: 88px;
+  border: 0; outline: 0; resize: none;
+  background: transparent; color: #1B1B1B;
+  font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  line-height: 1.32; padding: 0;
+}
+#textBar {
+  display: -webkit-flex; display: flex;
+  -webkit-justify-content: flex-end; justify-content: flex-end;
+}
+#textCancelBtn { color: #8C8C8C; font-size: 14px; padding: 8px 12px; }
+#textDoneBtn { color: #0381FE; font-size: 14px; font-weight: 600; padding: 8px 12px; }
+
+/* ============================================================
+   DARK THEME (Samsung Notes dark mode)
+   Applied by toggling body class "dark".
+   ============================================================ */
+body.dark { background: #0E0F12; color: #E8E8E8; }
+body.dark .hdr { background: #1B1C1F; border-bottom: 1px solid #2A2B2F; }
+body.dark .hdr .ttl { color: #E8E8E8; }
+body.dark .ibtn { color: #B8B8BC; }
+body.dark .ibtn:active { background: #26282C; }
+body.dark .note-card { background: #1D1E22; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+body.dark .note-card:active { background: #24262B; }
+body.dark .note-card .nc-title { color: #E8E8E8; }
+body.dark .note-card .nc-sub { color: #8C8C8C; }
+body.dark .note-card .nc-date { color: #74747C; }
+body.dark .star-btn { color: #5A5C62; }
+body.dark .star-btn.on { color: #F58300; }
+body.dark #notesGrid { background: transparent; }
+body.dark #palmBtn { background: #26282C; color: #B8B8BC; }
+body.dark #palmBtn.med, body.dark #palmBtn.maxed { color: #61A8FF; background: rgba(61,140,255,0.16); }
+body.dark #searchBar { background: #1B1C1F; border-bottom-color: #2A2B2F; }
+body.dark #searchInput { background: #26282C; color: #E8E8E8; }
+body.dark #searchCancelBtn { color: #61A8FF; }
+body.dark #drawer { background: #1B1C1F; }
+body.dark #drawer .d-hdr { border-bottom-color: #2A2B2F; color: #E8E8E8; }
+body.dark .nb-row:active { background: #26282C; }
+body.dark .nb-row .nm { color: #E8E8E8; }
+body.dark #newNbBtn { color: #61A8FF; }
+body.dark #toolbar { background: rgba(29,30,34,0.97); border-color: rgba(255,255,255,0.08); }
+body.dark .tb-btn { color: #A8ABB0; }
+body.dark .tb-btn:active { background: #26282C; }
+body.dark .tb-btn.on { background: rgba(61,140,255,0.18); color: #61A8FF; }
+body.dark .tb-sep { background: #2F3033; }
+body.dark #penPalette, body.dark #eraserPanel, body.dark #moreMenu {
+  background: #1D1E22;
+}
+body.dark .pen-chip { border-color: #33343A; background: #1D1E22; }
+body.dark .pen-chip.on { border-color: #3E8BFF; background: #1E2A38; }
+body.dark .pen-chip .pn { color: #A8ABB0; }
+body.dark #thickLbl, body.dark #eraserPanel .ep-h, body.dark #shapeRow .sh-h { color: #8C8C8C; }
+body.dark .ep-mode, body.dark .sh-mode { background: #26282C; color: #B8B8BC; }
+body.dark .ep-mode.on, body.dark .sh-mode.on { background: rgba(61,140,255,0.18); color: #61A8FF; }
+body.dark .mrow { color: #E8E8E8; }
+body.dark .mrow:active { background: #26282C; }
+body.dark .mrow .val { color: #61A8FF; }
+body.dark #selBar { background: rgba(29,30,34,0.97); border-color: rgba(255,255,255,0.08); }
+body.dark #selBar button { color: #B8B8BC; }
+body.dark #selBar button.selz { color: #6FB1FF; }
+body.dark #selBar button:active { background: #26282C; }
+body.dark #selDelBtn { color: #FF6B62; }
+body.dark #textOverlay { background: #1D1E22; border-color: rgba(255,255,255,0.08); }
+body.dark #textArea { color: #E8E8E8; }
+body.dark #textCancelBtn { color: #8C8C8C; }
+body.dark #textDoneBtn { color: #61A8FF; }
+body.dark #pendingDot { border-color: rgba(97,168,255,0.55); }
+body.dark #toast { background: rgba(20,21,24,0.94); }
 
 /* storage warning banner */
 #warning {
@@ -315,7 +456,15 @@ input { font: inherit; }
       </svg>
     </button>
     <div class="ttl left" id="homeTitle">Notes</div>
-    <span style="width:44px"></span>
+    <button id="searchBtn" class="ibtn" aria-label="Search notes">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+        <circle cx="11" cy="11" r="6.2"/><path d="M15.6 15.6 L20 20"/>
+      </svg>
+    </button>
+  </div>
+  <div id="searchBar">
+    <input id="searchInput" type="text" placeholder="Search notes" autocapitalize="off" autocorrect="off">
+    <button id="searchCancelBtn">Cancel</button>
   </div>
   <div id="notesGrid"></div>
   <div id="emptyHint">No notes yet.<br>Tap the blue + button to create one.</div>
@@ -362,8 +511,11 @@ input { font: inherit; }
   <div id="canvasWrap">
     <canvas id="noteCanvas"></canvas>
     <div id="pendingDot"></div>
-    <div id="scrollPill"></div>
   </div>
+
+  <!-- scroll/zoom pill: outside canvasWrap so its tap is not eaten
+       by the canvas touch handlers (tap = jump to page) -->
+  <div id="scrollPill"></div>
 
   <!-- floating tool capsule -->
   <div id="toolbar">
@@ -374,10 +526,28 @@ input { font: inherit; }
         <path d="M13.5 7 l3.5 3.5"/>
       </svg>
     </button>
+    <button id="selectBtn" class="tb-btn" aria-label="Selection lasso">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <path d="M11.5 4.5 c4.7 0 8 2.9 8 6.4 c0 3.2 -2.4 5.1 -5.2 5.1 c-1.1 0 -1.9 0.7 -1.9 1.7 c0 1.3 1.3 1.9 1.3 3.1 c0 0.7 -0.6 1.2 -1.5 1.2" stroke-dasharray="3.2 2.6"/>
+      </svg>
+    </button>
+    <button id="textBtn" class="tb-btn" aria-label="Insert text">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+        <path d="M5.5 6.2 V4.6 h13 V6.2"/><path d="M12 4.6 v14.8"/><path d="M9.3 19.4 h5.4"/>
+      </svg>
+    </button>
     <button id="eraserBtn" class="tb-btn" aria-label="Eraser">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M9.5 19.5 L4.5 14.5 a1.6 1.6 0 0 1 0-2.3 L12.5 4.2 a1.6 1.6 0 0 1 2.3 0 L19.8 9.2 a1.6 1.6 0 0 1 0 2.3 L12.9 19.5 z"/>
         <path d="M8.5 8.5 l7 7"/>
+      </svg>
+    </button>
+    <button id="handBtn" class="tb-btn" aria-label="Scroll and zoom (hand tool)">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8.6 12.4 V6.3 a1.05 1.05 0 0 1 2.1 0 v4.6"/>
+        <path d="M10.7 10.9 V4.9 a1.05 1.05 0 0 1 2.1 0 v5.6"/>
+        <path d="M12.8 10.5 V6.1 a1.05 1.05 0 0 1 2.1 0 v5.2"/>
+        <path d="M14.9 11.3 V7.9 a1.05 1.05 0 0 1 2.1 0 v5.9 c0 3.7 -2.3 6.4 -5.7 6.4 c-2.6 0 -4.1 -1.1 -5.2 -3.1 l-1.5 -2.7 c-0.5 -0.9 0.5 -1.8 1.4 -1.2 l2 1.5"/>
       </svg>
     </button>
     <div class="tb-sep"></div>
@@ -403,6 +573,14 @@ input { font: inherit; }
       <input type="range" id="thicknessRange" min="0" max="5" step="1" value="2">
     </div>
     <canvas id="previewCanvas" width="536" height="88"></canvas>
+    <div id="shapeRow">
+      <div class="sh-h">Shape assist</div>
+      <div class="sh-modes">
+        <button id="shapeOffBtn" class="sh-mode first on">Off</button>
+        <button id="shapeLineBtn" class="sh-mode mid">Line</button>
+        <button id="shapeShapeBtn" class="sh-mode last">Shapes</button>
+      </div>
+    </div>
     <div id="colorRow"></div>
   </div>
 
@@ -415,6 +593,24 @@ input { font: inherit; }
     </div>
     <div class="ep-h" style="margin-top:12px">Size</div>
     <div id="sizeRow"></div>
+  </div>
+
+  <!-- selection action bar (lasso tool) -->
+  <div id="selBar">
+    <button id="selSmallBtn" class="selz">-</button>
+    <button id="selBigBtn" class="selz">+</button>
+    <button id="selDelBtn">Delete</button>
+    <button id="selCopyBtn">Duplicate</button>
+    <button id="selDoneBtn">Done</button>
+  </div>
+
+  <!-- text editor overlay (insert text tool) -->
+  <div id="textOverlay">
+    <textarea id="textArea" rows="3"></textarea>
+    <div id="textBar">
+      <button id="textCancelBtn">Cancel</button>
+      <button id="textDoneBtn">Done</button>
+    </div>
   </div>
 
   <!-- kebab menu -->
@@ -433,27 +629,31 @@ input { font: inherit; }
 
 <script>
 /* ============================================================
- * MathNotes v4.0 "Samsung Edition"  (deployment marker: SCLASS_V4)
+ * MathNotes v5.1 "S-Class 5"  (deployment marker: SCLASS_V51)
  * Single-file handwriting notes for a 2012 iPad 3 (iOS 9.3.5).
  * Everything is ES5: var, function declarations, no arrow
  * functions, no template strings, no Promises, no Pointer Events.
  *
- * WHAT IS NEW IN v4
- *   - Samsung Notes style interface: floating tool capsule on the
- *     right edge, pen palette with five real pen renderers
- *     (ballpoint, fountain, calligraphy, pencil, highlighter),
- *     ruled scrolling paper with discrete pages.
- *   - Tile-cached rendering: finished strokes are baked into
- *     offscreen tiles so scrolling never redraws every stroke.
- *   - S-Class palm rejection: every new touch is observed as a
- *     "probe". A probe becomes ink only if it MOVES like writing
- *     (speed + direction coherence + travel). Palm contacts are
- *     permanently remembered in place and time, so a drifting
- *     palm can never wake up and steal the pen again.
- *   - Two-finger pan with momentum (content scrolls with two
- *     coherent fingers, writing is never blocked by it).
- *   - Mid-stroke palm discard: a committed stroke that behaves
- *     like slow straight drift is auto-removed (undoable).
+ * WHAT IS NEW IN v5 (Samsung Notes feature parity)
+ *   - Hand tool: one finger scrolls the paper (view mode),
+ *     two fingers pinch-zoom + pan, double-tap resets zoom.
+ *     With a pen in the other hand this is the finger-moves /
+ *     pen-writes split of Samsung Notes (as close as a 2012
+ *     capacitive screen without a digitizer can get).
+ *   - Pinch-to-zoom while writing (two coherent fingers turn
+ *     into a zoom gesture; ink is never disturbed).
+ *   - Lasso selection: loop strokes to select, drag to move,
+ *     duplicate or delete from a floating action bar.
+ *   - Shape assist: Off / Line / Shapes (snaps near-straight
+ *     strokes to perfect lines, closed loops to rectangles and
+ *     ellipses, like Samsung shape recognition).
+ *   - Insert text (T tool): tap anywhere, type with the
+ *     keyboard, text lands on the paper as movable ink.
+ *   - Per-pen memory (each pen keeps its own color + size,
+ *     like the Samsung pen tray), 24 colors, 5 paper colors,
+ *     full dark theme, note search, favorite notes, tap the
+ *     page pill to jump to a page.
+ *   - S-Class palm rejection (v4 engine, unchanged core).
  * ============================================================ */
 (function () {
 'use strict';
@@ -480,6 +680,22 @@ var FIRST_BASE = 56;   /* first ruled line distance from page top */
 var TPL_RULED = 0, TPL_GRID = 1, TPL_DOTTED = 2, TPL_BLANK = 3;
 var TPL_NAMES = ['Ruled', 'Grid', 'Dotted', 'Blank'];
 
+/* paper colors (Samsung Notes paper options) */
+var PAPERS = [
+  { name: 'White',  bg: '#FFFFFF', line: '#D8DDE3', dot: '#D0D4D9', num: '#A0A0A0', dark: false },
+  { name: 'Cream',  bg: '#FBF6E7', line: '#E3DCC4', dot: '#D9D0B4', num: '#B3A97F', dark: false },
+  { name: 'Yellow', bg: '#FCF6D5', line: '#E2D79E', dot: '#D8CC92', num: '#B0A26A', dark: false },
+  { name: 'Mint',   bg: '#ECF4EE', line: '#CCDFD2', dot: '#C2D5C7', num: '#93A899', dark: false },
+  { name: 'Dark',   bg: '#20242A', line: '#3A434C', dot: '#47515C', num: '#6A7178', dark: true  }
+];
+
+/* shape assist modes */
+var SHAPE_OFF = 0, SHAPE_LINE = 1, SHAPE_SHAPE = 2;
+var SHAPE_NAMES = ['Off', 'Line', 'Shapes'];
+
+/* zoom limits (screen scale) */
+var Z_MIN = 0.6, Z_MAX = 2.6;
+
 var HAND_R = 0, HAND_L = 1, HAND_BOTH = 2;
 var HAND_NAMES = ['Right', 'Left', 'Both'];
 
@@ -489,7 +705,7 @@ var ERASER_SIZES = [16, 28, 44, 64];
 var NB_COLORS = ['#0381FE', '#E2231A', '#36C0A1', '#8E50E6', '#F58300', '#1428A0'];
 
 /* pen kind ids */
-var PEN_BALL = 0, PEN_FOUNTAIN = 1, PEN_CALLI = 2, PEN_PENCIL = 3, PEN_HIGH = 4;
+var PEN_BALL = 0, PEN_FOUNTAIN = 1, PEN_CALLI = 2, PEN_PENCIL = 3, PEN_HIGH = 4, PEN_TEXT = 5;
 var PENS = [
   { name: 'Ballpoint',  wMin: 1.2, wMax: 8,  alpha: 1,    kind: PEN_BALL },
   { name: 'Fountain',   wMin: 1.5, wMax: 12, alpha: 1,    kind: PEN_FOUNTAIN },
@@ -498,10 +714,25 @@ var PENS = [
   { name: 'Highlighter',wMin: 6,   wMax: 22, alpha: 0.35, kind: PEN_HIGH }
 ];
 
+/* per-pen remembered settings (Samsung pen tray behaviour):
+   penCfg[i] = { c: color, w: widthStep } */
+function defaultPenCfg() {
+  return [
+    { c: '#000000', w: 2 },
+    { c: '#000000', w: 2 },
+    { c: '#000000', w: 2 },
+    { c: '#000000', w: 2 },
+    { c: '#F5D300', w: 2 }
+  ];
+}
+
 var COLORS = [
-  '#000000', '#7F7F7F', '#E2231A', '#F58300',
-  '#F5D300', '#36C0A1', '#0381FE', '#1428A0',
-  '#8E50E6', '#F763C6', '#9C6632', '#0B7285'
+  '#000000', '#7F7F7F', '#C3C7CC', '#FFFFFF',
+  '#E2231A', '#F0563A', '#F58300', '#FFB02E',
+  '#F5D300', '#9ACD32', '#36C0A1', '#0B7285',
+  '#0381FE', '#1428A0', '#6A3AB2', '#8E50E6',
+  '#F763C6', '#D6336C', '#9C6632', '#6B4A2B',
+  '#12B5CB', '#4DD0E1', '#8E44AD', '#2E7D32'
 ];
 
 /* S-Class tuning (document px, ms) */
@@ -555,6 +786,13 @@ var eraserPanel = byId('eraserPanel'), sizeRow = byId('sizeRow');
 var moreMenu = byId('moreMenu'), toastEl = byId('toast'), warningEl = byId('warning');
 var drawer = byId('drawer'), drawerBackdrop = byId('drawerBackdrop'), nbList = byId('nbList');
 var exportOverlay = byId('exportOverlay'), exportImg = byId('exportImg');
+var selectBtn = byId('selectBtn'), textBtn = byId('textBtn'), handBtn = byId('handBtn');
+var selBarEl = byId('selBar'), selDelBtn = byId('selDelBtn'), selCopyBtn = byId('selCopyBtn'), selDoneBtn = byId('selDoneBtn');
+var selSmallBtn = byId('selSmallBtn'), selBigBtn = byId('selBigBtn');
+var textOverlayEl = byId('textOverlay'), textAreaEl = byId('textArea');
+var textDoneBtn = byId('textDoneBtn'), textCancelBtn = byId('textCancelBtn');
+var searchBtn = byId('searchBtn'), searchBarEl = byId('searchBar'), searchInputEl = byId('searchInput'), searchCancelBtn = byId('searchCancelBtn');
+var shapeOffBtn = byId('shapeOffBtn'), shapeLineBtn = byId('shapeLineBtn'), shapeShapeBtn = byId('shapeShapeBtn');
 
 var ctx = null;
 if (cvs.getContext) ctx = cvs.getContext('2d');
@@ -574,14 +812,18 @@ var settings = {
   template: TPL_RULED,
   guideDots: true,
   paperDark: false,
+  paperColor: 0,
+  uiDark: false,
+  shapeAssist: SHAPE_OFF,
   scrollHintShown: false,
   pen: PEN_BALL,
   widthStep: 2,
-  color: '#000000'
+  color: '#000000',
+  penCfg: defaultPenCfg()
 };
 
 var viewW = 768, viewH = 968, wrapRect = { left: 0, top: 0 };
-var scrollY = 0, docH = PAGE_H;
+var scrollY = 0, scrollX = 0, zoom = 1, docH = PAGE_H;
 var tiles = {}, tileOrder = [];
 var renderQueued = false;
 
@@ -693,11 +935,29 @@ function loadAll() {
     if (data.set.spacing === 32 || data.set.spacing === 38 || data.set.spacing === 44) settings.spacing = data.set.spacing;
     if (typeof data.set.template === 'number') settings.template = data.set.template;
     if (typeof data.set.guideDots === 'boolean') settings.guideDots = data.set.guideDots;
-    if (typeof data.set.paperDark === 'boolean') settings.paperDark = data.set.paperDark;
+    if (typeof data.set.paperColor === 'number' && data.set.paperColor >= 0 && data.set.paperColor < PAPERS.length) {
+      settings.paperColor = data.set.paperColor;
+    } else if (typeof data.set.paperDark === 'boolean') {
+      settings.paperColor = data.set.paperDark ? 4 : 0;
+    }
+    if (typeof data.set.uiDark === 'boolean') settings.uiDark = data.set.uiDark;
+    if (typeof data.set.shapeAssist === 'number') settings.shapeAssist = data.set.shapeAssist;
     if (typeof data.set.scrollHintShown === 'boolean') settings.scrollHintShown = data.set.scrollHintShown;
-    if (typeof data.set.pen === 'number') settings.pen = data.set.pen;
+    if (typeof data.set.pen === 'number') settings.pen = lim(data.set.pen, 0, PENS.length - 1);
     if (typeof data.set.widthStep === 'number') settings.widthStep = lim(data.set.widthStep, 0, 5);
     if (data.set.color && COLORS.indexOf(data.set.color) >= 0) settings.color = data.set.color;
+    if (data.set.penCfg && data.set.penCfg.length === 5) {
+      for (var pc = 0; pc < 5; pc++) {
+        var cfg = data.set.penCfg[pc];
+        if (cfg && typeof cfg.c === 'string' && COLORS.indexOf(cfg.c) >= 0 &&
+            typeof cfg.w === 'number' && cfg.w >= 0 && cfg.w <= 5) {
+          settings.penCfg[pc] = { c: cfg.c, w: cfg.w };
+        }
+      }
+    } else {
+      /* migrate v4 global color/width into the active pen slot */
+      settings.penCfg[settings.pen] = { c: settings.color, w: settings.widthStep };
+    }
   }
 }
 
@@ -711,7 +971,14 @@ function serializeNote(n) {
     for (var j = 0; j < p.length; j++) {
       pts.push([Math.round(p[j][0] * 10) / 10, Math.round(p[j][1] * 10) / 10, Math.round(p[j][2])]);
     }
-    out.push({ id: s.id, pen: s.pen, w: s.w, color: s.color, a: s.a, ord: s.ord, pts: pts });
+    var rec = { id: s.id, pen: s.pen, w: s.w, color: s.color, a: s.a, ord: s.ord, pts: pts };
+    if (s.pen === PEN_TEXT) {
+      rec.txt = s.txt || '';
+      rec.sz = s.sz || 24;
+      rec.tw = s.tw || 100;
+      rec.th = s.th || s.sz || 24;
+    }
+    out.push(rec);
   }
   return out;
 }
@@ -726,7 +993,7 @@ function doSaveNow() {
     for (var j = 0; j < ids.length; j++) {
       var n = notes[ids[j]];
       if (!n) continue;
-      payload.notes[ids[j]] = { id: n.id, title: n.title, cr: n.cr, mod: n.mod, scroll: Math.round(n.scroll), strokes: serializeNote(n) };
+      payload.notes[ids[j]] = { id: n.id, title: n.title, cr: n.cr, mod: n.mod, scroll: Math.round(n.scroll), fav: n.fav ? 1 : 0, strokes: serializeNote(n) };
       total++;
     }
   }
@@ -755,6 +1022,36 @@ function saveSoon() {
 function mkStroke(pen, w, color, pts) {
   var s = { id: genId(), pen: pen, w: w, color: color, a: PENS[pen].alpha, pts: pts, ord: strokeSeq++ };
   return s;
+}
+
+/* ---------- text objects (T tool) ---------- */
+function mkTextStroke(x, y, sz, color, txt) {
+  var s = { id: genId(), pen: PEN_TEXT, w: 1, color: color, a: 1,
+            pts: [[x, y, Date.now()]], txt: txt, sz: sz, ord: strokeSeq++ };
+  measureTextStroke(s);
+  return s;
+}
+function measureTextStroke(s) {
+  if (!ctx) { s.tw = 100; s.th = s.sz * 1.32; return; }
+  var lines = String(s.txt || '').split('\n');
+  ctx.font = s.sz + 'px Helvetica, Arial, sans-serif';
+  var w = 0, i;
+  for (i = 0; i < lines.length; i++) {
+    var m = ctx.measureText(lines[i]);
+    if (m && m.width > w) w = m.width;
+  }
+  s.tw = Math.max(4, w);
+  s.th = lines.length * s.sz * 1.32;
+}
+function renderTextStroke(c, s) {
+  var p = s.pts[0];
+  var lines = String(s.txt || '').split('\n');
+  c.font = s.sz + 'px Helvetica, Arial, sans-serif';
+  c.textBaseline = 'top';
+  c.fillStyle = s.color;
+  for (var i = 0; i < lines.length; i++) {
+    c.fillText(lines[i], p[0], p[1] + i * s.sz * 1.32);
+  }
 }
 
 function penCap(pen) { return pen === PEN_HIGH ? 'butt' : 'round'; }
@@ -835,6 +1132,7 @@ function renderStrokeFull(c, s) {
   c.globalAlpha = s.a;
   c.strokeStyle = s.color;
   c.fillStyle = s.color;
+  if (s.pen === PEN_TEXT) { renderTextStroke(c, s); c.restore(); return; }
   c.lineCap = penCap(s.pen);
   c.lineJoin = 'round';
   if (n === 1) { drawDot(c, s); c.restore(); return; }
@@ -845,6 +1143,11 @@ function renderStrokeFull(c, s) {
 /* ---------- stroke bbox + tile cache ---------- */
 function strokeBBox(s) {
   if (s.bb) return s.bb;
+  if (s.pen === PEN_TEXT) {
+    var p0 = s.pts[0];
+    s.bb = { x0: p0[0] - 6, y0: p0[1] - 4, x1: p0[0] + (s.tw || 100) + 6, y1: p0[1] + (s.th || s.sz * 1.32) + 4 };
+    return s.bb;
+  }
   var p = s.pts, x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, i;
   for (i = 0; i < p.length; i++) {
     if (p[i][0] < x0) x0 = p[i][0];
@@ -868,6 +1171,7 @@ function sortedStrokesForBand(y0, y1) {
   if (!n) return list;
   var st = n.strokes;
   for (var i = 0; i < st.length; i++) {
+    if (selHidden[st[i].id]) continue;   /* hidden = being dragged by lasso */
     var bb = strokeBBox(st[i]);
     if (bb.y1 >= y0 && bb.y0 <= y1) list.push(st[i]);
   }
@@ -901,45 +1205,37 @@ function getTile(i) {
 }
 
 /* ---------- paper ---------- */
-function drawPaper(c) {
-  var y0 = scrollY, y1 = scrollY + viewH;
-  var dark = settings.paperDark;
-  var gapBg  = dark ? '#141414' : '#F1F2F4';
-  var paperBg = dark ? '#20242A' : '#FFFFFF';
-  var lineCol = dark ? '#3A434C' : '#D8DDE3';
-  var dotCol = dark ? '#47515C' : '#D0D4D9';
-  var numCol = dark ? '#6A7178' : '#A0A0A0';
-  c.fillStyle = gapBg;
-  c.fillRect(0, y0 - 1, viewW, viewH + 2);
+function drawPaperPages(c, y0, y1) {
+  var P = PAPERS[settings.paperColor] || PAPERS[0];
   var pFirst = Math.max(0, Math.floor(y0 / (PAGE_H + GAP_H)) - 1);
   var pLast = Math.floor(y1 / (PAGE_H + GAP_H)) + 1;
   for (var p = pFirst; p <= pLast; p++) {
     var top = p * (PAGE_H + GAP_H);
     if (top + PAGE_H <= y0) continue;
     if (top >= y1) continue;
-    c.fillStyle = paperBg;
+    c.fillStyle = P.bg;
     c.fillRect(0, top, viewW, PAGE_H);
     var tpl = settings.template;
     if (tpl === TPL_RULED) {
-      c.strokeStyle = lineCol; c.lineWidth = 1;
+      c.strokeStyle = P.line; c.lineWidth = 1;
       c.beginPath();
       for (var y = top + FIRST_BASE; y <= top + PAGE_H - 16; y += settings.spacing) {
         c.moveTo(0, y + 0.5); c.lineTo(viewW, y + 0.5);
       }
       c.stroke();
     } else if (tpl === TPL_GRID) {
-      c.strokeStyle = lineCol; c.lineWidth = 1;
+      c.strokeStyle = P.line; c.lineWidth = 1;
       c.beginPath();
       for (var gx = 24; gx < viewW; gx += 24) { c.moveTo(gx + 0.5, top); c.lineTo(gx + 0.5, top + PAGE_H); }
       for (var gy = top + 24; gy <= top + PAGE_H - 8; gy += 24) { c.moveTo(0, gy + 0.5); c.lineTo(viewW, gy + 0.5); }
       c.stroke();
     } else if (tpl === TPL_DOTTED) {
-      c.fillStyle = dotCol;
+      c.fillStyle = P.dot;
       for (var dy = top + 20; dy <= top + PAGE_H - 12; dy += 24) {
         for (var dx = 12; dx < viewW; dx += 24) c.fillRect(dx - 1, dy - 1, 2, 2);
       }
     }
-    c.fillStyle = numCol;
+    c.fillStyle = P.num;
     c.font = '12px Helvetica, Arial, sans-serif';
     c.textAlign = 'center';
     var gy2 = top + PAGE_H + GAP_H / 2;
@@ -964,13 +1260,19 @@ function recomputeDoc() {
   clampScroll();
 }
 function clampScroll() {
-  var max = Math.max(0, docH - viewH);
-  if (scrollY > max) scrollY = max;
-  if (scrollY < 0) scrollY = 0;
+  /* visible doc-space viewport = viewW/zoom x viewH/zoom.
+   * When the content is smaller than the viewport it is centred
+   * (negative scroll allowed). */
+  var vh = viewH / zoom, vw = viewW / zoom;
+  var yMax = Math.max(0, docH - vh), yMin = Math.min(0, docH - vh);
+  var xMax = Math.max(0, viewW - vw), xMin = Math.min(0, viewW - vw);
+  scrollY = lim(scrollY, yMin, yMax);
+  scrollX = lim(scrollX, xMin, xMax);
 }
 
 /* ---------- render loop ---------- */
 var lastRenderScrollY = -1;
+var lastRenderZoom = -1;
 var pillTotalDirty = false;
 function requestRender() {
   if (renderQueued) return;
@@ -982,10 +1284,13 @@ function render() {
   if (!ctx) return;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, cvs.width, cvs.height);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, -scrollY * dpr);
-  drawPaper(ctx);
+  ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -dpr * zoom * scrollX, -dpr * zoom * scrollY);
+  var P = PAPERS[settings.paperColor] || PAPERS[0];
+  ctx.fillStyle = P.dark ? '#141414' : '#F1F2F4';
+  ctx.fillRect(scrollX - 8, scrollY - 8, viewW / zoom + 16, viewH / zoom + 16);
+  drawPaperPages(ctx, scrollY - 8, scrollY + viewH / zoom + 8);
   var i0 = Math.floor(scrollY / TILE_H);
-  var i1 = Math.floor((scrollY + viewH) / TILE_H);
+  var i1 = Math.floor((scrollY + viewH / zoom) / TILE_H);
   var i;
   for (i = i0; i <= i1; i++) {
     var t = getTile(i);
@@ -995,9 +1300,11 @@ function render() {
     if (inkNow.hasOwnProperty(id)) renderStrokeFull(ctx, inkNow[id].stroke);
   }
   if (eraserTouchId !== null) drawEraserCursor(ctx);
-  if (Math.abs(scrollY - lastRenderScrollY) > 0.5 || pillTotalDirty) updateScrollPill();
+  drawSelectionOverlays(ctx);
+  if (Math.abs(scrollY - lastRenderScrollY) > 0.5 || Math.abs(zoom - lastRenderZoom) > 0.001 || pillTotalDirty) updateScrollPill();
   pillTotalDirty = false;
   lastRenderScrollY = scrollY;
+  lastRenderZoom = zoom;
 }
 
 /* ---------- resize ---------- */
@@ -1014,6 +1321,7 @@ function resizeView() {
   invalidateAll();
   wrapRect = canvasWrap.getBoundingClientRect();
   clampScroll();
+  positionSelBar();
   requestRender();
 }
 
@@ -1048,6 +1356,42 @@ function applyOp(op, reverse) {
   if (op.t === 'add') {
     if (reverse) removeStroke(n, op.s);
     else addStroke(n, op.s);
+  } else if (op.t === 'adds') {
+    if (reverse) { for (i = 0; i < op.list.length; i++) removeStroke(n, op.list[i]); }
+    else { for (i = 0; i < op.list.length; i++) addStroke(n, op.list[i]); }
+  } else if (op.t === 'move') {
+    var dx = reverse ? -op.dx : op.dx;
+    var dy = reverse ? -op.dy : op.dy;
+    for (i = 0; i < op.list.length; i++) {
+      var bb0 = strokeBBox(op.list[i]);
+      invalidateRange(bb0.y0, bb0.y1);
+      shiftStroke(op.list[i], dx, dy);
+      var bb1 = strokeBBox(op.list[i]);
+      invalidateRange(bb1.y0, bb1.y1);
+    }
+    requestRender();
+  } else if (op.t === 'scale') {
+    var kk = reverse ? 1 / op.k : op.k;
+    for (i = 0; i < op.list.length; i++) {
+      var bbs0 = strokeBBox(op.list[i]);
+      invalidateRange(bbs0.y0, bbs0.y1);
+      scaleStroke(op.list[i], op.ax, op.ay, kk);
+      var bbs1 = strokeBBox(op.list[i]);
+      invalidateRange(bbs1.y0, bbs1.y1);
+    }
+    requestRender();
+  } else if (op.t === 'textedit') {
+    var bb2 = strokeBBox(op.s);
+    invalidateRange(bb2.y0, bb2.y1);
+    if (reverse) {
+      op.s.txt = op.oldTxt; op.s.tw = op.oldTw; op.s.th = op.oldTh;
+    } else {
+      op.s.txt = op.newTxt; op.s.tw = op.newTw; op.s.th = op.newTh;
+    }
+    op.s.bb = null;
+    var bb3 = strokeBBox(op.s);
+    invalidateRange(bb3.y0, bb3.y1);
+    requestRender();
   } else {
     if (reverse) { for (i = 0; i < op.list.length; i++) addStroke(n, op.list[i]); }
     else { for (i = 0; i < op.list.length; i++) removeStroke(n, op.list[i]); }
@@ -1055,6 +1399,7 @@ function applyOp(op, reverse) {
 }
 function doUndo() {
   if (!undoStack.length) return;
+  clearSelection();
   var op = undoStack.pop();
   applyOp(op, true);
   redoStack.push(op);
@@ -1063,6 +1408,7 @@ function doUndo() {
 }
 function doRedo() {
   if (!redoStack.length) return;
+  clearSelection();
   var op = redoStack.pop();
   applyOp(op, false);
   undoStack.push(op);
@@ -1076,7 +1422,7 @@ function exportPNG() {
   if (!n) return;
   closePanels();
   var totalPages = Math.max(1, Math.ceil(docH / (PAGE_H + GAP_H)));
-  var usePages = Math.min(totalPages, 3);
+  var usePages = Math.min(totalPages, 4);
   var W = Math.round(viewW * dpr);
   var H = Math.round(usePages * (PAGE_H + GAP_H) * dpr) - Math.round(GAP_H * dpr);
   var c = document.createElement('canvas');
@@ -1084,18 +1430,10 @@ function exportPNG() {
   var ec = c.getContext('2d');
   if (!ec) { toast('Export failed on this device'); return; }
   ec.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ec.fillStyle = '#FFFFFF';
+  var P = PAPERS[settings.paperColor] || PAPERS[0];
+  ec.fillStyle = P.bg;
   ec.fillRect(0, 0, viewW, H / dpr);
-  ec.strokeStyle = '#D8DDE3';
-  ec.lineWidth = 1;
-  ec.beginPath();
-  for (var p = 0; p < usePages; p++) {
-    var top = p * (PAGE_H + GAP_H);
-    for (var y = top + FIRST_BASE; y <= top + PAGE_H - 16; y += settings.spacing) {
-      ec.moveTo(0, y + 0.5); ec.lineTo(viewW, y + 0.5);
-    }
-  }
-  ec.stroke();
+  drawPaperPages(ec, 0, H / dpr);
   var st = [];
   for (var i = 0; i < n.strokes.length; i++) st.push(n.strokes[i]);
   st.sort(function (a, b) { return a.ord - b.ord; });
@@ -1129,10 +1467,25 @@ var rejectFlashTimer = null;
 var dotQueue = null;
 var lastBounce = null;
 
-var tool = 'pen';       /* 'pen' | 'eraser' */
+var tool = 'pen';       /* 'pen' | 'select' | 'text' | 'eraser' | 'hand' */
 var eraserMode = 0;     /* 0 = stroke, 1 = area */
 var eraserSize = 28;
 var scrollPillTimer = null;
+
+/* ---------- lasso selection state ---------- */
+var selection = [];       /* array of stroke refs currently selected */
+var selHidden = {};       /* id -> 1 while dragged off the tile cache */
+var selBBox = null;       /* union bbox of the selection (+pad) */
+var selDrag = null;       /* live selmove touch ref while dragging */
+var selScale = null;      /* live selscale touch ref while resizing */
+var lassoId = null;       /* identifier of the active lasso touch */
+
+/* ---------- text tool state ---------- */
+var textEdit = null;      /* { mode: 'new'|'edit', x, y, s } */
+var textFocusTimer = null;
+
+/* ---------- hand tool double-tap memory ---------- */
+var lastHandTap = null;   /* { t, x, y } */
 
 function currentPenWidth() {
   var pdef = PENS[settings.pen];
@@ -1141,8 +1494,14 @@ function currentPenWidth() {
 
 function docPoint(t) {
   return {
-    x: t.clientX - wrapRect.left,
-    y: t.clientY - wrapRect.top + scrollY
+    x: (t.clientX - wrapRect.left) / zoom + scrollX,
+    y: (t.clientY - wrapRect.top) / zoom + scrollY
+  };
+}
+function docToScreen(x, y) {
+  return {
+    x: (x - scrollX) * zoom + wrapRect.left,
+    y: (y - scrollY) * zoom + wrapRect.top
   };
 }
 
@@ -1164,8 +1523,9 @@ function showPendingDot(id, x, y) {
   if (pendingDotId !== null) return;      /* one ring at a time */
   pendingDotId = id;
   pendingDot.className = '';
-  pendingDot.style.left = (x + wrapRect.left) + 'px';
-  pendingDot.style.top = (y - scrollY + wrapRect.top) + 'px';
+  var sp = docToScreen(x, y);
+  pendingDot.style.left = sp.x + 'px';
+  pendingDot.style.top = sp.y + 'px';
   pendingDot.style.display = 'block';
 }
 function hidePendingDot(id) {
@@ -1232,6 +1592,87 @@ function beginTouch(touch, now) {
   var pt = docPoint(touch);
   var id = touch.identifier;
 
+  /* HAND TOOL: every touch is a gesture member (pan/zoom). This
+     is the "finger moves the screen, pen writes" split: with the
+     hand tool active the paper follows the finger and no ink is
+     possible, exactly like Samsung Notes with finger drawing off. */
+  if (tool === 'hand') {
+    touchStates[id] = {
+      kind: 'gesture', id: id,
+      sx: touch.clientX, sy: touch.clientY,
+      cx: touch.clientX, cy: touch.clientY,
+      t0: now
+    };
+    if (!gesture) {
+      gesture = {
+        lastCx: touch.clientX, lastCy: touch.clientY,
+        lastD: 0, lastT: now, vx: 0, vy: 0, fromHand: true
+      };
+    }
+    return;
+  }
+
+  /* TEXT TOOL: record a tap candidate; the editor opens on
+     touchend only if it was a quick, small, deliberate tap. */
+  if (tool === 'text') {
+    touchStates[id] = {
+      kind: 'texttap', id: id,
+      sx: pt.x, sy: pt.y, x: pt.x, y: pt.y,
+      cx: touch.clientX, cy: touch.clientY,
+      t0: now, moved: 0
+    };
+    return;
+  }
+
+  /* SELECT TOOL: tap/drag on an existing selection moves it, the
+     corner handle resizes it, otherwise a new lasso loop starts.
+     A second finger while a drag/resize is live stays inert (it
+     cannot start a new lasso against the moving selection). */
+  if (tool === 'select') {
+    if ((selDrag && selDrag.live) || (selScale && selScale.live)) {
+      touchStates[id] = { kind: 'selignore', id: id, cx: touch.clientX, cy: touch.clientY };
+      return;
+    }
+    if (selection.length && selBBox) {
+      var hR = Math.min(80, Math.max(22, 30 / zoom));
+      if (dist(pt.x, pt.y, selBBox.x1, selBBox.y1) <= hR) {
+        touchStates[id] = {
+          kind: 'selscale', id: id,
+          sx: pt.x, sy: pt.y, x: pt.x, y: pt.y,
+          cx: touch.clientX, cy: touch.clientY,
+          t0: now, live: false,
+          ax: selBBox.x0, ay: selBBox.y0,
+          d0: Math.max(dist(selBBox.x0, selBBox.y0, selBBox.x1, selBBox.y1), 24),
+          k: 1
+        };
+        selScale = touchStates[id];
+        hideSelBar();
+        return;
+      }
+    }
+    if (selection.length && selBBox &&
+        pt.x >= selBBox.x0 - 14 && pt.x <= selBBox.x1 + 14 &&
+        pt.y >= selBBox.y0 - 14 && pt.y <= selBBox.y1 + 14) {
+      touchStates[id] = {
+        kind: 'selmove', id: id,
+        sx: pt.x, sy: pt.y, dx: 0, dy: 0,
+        cx: touch.clientX, cy: touch.clientY,
+        t0: now, live: false
+      };
+      selDrag = touchStates[id];
+      hideSelBar();
+      return;
+    }
+    touchStates[id] = {
+      kind: 'lasso', id: id,
+      sx: pt.x, sy: pt.y, x: pt.x, y: pt.y,
+      cx: touch.clientX, cy: touch.clientY,
+      t0: now, path: [[pt.x, pt.y]], active: false
+    };
+    lassoId = id;
+    return;
+  }
+
   if (tool === 'eraser') {
     /* eraser is movement-gated so a resting palm cannot erase: it
        becomes live after 3 px of travel (a deliberate wipe) */
@@ -1291,7 +1732,7 @@ function startInkRecord(st, now) {
     prunePalmMemNear(st.sx, st.sy);
     if (!settings.scrollHintShown) {
       settings.scrollHintShown = true;
-      toast('Tip: scroll with two fingers');
+      toast('Tip: scroll with two fingers or the hand tool');
       saveSoon();
     }
   }
@@ -1318,7 +1759,48 @@ function moveTouch(touch, now) {
     requestRender();
     return;
   }
-  if (st.kind === 'gesture') { st.x = pt.x; st.y = pt.y; st.cx = touch.clientX; st.cy = touch.clientY; return; }
+  if (st.kind === 'gesture') { st.cx = touch.clientX; st.cy = touch.clientY; return; }
+  if (st.kind === 'selignore') { st.cx = touch.clientX; st.cy = touch.clientY; return; }
+  if (st.kind === 'selscale') {
+    st.x = pt.x; st.y = pt.y;
+    st.cx = touch.clientX; st.cy = touch.clientY;
+    var sd = dist(st.ax, st.ay, pt.x, pt.y);
+    var k = sd / st.d0;
+    if (k < 0.15) k = 0.15;
+    if (k > 8) k = 8;
+    st.k = k;
+    if (!st.live && (k > 1.06 || k < 0.94)) {
+      st.live = true;
+      hideSelectedFromTiles();
+    }
+    if (st.live) requestRender();
+    return;
+  }
+  if (st.kind === 'texttap') {
+    st.moved += dist(st.x, st.y, pt.x, pt.y);
+    st.x = pt.x; st.y = pt.y;
+    st.cx = touch.clientX; st.cy = touch.clientY;
+    return;
+  }
+  if (st.kind === 'selmove') {
+    st.dx = pt.x - st.sx;
+    st.dy = pt.y - st.sy;
+    if (!st.live && Math.abs(st.dx) + Math.abs(st.dy) > 4) {
+      st.live = true;
+      hideSelectedFromTiles();
+    }
+    requestRender();
+    return;
+  }
+  if (st.kind === 'lasso') {
+    var last = st.path[st.path.length - 1];
+    if (dist(last[0], last[1], pt.x, pt.y) > 3) st.path.push([pt.x, pt.y]);
+    if (!st.active && dist(st.sx, st.sy, pt.x, pt.y) > 12) st.active = true;
+    st.x = pt.x; st.y = pt.y;
+    st.cx = touch.clientX; st.cy = touch.clientY;
+    requestRender();
+    return;
+  }
   if (st.state === 'palm') { st.x = pt.x; st.y = pt.y; return; }
   if (st.state === 'ink') { appendInk(st, pt, now); return; }
 
@@ -1396,7 +1878,7 @@ function appendInk(st, pt, now) {
   var k = s.pts.length - 1;
   if (k >= 2) {
     ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, -scrollY * dpr);
+    ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -dpr * zoom * scrollX, -dpr * zoom * scrollY);
     ctx.globalAlpha = s.a;
     ctx.strokeStyle = s.color;
     ctx.lineCap = penCap(s.pen);
@@ -1431,6 +1913,11 @@ function finalizeInk(st, now) {
   var s = ink.stroke;
   var n = activeNote();
   if (!n) return;
+  /* shape assist mutates the points before the stroke lands in
+     the document, so undo is a plain remove (v4 semantics) */
+  if (settings.shapeAssist !== SHAPE_OFF && s.pen !== PEN_TEXT && s.pts.length > 4) {
+    tryReshape(s);
+  }
   n.strokes.push(s);
   pushUndo({ t: 'add', s: s });
   var bb = strokeBBox(s);
@@ -1483,7 +1970,45 @@ function endTouch(touch, now, cancelled) {
     return;
   }
   if (st.kind === 'gesture') {
+    /* hand-tool tap? check double-tap = reset zoom */
+    if (gesture && gesture.fromHand && !cancelled &&
+        now - st.t0 < 300 && dist(st.sx, st.sy, st.cx, st.cy) < 10) {
+      if (lastHandTap && now - lastHandTap.t < 400 &&
+          dist(lastHandTap.x, lastHandTap.y, st.sx, st.sy) < 44) {
+        lastHandTap = null;
+        gestureMemberEnd(now);
+        resetZoom();
+        return;
+      }
+      lastHandTap = { t: now, x: st.sx, y: st.sy };
+    }
     gestureMemberEnd(now);
+    return;
+  }
+  if (st.kind === 'texttap') {
+    if (!cancelled && now - st.t0 < 450 && st.moved < 8) openTextEditor(st.sx, st.sy);
+    return;
+  }
+  if (st.kind === 'selmove') {
+    if (selDrag === st) selDrag = null;
+    commitSelMove(st);
+    return;
+  }
+  if (st.kind === 'selscale') {
+    if (selScale === st) selScale = null;
+    commitSelScale(st);
+    return;
+  }
+  if (st.kind === 'selignore') return;
+  if (st.kind === 'lasso') {
+    if (lassoId === st.id) lassoId = null;
+    if (cancelled || !st.active) {
+      /* a plain tap with the select tool clears the selection */
+      clearSelection();
+      requestRender();
+    } else {
+      resolveSelection(st.path);
+    }
     return;
   }
   if (st.state === 'ink') {
@@ -1503,7 +2028,7 @@ function endTouch(touch, now, cancelled) {
   if (pendingDotId === st.id) hidePendingDot(st.id);
 }
 
-/* ---------- two-finger pan + momentum ---------- */
+/* ---------- gesture engine: pan + pinch-zoom + momentum ---------- */
 function recentVec(o, now) {
   var p = o.path, m = p.length;
   if (m < 2) return null;
@@ -1519,6 +2044,34 @@ function angDiff(a, b) {
   while (d > Math.PI) d -= 2 * Math.PI;
   while (d < -Math.PI) d += 2 * Math.PI;
   return d;
+}
+
+function gestureMembers() {
+  var out = [], k;
+  for (k in touchStates) {
+    if (!touchStates.hasOwnProperty(k)) continue;
+    if (touchStates[k].kind === 'gesture') out.push(touchStates[k]);
+  }
+  return out;
+}
+
+function engageGesture(ids, now, pairDist) {
+  var c = gestureCentroid(true);
+  if (!c) return;
+  var i, o;
+  gesture = {
+    lastCx: c.x, lastCy: c.y,
+    lastD: pairDist || 0, lastT: now,
+    vx: 0, vy: 0, fromHand: false
+  };
+  for (i = 0; i < ids.length; i++) {
+    o = touchStates[ids[i]];
+    if (o && o.kind === 'probe' && o.state !== 'ink') {
+      o.kind = 'gesture';
+      if (pendingDotId === o.id) hidePendingDot(o.id);
+    }
+  }
+  hidePendingDot();
 }
 
 function detectGesture(now) {
@@ -1537,6 +2090,29 @@ function detectGesture(now) {
   }
   if (vecs.length < 2) return;
 
+  /* --- pinch candidate: exactly two probes separating / closing
+         along the line that joins them (both moving fast) --- */
+  if (vecs.length === 2) {
+    var o1 = touchStates[vecs[0].id];
+    var o2 = touchStates[vecs[1].id];
+    var ax = o2.cx - o1.cx, ay = o2.cy - o1.cy;
+    var al = Math.sqrt(ax * ax + ay * ay);
+    if (al > 40) {
+      ax /= al; ay /= al;
+      var v1 = Math.sqrt(vecs[0].rv.dx * vecs[0].rv.dx + vecs[0].rv.dy * vecs[0].rv.dy);
+      var v2 = Math.sqrt(vecs[1].rv.dx * vecs[1].rv.dx + vecs[1].rv.dy * vecs[1].rv.dy);
+      if (v1 > 0.01 && v2 > 0.01) {
+        var d1 = (vecs[0].rv.dx * ax + vecs[0].rv.dy * ay) / v1;
+        var d2 = (vecs[1].rv.dx * ax + vecs[1].rv.dy * ay) / v2;
+        if (d1 * d2 < -0.5) {
+          engageGesture([vecs[0].id, vecs[1].id], now, al);
+          return;
+        }
+      }
+    }
+  }
+
+  /* --- pan candidate: all moving the same way (v4 logic) --- */
   var ang0 = Math.atan2(vecs[0].rv.dy, vecs[0].rv.dx);
   var ok = true, maxV = 0, minV = 1e9, i;
   for (i = 0; i < vecs.length; i++) {
@@ -1548,19 +2124,13 @@ function detectGesture(now) {
   if (!ok) return;
   if (maxV / Math.max(minV, 0.001) > SC.PAN_RATIO) return;
 
-  /* both fingers move together: this is a pan - convert ONLY the
-     touches that actually moved coherently */
-  var c = gestureCentroid(true);
-  if (!c || c.n < 2) return;
-  gesture = { lastCx: c.x, lastCy: c.y, lastT: now, v: 0 };
-  for (i = 0; i < vecs.length; i++) {
-    o = touchStates[vecs[i].id];
-    if (o && o.kind === 'probe' && o.state !== 'ink') {
-      o.kind = 'gesture';
-      if (pendingDotId === o.id) hidePendingDot(o.id);
-    }
-  }
-  hidePendingDot();
+  var ids = [];
+  for (i = 0; i < vecs.length; i++) ids.push(vecs[i].id);
+  var ms = ids;
+  var pair = 0;
+  var mo1 = touchStates[ms[0]], mo2 = touchStates[ms[1]];
+  if (mo1 && mo2) pair = dist(mo1.cx, mo1.cy, mo2.cx, mo2.cy);
+  engageGesture(ids, now, pair);
 }
 
 function gestureCentroid(includeProbes) {
@@ -1580,26 +2150,54 @@ function gestureCentroid(includeProbes) {
 function applyGesture(now) {
   if (!gesture) return;
   var c = gestureCentroid(false);
-  if (!c || c.n < 2) { gesture = null; return; }
+  if (!c || c.n < 1) { gesture = null; return; }
+  var dx = c.x - gesture.lastCx;
   var dy = c.y - gesture.lastCy;
   var dt = Math.max(now - gesture.lastT, 4);
-  scrollY += -dy;
-  gesture.v = gesture.v * 0.7 + (-dy / dt) * 0.3;
-  gesture.lastCy = c.y; gesture.lastT = now;
+
+  var ms = gestureMembers();
+
+  /* --- pinch: scale around the finger centroid. The doc point
+         under the centroid stays under the centroid. --- */
+  if (ms.length >= 2) {
+    var d = dist(ms[0].cx, ms[0].cy, ms[1].cx, ms[1].cy);
+    if (gesture.lastD > 30 && d > 30) {
+      var f = d / gesture.lastD;
+      var nz = lim(zoom * f, Z_MIN, Z_MAX);
+      var ax = (c.x - wrapRect.left) / zoom + scrollX;
+      var ay = (c.y - wrapRect.top) / zoom + scrollY;
+      zoom = nz;
+      scrollX = ax - (c.x - wrapRect.left) / zoom;
+      scrollY = ay - (c.y - wrapRect.top) / zoom;
+    }
+    gesture.lastD = d;
+  }
+
+  /* --- pan: the paper follows the centroid --- */
+  scrollX -= dx / zoom;
+  scrollY -= dy / zoom;
+
+  gesture.vx = gesture.vx * 0.7 + (dx / dt) * 0.3;
+  gesture.vy = gesture.vy * 0.7 + (dy / dt) * 0.3;
+  gesture.lastCx = c.x; gesture.lastCy = c.y; gesture.lastT = now;
   clampScroll();
   requestRender();
 }
 
 function gestureMemberEnd(now) {
-  var c = gestureCentroid(false);
-  if (c && c.n >= 2) return;
-  var v = gesture ? gesture.v : 0;
+  var ms = gestureMembers();
+  /* a hand-tool gesture survives with a single finger; a
+     pen-tool gesture (pan/pinch) needs two */
+  var need = (gesture && gesture.fromHand) ? 1 : 2;
+  if (ms.length >= need) return;
+  var vx = gesture ? gesture.vx : 0;
+  var vy = gesture ? gesture.vy : 0;
   gesture = null;
-  if (Math.abs(v) > 0.06) startMomentum(v);
+  if (Math.abs(vy) > 0.06 || Math.abs(vx) > 0.06) startMomentum(vx, vy);
 }
 
-function startMomentum(v) {
-  momentum = { v: v };
+function startMomentum(vx, vy) {
+  momentum = { vx: vx, vy: vy };
   if (!momRAF) momRAF = window.requestAnimationFrame(momStep);
 }
 function stopMomentum() { momentum = null; }
@@ -1607,11 +2205,14 @@ function stopMomentum() { momentum = null; }
 function momStep() {
   momRAF = 0;
   if (!momentum) return;
-  scrollY += momentum.v * 16;
-  momentum.v *= SC.MOM_DECAY;
+  scrollX -= momentum.vx * 16 / zoom;
+  scrollY -= momentum.vy * 16 / zoom;
+  var decay = Math.pow(SC.MOM_DECAY, 16 / 16);
+  momentum.vx *= decay;
+  momentum.vy *= decay;
   clampScroll();
   requestRender();
-  if (Math.abs(momentum.v) > 0.02) momRAF = window.requestAnimationFrame(momStep);
+  if (Math.abs(momentum.vy) > 0.02 || Math.abs(momentum.vx) > 0.02) momRAF = window.requestAnimationFrame(momStep);
   else momentum = null;
 }
 
@@ -1637,7 +2238,10 @@ function eraseAt(x, y) {
     if (x < bb.x0 - r || x > bb.x1 + r || y < bb.y0 - r || y > bb.y1 + r) continue;
     var hit = false;
     var p = s.pts;
-    if (p.length === 1) {
+    if (s.pen === PEN_TEXT) {
+      /* text: erase when the cursor rectangle covers the text box */
+      hit = (x + r > bb.x0 && x - r < bb.x1 && y + r > bb.y0 && y - r < bb.y1);
+    } else if (p.length === 1) {
       hit = dist(x, y, p[0][0], p[0][1]) <= r + s.w;
     } else if (eraserMode === 1) {
       var cx = lim(x, bb.x0, bb.x1), cy = lim(y, bb.y0, bb.y1);
@@ -1668,15 +2272,590 @@ function drawEraserCursor(c) {
   c.restore();
 }
 
+/* ============================================================
+ * LASSO SELECTION (Samsung selection tool)
+ * ============================================================ */
+function ptInPoly(x, y, poly) {
+  var inside = false, i, j;
+  for (i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    var xi = poly[i][0], yi = poly[i][1];
+    var xj = poly[j][0], yj = poly[j][1];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function strokeInLasso(s, poly) {
+  if (s.pen === PEN_TEXT) {
+    var bb = strokeBBox(s);
+    return ptInPoly((bb.x0 + bb.x1) / 2, (bb.y0 + bb.y1) / 2, poly);
+  }
+  var p = s.pts, n = p.length, inside = 0, i;
+  if (!n) return false;
+  for (i = 0; i < n; i++) {
+    if (ptInPoly(p[i][0], p[i][1], poly)) inside++;
+  }
+  return inside * 2 >= n;   /* at least half the points inside */
+}
+
+function resolveSelection(path) {
+  var n = activeNote();
+  var hit = [];
+  if (n && path.length > 2) {
+    /* auto-close the loop */
+    var closed = path.slice(0);
+    if (dist(closed[0][0], closed[0][1], closed[closed.length - 1][0], closed[closed.length - 1][1]) > 6) {
+      closed.push([closed[0][0], closed[0][1]]);
+    }
+    for (var i = 0; i < n.strokes.length; i++) {
+      if (strokeInLasso(n.strokes[i], closed)) hit.push(n.strokes[i]);
+    }
+  }
+  if (!hit.length) {
+    clearSelection();
+    requestRender();
+    return;
+  }
+  selection = hit;
+  selHidden = {};
+  selBBox = selUnionBBox();
+  positionSelBar();
+  requestRender();
+}
+
+function selUnionBBox() {
+  if (!selection.length) return null;
+  var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, i;
+  for (i = 0; i < selection.length; i++) {
+    var bb = strokeBBox(selection[i]);
+    if (bb.x0 < x0) x0 = bb.x0;
+    if (bb.y0 < y0) y0 = bb.y0;
+    if (bb.x1 > x1) x1 = bb.x1;
+    if (bb.y1 > y1) y1 = bb.y1;
+  }
+  return { x0: x0 - 8, y0: y0 - 8, x1: x1 + 8, y1: y1 + 8 };
+}
+
+function hideSelectedFromTiles() {
+  if (!selection.length) return;
+  for (var i = 0; i < selection.length; i++) {
+    var s = selection[i];
+    selHidden[s.id] = 1;
+    var bb = strokeBBox(s);
+    invalidateRange(bb.y0, bb.y1);
+  }
+  requestRender();
+}
+
+function unhideSelectedFromTiles() {
+  var any = false;
+  for (var i = 0; i < selection.length; i++) {
+    var s = selection[i];
+    if (selHidden[s.id]) {
+      delete selHidden[s.id];
+      any = true;
+      var bb = strokeBBox(s);
+      invalidateRange(bb.y0, bb.y1);
+    }
+  }
+  if (any) requestRender();
+}
+
+function shiftStroke(s, dx, dy) {
+  var p = s.pts;
+  for (var i = 0; i < p.length; i++) {
+    p[i][0] += dx;
+    p[i][1] += dy;
+  }
+  s.bb = null;
+}
+
+/* uniform scale of a stroke around anchor (ax, ay):
+   points move, pen width grows/shrinks, text font size too */
+function scaleStroke(s, ax, ay, k) {
+  var p = s.pts, i;
+  for (i = 0; i < p.length; i++) {
+    p[i][0] = ax + (p[i][0] - ax) * k;
+    p[i][1] = ay + (p[i][1] - ay) * k;
+  }
+  if (s.pen === PEN_TEXT) {
+    var tw = s.tw || 100, th = s.th || s.sz * 1.32;
+    s.sz = Math.max(6, s.sz * k);
+    s.tw = tw * k;
+    s.th = th * k;
+  } else {
+    s.w = Math.max(0.25, Math.min(80, s.w * k));
+  }
+  s.bb = null;
+}
+
+function applyScaleToSelection(list, ax, ay, k) {
+  var i, bb;
+  for (i = 0; i < list.length; i++) {
+    bb = strokeBBox(list[i]);
+    invalidateRange(bb.y0, bb.y1);
+  }
+  for (i = 0; i < list.length; i++) scaleStroke(list[i], ax, ay, k);
+  for (i = 0; i < list.length; i++) {
+    bb = strokeBBox(list[i]);
+    invalidateRange(bb.y0, bb.y1);
+  }
+  pushUndo({ t: 'scale', list: list, ax: ax, ay: ay, k: k });
+  recomputeDoc();
+  unhideSelectedFromTiles();
+  selBBox = selUnionBBox();
+  positionSelBar();
+  saveSoon();
+  requestRender();
+}
+
+function commitSelScale(st) {
+  if (!st.live) {
+    /* tap on the handle: just restore the bar */
+    selBBox = selUnionBBox();
+    positionSelBar();
+    requestRender();
+    return;
+  }
+  if (Math.abs(st.k - 1) < 0.01) {
+    unhideSelectedFromTiles();
+    selBBox = selUnionBBox();
+    positionSelBar();
+    requestRender();
+    return;
+  }
+  applyScaleToSelection(selection.slice(), st.ax, st.ay, st.k);
+}
+
+/* -/+ action bar buttons: scale around the selection center */
+function scaleSelectionBy(k) {
+  if (!selection.length || !selBBox) return;
+  if (selDrag || selScale) return;
+  var cx = (selBBox.x0 + selBBox.x1) / 2;
+  var cy = (selBBox.y0 + selBBox.y1) / 2;
+  applyScaleToSelection(selection.slice(), cx, cy, k);
+}
+
+function commitSelMove(st) {
+  if (!st.live) {
+    /* tap on the selection: just restore the bar */
+    selBBox = selUnionBBox();
+    positionSelBar();
+    requestRender();
+    return;
+  }
+  var dx = st.dx, dy = st.dy, i, s, bb;
+  if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
+    unhideSelectedFromTiles();
+    selBBox = selUnionBBox();
+    positionSelBar();
+    requestRender();
+    return;
+  }
+  for (i = 0; i < selection.length; i++) {
+    bb = strokeBBox(selection[i]);
+    invalidateRange(bb.y0, bb.y1);
+  }
+  for (i = 0; i < selection.length; i++) shiftStroke(selection[i], dx, dy);
+  for (i = 0; i < selection.length; i++) {
+    bb = strokeBBox(selection[i]);
+    invalidateRange(bb.y0, bb.y1);
+  }
+  pushUndo({ t: 'move', list: selection.slice(), dx: dx, dy: dy });
+  recomputeDoc();
+  unhideSelectedFromTiles();
+  selBBox = selUnionBBox();
+  positionSelBar();
+  saveSoon();
+  requestRender();
+}
+
+function clearSelection() {
+  var hadHidden = false, k;
+  for (k in selHidden) {
+    if (selHidden.hasOwnProperty(k)) { hadHidden = true; break; }
+  }
+  selection = [];
+  selHidden = {};
+  selBBox = null;
+  selDrag = null;
+  selScale = null;
+  hideSelBar();
+  if (hadHidden) { invalidateAll(); requestRender(); }
+}
+
+function positionSelBar() {
+  if (!selection.length || !selBBox || selDrag || selScale) { hideSelBar(); return; }
+  selBarEl.style.display = 'block';
+  var bw = selBarEl.offsetWidth || 150;
+  var sp = docToScreen((selBBox.x0 + selBBox.x1) / 2, selBBox.y0);
+  var left = sp.x - bw / 2;
+  if (left < 10) left = 10;
+  if (left > viewW - bw - 10) left = viewW - bw - 10;
+  var top = sp.y - 56;
+  if (top < 62) top = 62;
+  if (top > viewH - 20) top = viewH - 20;
+  selBarEl.style.left = left + 'px';
+  selBarEl.style.top = top + 'px';
+}
+function hideSelBar() { selBarEl.style.display = 'none'; }
+
+function deleteSelection() {
+  var n = activeNote();
+  if (!n || !selection.length) return;
+  var list = selection.slice();
+  for (var i = 0; i < list.length; i++) removeStroke(n, list[i]);
+  pushUndo({ t: 'erase', list: list });
+  selection = [];
+  selHidden = {};
+  selBBox = null;
+  hideSelBar();
+  recomputeDoc();
+  saveSoon();
+  requestRender();
+  toast(list.length + (list.length === 1 ? ' item deleted' : ' items deleted'));
+}
+
+function duplicateSelection() {
+  var n = activeNote();
+  if (!n || !selection.length) return;
+  var clones = [], i, s;
+  for (i = 0; i < selection.length; i++) {
+    s = selection[i];
+    var pts = [];
+    for (var j = 0; j < s.pts.length; j++) {
+      pts.push([s.pts[j][0] + 26, s.pts[j][1] + 26, s.pts[j][2]]);
+    }
+    var c = { id: genId(), pen: s.pen, w: s.w, color: s.color, a: s.a, ord: strokeSeq++, pts: pts };
+    if (s.pen === PEN_TEXT) {
+      c.txt = s.txt; c.sz = s.sz; c.tw = s.tw; c.th = s.th;
+    }
+    clones.push(c);
+    addStroke(n, c);
+  }
+  pushUndo({ t: 'adds', list: clones });
+  selection = clones;
+  selHidden = {};
+  selBBox = selUnionBBox();
+  positionSelBar();
+  recomputeDoc();
+  saveSoon();
+  requestRender();
+  toast('Duplicated');
+}
+
+/* ---------- selection + lasso rendering ---------- */
+function drawSelectionOverlays(c) {
+  /* live lasso path */
+  if (lassoId !== null && touchStates[lassoId] && touchStates[lassoId].active) {
+    var path = touchStates[lassoId].path;
+    c.save();
+    c.strokeStyle = 'rgba(3,129,254,0.85)';
+    c.lineWidth = 1.6 / zoom;
+    if (c.setLineDash) c.setLineDash([7 / zoom, 5 / zoom]);
+    c.beginPath();
+    c.moveTo(path[0][0], path[0][1]);
+    for (var li = 1; li < path.length; li++) c.lineTo(path[li][0], path[li][1]);
+    c.lineTo(path[0][0], path[0][1]);
+    c.stroke();
+    if (c.setLineDash) c.setLineDash([]);
+    c.restore();
+  }
+
+  if (!selection.length || !selBBox) return;
+
+  var dragSt = (selDrag && selDrag.live) ? selDrag : null;
+  var sclSt = (selScale && selScale.live) ? selScale : null;
+  var rx0 = selBBox.x0, ry0 = selBBox.y0, rx1 = selBBox.x1, ry1 = selBBox.y1;
+
+  if (dragSt) {
+    rx0 += dragSt.dx; rx1 += dragSt.dx;
+    ry0 += dragSt.dy; ry1 += dragSt.dy;
+  } else if (sclSt) {
+    rx1 = sclSt.ax + (rx1 - sclSt.ax) * sclSt.k;
+    ry1 = sclSt.ay + (ry1 - sclSt.ay) * sclSt.k;
+  }
+
+  c.save();
+  if (dragSt) {
+    /* moved copies drawn live (originals are off the tiles) */
+    c.translate(dragSt.dx, dragSt.dy);
+    for (var si = 0; si < selection.length; si++) renderStrokeFull(c, selection[si]);
+  } else if (sclSt) {
+    /* scaled copies drawn live around the anchor corner */
+    c.translate(sclSt.ax, sclSt.ay);
+    c.scale(sclSt.k, sclSt.k);
+    c.translate(-sclSt.ax, -sclSt.ay);
+    for (var sj = 0; sj < selection.length; sj++) renderStrokeFull(c, selection[sj]);
+  }
+  c.restore();
+
+  /* highlight rectangle + dashed border */
+  c.save();
+  c.fillStyle = 'rgba(3,129,254,0.07)';
+  c.fillRect(rx0, ry0, rx1 - rx0, ry1 - ry0);
+  c.strokeStyle = 'rgba(3,129,254,0.9)';
+  c.lineWidth = 1.4 / zoom;
+  if (c.setLineDash) c.setLineDash([8 / zoom, 5 / zoom]);
+  c.strokeRect(rx0, ry0, rx1 - rx0, ry1 - ry0);
+  if (c.setLineDash) c.setLineDash([]);
+
+  /* resize handle on the bottom-right corner (Samsung-style) */
+  if (!dragSt) {
+    var hr = Math.max(5.5, 7 / zoom);
+    c.fillStyle = '#FFFFFF';
+    c.strokeStyle = '#0381FE';
+    c.lineWidth = 1.6 / zoom;
+    c.beginPath();
+    c.arc(rx1, ry1, hr, 0, Math.PI * 2);
+    c.fill();
+    c.stroke();
+    /* tiny diagonal double arrow = "drag to resize" */
+    var dIn = hr * 0.5, dOut = hr * 0.38;
+    c.beginPath();
+    c.moveTo(rx1 - dIn, ry1 - dIn);
+    c.lineTo(rx1 + dIn, ry1 + dIn);
+    c.moveTo(rx1 + dIn, ry1 + dIn);
+    c.lineTo(rx1 + dIn - dOut, ry1 + dIn);
+    c.moveTo(rx1 + dIn, ry1 + dIn);
+    c.lineTo(rx1 + dIn, ry1 + dIn - dOut);
+    c.moveTo(rx1 - dIn, ry1 - dIn);
+    c.lineTo(rx1 - dIn + dOut, ry1 - dIn);
+    c.moveTo(rx1 - dIn, ry1 - dIn);
+    c.lineTo(rx1 - dIn, ry1 - dIn + dOut);
+    c.stroke();
+  }
+  c.restore();
+}
+
+/* ============================================================
+ * SHAPE ASSIST (Samsung shape recognition)
+ * Runs on stroke finish when enabled; mutates the stroke points
+ * before it is committed, so plain undo still works.
+ * ============================================================ */
+function tryReshape(s) {
+  var p = s.pts, n = p.length;
+  if (n < 5) return false;
+
+  /* stroke metrics */
+  var pathLen = 0, i;
+  for (i = 1; i < n; i++) pathLen += dist(p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]);
+  if (pathLen < 30) return false;
+  var net = dist(p[0][0], p[0][1], p[n - 1][0], p[n - 1][1]);
+  var straight = net / pathLen;
+
+  /* 1. LINE: nearly straight travel (either mode) */
+  if (straight > 0.88 && net > 24) {
+    s.pts = [p[0], p[n - 1]];
+    return true;
+  }
+
+  if (settings.shapeAssist !== SHAPE_SHAPE) return false;
+
+  /* bbox + closure */
+  var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (i = 0; i < n; i++) {
+    if (p[i][0] < x0) x0 = p[i][0];
+    if (p[i][1] < y0) y0 = p[i][1];
+    if (p[i][0] > x1) x1 = p[i][0];
+    if (p[i][1] > y1) y1 = p[i][1];
+  }
+  var w = x1 - x0, h = y1 - y0;
+  if (w < 18 || h < 18) return false;
+  var diag = Math.sqrt(w * w + h * h);
+  if (net > Math.max(30, diag * 0.28)) return false;   /* not closed */
+
+  var t0 = p[0][2], t1 = p[n - 1][2];
+
+  /* 2. RECTANGLE: most points hug the bbox edges AND all four
+     corners are actually approached (a circle never gets close
+     to its bbox corners: the gap is ~0.41 x radius). */
+  var tol = Math.max(9, Math.max(w, h) * 0.16);
+  var fit = 0;
+  for (i = 0; i < n; i++) {
+    var dxo = Math.max(x0 - p[i][0], 0, p[i][0] - x1);
+    var dyo = Math.max(y0 - p[i][1], 0, p[i][1] - y1);
+    var out = Math.sqrt(dxo * dxo + dyo * dyo);
+    var inDist = Math.min(p[i][0] - x0, x1 - p[i][0], p[i][1] - y0, y1 - p[i][1]);
+    if ((out > 0 ? out : inDist) <= tol) fit++;
+  }
+  var ctol = Math.max(7, Math.min(w, h) * 0.15);
+  var cg = [false, false, false, false];
+  for (i = 0; i < n; i++) {
+    if (dist(p[i][0], p[i][1], x0, y0) < ctol) cg[0] = true;
+    if (dist(p[i][0], p[i][1], x1, y0) < ctol) cg[1] = true;
+    if (dist(p[i][0], p[i][1], x1, y1) < ctol) cg[2] = true;
+    if (dist(p[i][0], p[i][1], x0, y1) < ctol) cg[3] = true;
+  }
+  if (fit / n > 0.82 && cg[0] && cg[1] && cg[2] && cg[3]) {
+    var steps = 5;
+    var corners = [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]];
+    var rp = [];
+    for (i = 0; i < steps; i++) {
+      rp.push([corners[i][0], corners[i][1], t0 + (t1 - t0) * i / (steps - 1)]);
+    }
+    s.pts = rp;
+    return true;
+  }
+
+  /* 3. ELLIPSE (incl. circle): radial deviation from the bbox-
+     inscribed ellipse is small */
+  var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  var rx = w / 2, ry = h / 2, rmax = Math.max(rx, ry);
+  var dev = 0;
+  for (i = 0; i < n; i++) {
+    var px = p[i][0] - cx, py = p[i][1] - cy;
+    var t = Math.atan2(py, px);
+    var er = Math.sqrt((rx * Math.cos(t)) * (rx * Math.cos(t)) + (ry * Math.sin(t)) * (ry * Math.sin(t)));
+    var r = Math.sqrt(px * px + py * py);
+    dev += Math.abs(r - er);
+  }
+  if (dev / n / rmax < 0.14) {
+    var steps2 = 28;
+    var ep = [];
+    for (i = 0; i < steps2; i++) {
+      var a = (i / (steps2 - 1)) * Math.PI * 2;
+      ep.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a), t0 + (t1 - t0) * i / (steps2 - 1)]);
+    }
+    s.pts = ep;
+    return true;
+  }
+
+  return false;
+}
+
+/* ============================================================
+ * TEXT TOOL (Samsung insert-text)
+ * ============================================================ */
+function openTextEditor(docX, docY) {
+  var n = activeNote();
+  if (!n) return;
+  closePanels();
+
+  /* tap on an existing text object = edit it */
+  var target = null;
+  for (var i = n.strokes.length - 1; i >= 0; i--) {
+    var s = n.strokes[i];
+    if (s.pen !== PEN_TEXT) continue;
+    var bb = strokeBBox(s);
+    if (docX >= bb.x0 - 8 && docX <= bb.x1 + 8 && docY >= bb.y0 - 8 && docY <= bb.y1 + 8) {
+      target = s;
+      break;
+    }
+  }
+
+  if (target) {
+    textEdit = { mode: 'edit', x: target.pts[0][0], y: target.pts[0][1], s: target };
+    textAreaEl.value = target.txt || '';
+  } else {
+    textEdit = { mode: 'new', x: docX, y: docY, s: null };
+    textAreaEl.value = '';
+  }
+
+  var sz = textStrokeSize();
+  textAreaEl.style.fontSize = Math.round(Math.min(Math.max(sz * zoom, 12), 34)) + 'px';
+  textAreaEl.style.color = settings.color;
+
+  var sp = docToScreen(textEdit.x, textEdit.y);
+  var left = sp.x - 30;
+  if (left < 12) left = 12;
+  if (left > viewW - 296) left = viewW - 296;
+  var top = sp.y - 40;
+  if (top < 62) top = 62;
+  if (top > viewH * 0.32) top = Math.round(viewH * 0.32);   /* stay above the keyboard */
+  textOverlayEl.style.left = left + 'px';
+  textOverlayEl.style.top = top + 'px';
+  textOverlayEl.style.display = 'block';
+
+  if (textFocusTimer) clearTimeout(textFocusTimer);
+  textFocusTimer = setTimeout(function () {
+    textFocusTimer = null;
+    if (textEdit && typeof textAreaEl.focus === 'function') textAreaEl.focus();
+  }, 80);
+}
+
+function textStrokeSize() {
+  /* text size follows the pen thickness slider (18..33 px) */
+  return 18 + settings.widthStep * 3;
+}
+
+function closeTextEditor() {
+  if (textFocusTimer) { clearTimeout(textFocusTimer); textFocusTimer = null; }
+  textEdit = null;
+  if (typeof textAreaEl.blur === 'function') textAreaEl.blur();
+  textOverlayEl.style.display = 'none';
+}
+
+function commitText() {
+  if (!textEdit) return;
+  var n = activeNote();
+  if (!n) { closeTextEditor(); return; }
+  var val = textAreaEl.value;
+  if (val && val.replace(/\s/g, '').length === 0) val = '';
+
+  if (textEdit.mode === 'new') {
+    if (val) {
+      var s = mkTextStroke(textEdit.x, textEdit.y, textStrokeSize(), settings.color, val);
+      addStroke(n, s);
+      pushUndo({ t: 'add', s: s });
+      recomputeDoc();
+      saveSoon();
+      requestRender();
+    }
+  } else {
+    var s2 = textEdit.s;
+    if (!s2) { closeTextEditor(); return; }
+    if (!val) {
+      /* emptied the box: remove the text object */
+      var old = { t: 'erase', list: [s2] };
+      removeStroke(n, s2);
+      pushUndo(old);
+      recomputeDoc();
+    } else if (s2.txt !== val) {
+      var op = { t: 'textedit', s: s2, oldTxt: s2.txt, oldTw: s2.tw, oldTh: s2.th,
+                 newTxt: val, newTw: 0, newTh: 0 };
+      var bb = strokeBBox(s2);
+      invalidateRange(bb.y0, bb.y1);
+      s2.txt = val;
+      measureTextStroke(s2);
+      op.newTw = s2.tw; op.newTh = s2.th;
+      s2.bb = null;
+      var bb2 = strokeBBox(s2);
+      invalidateRange(bb2.y0, bb2.y1);
+      pushUndo(op);
+      recomputeDoc();
+    }
+    saveSoon();
+    requestRender();
+  }
+  closeTextEditor();
+}
+
 /* ---------- scroll position pill ---------- */
 function updateScrollPill() {
   var totalPages = Math.max(1, Math.ceil(docH / (PAGE_H + GAP_H)));
-  var page = Math.floor((scrollY + viewH / 2) / (PAGE_H + GAP_H)) + 1;
+  var page = Math.floor((scrollY + viewH / zoom / 2) / (PAGE_H + GAP_H)) + 1;
   if (page > totalPages) page = totalPages;
-  scrollPill.textContent = page + ' / ' + totalPages;
+  if (page < 1) page = 1;
+  var txt = page + ' / ' + totalPages;
+  if (Math.abs(zoom - 1) > 0.01) txt = txt + '  ' + Math.round(zoom * 100) + '%';
+  scrollPill.textContent = txt;
   scrollPill.style.display = 'block';
   if (scrollPillTimer) clearTimeout(scrollPillTimer);
+  /* while zoomed the pill stays visible as the zoom indicator */
+  if (Math.abs(zoom - 1) <= 0.01) {
+    scrollPillTimer = setTimeout(function () { scrollPill.style.display = 'none'; }, 1300);
+  }
+}
+function resetZoom() {
+  zoom = 1;
+  scrollX = 0;
+  clampScroll();
+  requestRender();
+  updateScrollPill();
+  if (scrollPillTimer) { clearTimeout(scrollPillTimer); scrollPillTimer = null; }
   scrollPillTimer = setTimeout(function () { scrollPill.style.display = 'none'; }, 1300);
+  toast('Zoom 100%');
 }
 
 /* ---------- reset (note switch) ---------- */
@@ -1688,8 +2867,14 @@ function resetTouchTracking() {
   palmMem = [];
   lastBounce = null;
   eraserTouchId = null;
+  lassoId = null;
+  selDrag = null;
+  selScale = null;
+  lastHandTap = null;
   if (dotQueue) { clearTimeout(dotQueue.timer); dotQueue = null; }
   hidePendingDot();
+  clearSelection();
+  closeTextEditor();
 }
 
 /* ---------- event wiring ---------- */
@@ -1736,6 +2921,10 @@ canvasWrap.addEventListener('mousemove', function (e) {
   if (!touchStates[mouseId]) return;
   var now = Date.now();
   moveTouch({ identifier: mouseId, clientX: e.clientX, clientY: e.clientY, radiusX: 0 }, now);
+  /* mouse input must run the same gesture pipeline as touches,
+     otherwise the hand tool cannot pan with a mouse */
+  detectGesture(now);
+  applyGesture(now);
 });
 window.addEventListener('mouseup', function (e) {
   if (!touchStates[mouseId]) return;
@@ -1766,25 +2955,67 @@ function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-/* ---------- home ---------- */
-function renderHome() {
+/* ---------- home (search + favorites + cards) ---------- */
+function renderHome(filterText) {
   var nb = notebooks[curNotebook];
   homeTitle.textContent = nb ? nb.title : 'Notes';
   notesGrid.innerHTML = '';
+  var q = (filterText === undefined ? searchInputEl.value : filterText);
+  q = String(q || '').toLowerCase();
   var ids = nb ? nb.notes : [];
-  var i, j;
-  for (i = 0, j = 0; i < ids.length; i++) {
-    var n = notes[ids[i]];
-    if (!n) continue;
-    var card = document.createElement('button');
+  var shown = [], i;
+  for (i = 0; i < ids.length; i++) {
+    var nt = notes[ids[i]];
+    if (!nt) continue;
+    if (q && (nt.title || 'Untitled').toLowerCase().indexOf(q) < 0) continue;
+    shown.push(ids[i]);
+  }
+  /* favorites first, then most recently modified */
+  shown.sort(function (a, b) {
+    var na = notes[a], nbv = notes[b];
+    var fa = na && na.fav ? 1 : 0, fb = nbv && nbv.fav ? 1 : 0;
+    if (fa !== fb) return fb - fa;
+    return (nbv && nbv.mod || 0) - (na && na.mod || 0);
+  });
+  var j = 0;
+  for (i = 0; i < shown.length; i++) {
+    var n = notes[shown[i]];
+    var card = document.createElement('div');
     card.className = 'note-card';
-    card.innerHTML =
-      '<div class="nc-title">' + escapeHtml(n.title || 'Untitled') + '</div>' +
-      '<div class="nc-sub">' + n.strokes.length + ' strokes</div>' +
-      '<div class="nc-date">' + (n.mod ? fmtDate(n.mod) : fmtDate(n.cr)) + '</div>';
+
+    var titleEl = document.createElement('div');
+    titleEl.className = 'nc-title';
+    titleEl.textContent = n.title || 'Untitled';
+    card.appendChild(titleEl);
+
+    var subEl = document.createElement('div');
+    subEl.className = 'nc-sub';
+    subEl.textContent = n.strokes.length + ' strokes';
+    card.appendChild(subEl);
+
+    var dateEl = document.createElement('div');
+    dateEl.className = 'nc-date';
+    dateEl.textContent = (n.mod ? fmtDate(n.mod) : fmtDate(n.cr));
+    card.appendChild(dateEl);
+
+    var star = document.createElement('button');
+    star.className = 'star-btn' + (n.fav ? ' on' : '');
+    star.innerHTML =
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">' +
+      '<path d="M12 3.6 l2.6 5.4 5.9 0.8 -4.3 4.1 1 5.8 -5.2 -2.8 -5.2 2.8 1 -5.8 -4.3 -4.1 5.9 -0.8 z"/></svg>';
+    (function (note, starEl) {
+      starEl.addEventListener('click', function (ev) {
+        if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+        note.fav = !note.fav;
+        saveSoon();
+        renderHome();
+      });
+    })(n, star);
+    card.appendChild(star);
+
     (function (id) {
       card.addEventListener('click', function () { openNote(id); });
-    })(ids[i]);
+    })(shown[i]);
     notesGrid.appendChild(card);
     j++;
   }
@@ -1800,6 +3031,8 @@ function openNote(id) {
   resetTouchTracking();
   invalidateAll();
   scrollY = n.scroll || 0;
+  scrollX = 0;
+  zoom = 1;
   noteTitleBtn.textContent = n.title || 'Untitled';
   updateUndoButtons();
   recomputeDoc();
@@ -1812,9 +3045,11 @@ function openNote(id) {
 
 function goHome() {
   var n = activeNote();
-  if (n) { n.scroll = scrollY; n.mod = Date.now(); }
+  if (n) { n.scroll = Math.round(scrollY); n.mod = Date.now(); }
   doSaveNow();
   closePanels();
+  closeTextEditor();
+  clearSelection();
   showView('home');
   renderHome();
 }
@@ -1930,7 +3165,14 @@ function buildPalette() {
     chip.setAttribute('data-pen', i);
     (function (idx, el) {
       el.addEventListener('click', function () {
+        /* per-pen memory: store the outgoing pen's settings, load
+           the incoming pen's remembered color + size */
+        settings.penCfg[settings.pen].c = settings.color;
+        settings.penCfg[settings.pen].w = settings.widthStep;
         settings.pen = idx;
+        var cfg = settings.penCfg[idx];
+        settings.color = cfg.c;
+        settings.widthStep = cfg.w;
         applyPenUI();
         saveSoon();
       });
@@ -1946,6 +3188,7 @@ function buildPalette() {
     (function (col, el) {
       el.addEventListener('click', function () {
         settings.color = col;
+        settings.penCfg[settings.pen].c = col;
         applyPenUI();
         saveSoon();
       });
@@ -1956,12 +3199,21 @@ function buildPalette() {
   previewCanvas.style.height = '44px';
   thicknessRange.addEventListener('change', function () {
     settings.widthStep = lim(parseInt(thicknessRange.value, 10) || 0, 0, 5);
+    settings.penCfg[settings.pen].w = settings.widthStep;
     applyPenUI();
     saveSoon();
   });
+  shapeOffBtn.addEventListener('click', function () { settings.shapeAssist = SHAPE_OFF; applyShapeUI(); saveSoon(); });
+  shapeLineBtn.addEventListener('click', function () { settings.shapeAssist = SHAPE_LINE; applyShapeUI(); saveSoon(); });
+  shapeShapeBtn.addEventListener('click', function () { settings.shapeAssist = SHAPE_SHAPE; applyShapeUI(); saveSoon(); });
 }
 
 function applyPenUI() {
+  /* keep the active pen's cfg in sync (migration + safety) */
+  if (settings.penCfg[settings.pen]) {
+    settings.penCfg[settings.pen].c = settings.color;
+    settings.penCfg[settings.pen].w = settings.widthStep;
+  }
   var chips = penChips.children;
   for (var i = 0; i < chips.length; i++) {
     chips[i].className = 'pen-chip' + (i === settings.pen ? ' on' : '');
@@ -1975,6 +3227,13 @@ function applyPenUI() {
   penBadge.style.background = settings.color;
   thicknessRange.value = String(settings.widthStep);
   drawSquiggle(previewCanvas, settings.pen, currentPenWidth(), settings.color);
+  applyShapeUI();
+}
+
+function applyShapeUI() {
+  shapeOffBtn.className = 'sh-mode first' + (settings.shapeAssist === SHAPE_OFF ? ' on' : '');
+  shapeLineBtn.className = 'sh-mode mid' + (settings.shapeAssist === SHAPE_LINE ? ' on' : '');
+  shapeShapeBtn.className = 'sh-mode last' + (settings.shapeAssist === SHAPE_SHAPE ? ' on' : '');
 }
 
 /* ---------- eraser panel ---------- */
@@ -2016,13 +3275,21 @@ function buildMoreMenu() {
     { lbl: 'Export PNG', val: '', act: exportPNG },
     { lbl: 'Template', val: TPL_NAMES[settings.template], act: function () { settings.template = (settings.template + 1) % 4; afterSettingChange(); } },
     { lbl: 'Line spacing', val: settings.spacing + ' px', act: function () { settings.spacing = settings.spacing === 32 ? 38 : (settings.spacing === 38 ? 44 : 32); afterSettingChange(); } },
+    { lbl: 'Paper color', val: (PAPERS[settings.paperColor] || PAPERS[0]).name, act: function () { settings.paperColor = (settings.paperColor + 1) % PAPERS.length; afterSettingChange(); } },
+    { lbl: 'Theme', val: settings.uiDark ? 'Dark' : 'Light', act: function () {
+        settings.uiDark = !settings.uiDark;
+        if (settings.uiDark && settings.paperColor === 0) settings.paperColor = 4;
+        else if (!settings.uiDark && settings.paperColor === 4) settings.paperColor = 0;
+        applyTheme();
+        afterSettingChange();
+      } },
+    { lbl: 'Zoom', val: Math.round(zoom * 100) + '%', act: function () { resetZoom(); } },
     { lbl: 'Palm rejection', val: PALM_NAMES[settings.palmLevel], act: function () { settings.palmLevel = (settings.palmLevel + 1) % 3; applyPalmUI(); afterSettingChange(); } },
     { lbl: 'Writing hand', val: HAND_NAMES[settings.hand], act: function () { settings.hand = (settings.hand + 1) % 3; afterSettingChange(); } },
     { lbl: 'Touch guide', val: settings.guideDots ? 'On' : 'Off', act: function () { settings.guideDots = !settings.guideDots; hidePendingDot(); afterSettingChange(); } },
-    { lbl: 'Paper', val: settings.paperDark ? 'Dark' : 'Light', act: function () { settings.paperDark = !settings.paperDark; afterSettingChange(); } },
     { lbl: 'Clear note', val: '', warn: true, act: clearNote },
     { lbl: 'Delete note', val: '', warn: true, act: deleteCurrentNote },
-    { lbl: 'About', val: '', act: function () { window.alert('MathNotes v4.0 (Samsung Edition)\n\nWorks offline. Notes are saved in this browser (localStorage).\nScroll with two fingers. Palm rejection: ' + PALM_NAMES[settings.palmLevel] + '.'); } }
+    { lbl: 'About', val: '', act: function () { window.alert('MathNotes v5.1 (S-Class 5)\n\nSamsung-notes style handwriting for iPad 3.\nWorks offline. Notes are saved in this browser.\n\nHand tool: finger scrolls, pen writes.\nTwo-finger pinch zooms. Lasso tool selects ink.\nDrag the corner handle or tap - / + to resize\nthe selection. Double-tap with the hand tool\nresets zoom.'); } }
   ];
   for (var i = 0; i < moreRowDefs.length; i++) {
     var d = moreRowDefs[i];
@@ -2042,6 +3309,11 @@ function afterSettingChange() {
   buildMoreMenu();
   requestRender();
   saveSoon();
+}
+
+/* ---------- dark theme ---------- */
+function applyTheme() {
+  document.body.className = settings.uiDark ? 'dark' : '';
 }
 
 /* ---------- palm level ---------- */
@@ -2098,21 +3370,85 @@ byId('moreBtn').addEventListener('click', function () {
 });
 
 penBtn.addEventListener('click', function () {
-  tool = 'pen';
-  eraserBtn.className = 'tb-btn';
-  penBtn.className = 'tb-btn on';
-  eraserPanel.style.display = 'none';
-  if (penPalette.style.display === 'block') penPalette.style.display = 'none';
-  else { applyPenUI(); penPalette.style.display = 'block'; }
+  if (tool === 'pen' && penPalette.style.display === 'block') {
+    penPalette.style.display = 'none';
+    return;
+  }
+  setTool('pen');
+  applyPenUI();
+  penPalette.style.display = 'block';
 });
+selectBtn.addEventListener('click', function () { setTool('select'); });
+textBtn.addEventListener('click', function () { setTool('text'); });
+handBtn.addEventListener('click', function () { setTool('hand'); });
 eraserBtn.addEventListener('click', function () {
-  tool = 'eraser';
-  penBtn.className = 'tb-btn';
-  eraserBtn.className = 'tb-btn on';
-  penPalette.style.display = 'none';
-  if (eraserPanel.style.display === 'block') eraserPanel.style.display = 'none';
-  else { applyEraserUI(); eraserPanel.style.display = 'block'; }
+  if (tool === 'eraser' && eraserPanel.style.display === 'block') {
+    eraserPanel.style.display = 'none';
+    return;
+  }
+  setTool('eraser');
+  applyEraserUI();
+  eraserPanel.style.display = 'block';
 });
+
+function setTool(t) {
+  tool = t;
+  penBtn.className = 'tb-btn' + (t === 'pen' ? ' on' : '');
+  selectBtn.className = 'tb-btn' + (t === 'select' ? ' on' : '');
+  textBtn.className = 'tb-btn' + (t === 'text' ? ' on' : '');
+  eraserBtn.className = 'tb-btn' + (t === 'eraser' ? ' on' : '');
+  handBtn.className = 'tb-btn' + (t === 'hand' ? ' on' : '');
+  penPalette.style.display = 'none';
+  eraserPanel.style.display = 'none';
+  /* an abandoned lasso must not linger */
+  if (lassoId !== null) {
+    var ls = touchStates[lassoId];
+    if (ls) { delete touchStates[lassoId]; lassoId = null; }
+  }
+}
+
+/* selection action bar */
+selDelBtn.addEventListener('click', deleteSelection);
+selCopyBtn.addEventListener('click', duplicateSelection);
+selSmallBtn.addEventListener('click', function () { scaleSelectionBy(0.85); });
+selBigBtn.addEventListener('click', function () { scaleSelectionBy(1.18); });
+selDoneBtn.addEventListener('click', function () { clearSelection(); requestRender(); });
+
+/* text editor */
+textDoneBtn.addEventListener('click', commitText);
+textCancelBtn.addEventListener('click', closeTextEditor);
+
+/* page jump: tap the scroll/zoom pill */
+scrollPill.addEventListener('click', function () {
+  if (homeView.className.indexOf('on') >= 0) return;
+  var totalPages = Math.max(1, Math.ceil(docH / (PAGE_H + GAP_H)));
+  var cur = Math.floor((scrollY + viewH / zoom / 2) / (PAGE_H + GAP_H)) + 1;
+  var ans = window.prompt('Go to page (1-' + totalPages + ')', String(cur));
+  if (ans === null || ans === '') return;
+  var p = parseInt(ans, 10);
+  if (isNaN(p)) return;
+  p = lim(p, 1, totalPages);
+  scrollY = (p - 1) * (PAGE_H + GAP_H);
+  clampScroll();
+  requestRender();
+  updateScrollPill();
+});
+
+/* search */
+searchBtn.addEventListener('click', function () {
+  if (searchBarEl.style.display === 'block') { hideSearch(); return; }
+  searchBarEl.style.display = 'block';
+  setTimeout(function () {
+    if (searchBarEl.style.display === 'block' && typeof searchInputEl.focus === 'function') searchInputEl.focus();
+  }, 60);
+});
+function hideSearch() {
+  searchBarEl.style.display = 'none';
+  searchInputEl.value = '';
+  renderHome('');
+}
+searchCancelBtn.addEventListener('click', hideSearch);
+searchInputEl.addEventListener('input', function () { renderHome(); });
 undoBtn.addEventListener('click', doUndo);
 redoBtn.addEventListener('click', doRedo);
 byId('exportCloseBtn').addEventListener('click', function () { exportOverlay.className = 'overlay'; });
@@ -2128,6 +3464,7 @@ function init() {
   buildMoreMenu();
   applyPenUI();
   applyPalmUI();
+  applyTheme();
   updateUndoButtons();
   if (!storageOk) showWarning('Private Browsing detected: notes will NOT be saved after reload.');
   if (curNoteId && notes[curNoteId]) openNote(curNoteId);
