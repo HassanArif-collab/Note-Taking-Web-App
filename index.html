@@ -1,2573 +1,2143 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="MathNotes">
-  <meta name="format-detection" content="telephone=no">
-  <title>MathNotes</title>
-  <style>
-    /* ============================================================
-       MathNotes v2 — Premium UI, Safari 9 / iOS 9.3.5 compatible
-       CSS constraints: no Grid, no custom properties, no calc(),
-       no var(). Flexbox + absolute positioning only.
-       ============================================================ */
-    * {
-      -webkit-box-sizing: border-box;
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: rgba(0,0,0,0);
-    }
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
-      -webkit-user-select: none;
-      user-select: none;
-      -webkit-touch-callout: none;
-      background: #f2f2f7;
-      color: #1c1c1e;
-      -webkit-font-smoothing: antialiased;
-      font-smoothing: antialiased;
-      transition: background 0.25s ease;
-    }
-    body.dark {
-      background: #000000;
-      color: #ffffff;
-    }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<title>MathNotes</title>
+<style>
+/* ============================================================
+   MathNotes v4.0 "Samsung Edition"
+   Single-file handwriting notes for iPad 3 (iOS 9.3.5 / Safari 9).
+   All CSS below is Safari 9 safe: flexbox without spacing props,
+   plain values, rgba shadows, no custom properties, no grid.
+   ============================================================ */
+* { margin: 0; padding: 0; -webkit-tap-highlight-color: rgba(0,0,0,0); }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  background: #F1F2F4; color: #1B1B1B;
+  -webkit-user-select: none; -webkit-touch-callout: none;
+  font-size: 15px; line-height: 1.4;
+}
+button { border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
+input { font: inherit; }
 
-    /* ---------- Layout primitives ---------- */
-    .view {
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      display: none;
-      -webkit-box-orient: vertical;
-      -webkit-box-direction: normal;
-      -webkit-flex-direction: column;
-      flex-direction: column;
-    }
-    .view.active { display: -webkit-box; display: -webkit-flex; display: flex; }
+/* ---------- shared view shell ---------- */
+.view { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: none; }
+.view.on { display: block; }
 
-    /* ============================================================
-       HOME VIEW — notebook gallery
-       ============================================================ */
-    #homeView { background: #f2f2f7; }
-    body.dark #homeView { background: #000000; }
+/* ---------- header (Samsung Notes style) ---------- */
+.hdr {
+  height: 56px; background: #FFFFFF;
+  border-bottom: 1px solid #E5E5E5;
+  display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center;
+  padding: 0 6px;
+  position: relative; z-index: 10;
+}
+.hdr .ttl {
+  -webkit-flex: 1; flex: 1;
+  min-width: 0;
+  font-size: 18px; font-weight: 600; color: #1B1B1B;
+  text-align: center; letter-spacing: -0.2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hdr .ttl.left { text-align: left; padding-left: 12px; font-size: 20px; }
+.ibtn {
+  width: 44px; height: 44px; border-radius: 50%;
+  display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center;
+  -webkit-justify-content: center; justify-content: center;
+  color: #474747; position: relative;
+}
+.ibtn:active { background: #EFF0F2; }
+.ibtn svg { display: block; }
+.ibtn.dis { color: #C8C8C8; }
 
-    .home-header {
-      -webkit-flex: 0 0 auto;
-      flex: 0 0 auto;
-      padding: calc(env(safe-area-inset-top, 0px) + 12px) 20px 14px 20px;
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-align: center;
-      -webkit-align-items: center;
-      align-items: center;
-      -webkit-box-pack: justify;
-      -webkit-justify-content: space-between;
-      justify-content: space-between;
-    }
-    .home-header h1 {
-      margin: 0;
-      font-size: 32px;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-    }
-    .icon-btn {
-      -webkit-appearance: none;
-      appearance: none;
-      background: transparent;
-      border: 0;
-      width: 44px;
-      height: 44px;
-      border-radius: 22px;
-      color: #0a84ff;
-      font-size: 22px;
-      cursor: pointer;
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-align: center;
-      -webkit-align-items: center;
-      align-items: center;
-      -webkit-box-pack: center;
-      -webkit-justify-content: center;
-      justify-content: center;
-    }
-    .icon-btn:active { background: rgba(0,0,0,0.06); }
-    body.dark .icon-btn:active { background: rgba(255,255,255,0.08); }
+/* palm level quick chip in the editor header */
+#palmBtn {
+  height: 30px; padding: 0 12px; border-radius: 15px;
+  background: #EFF0F2; color: #474747;
+  font-size: 13px; font-weight: 600; margin: 0 2px;
+  white-space: nowrap;
+}
+#palmBtn.maxed { background: rgba(3,129,254,0.12); color: #0381FE; }
+#palmBtn.med { color: #0381FE; }
 
-    .scroll-area {
-      -webkit-flex: 1 1 auto;
-      flex: 1 1 auto;
-      overflow-y: auto;
-      overflow-x: hidden;
-      -webkit-overflow-scrolling: touch;
-      padding: 6px 16px 110px 16px;
-    }
+/* ---------- notes home (Samsung list) ---------- */
+#notesGrid {
+  position: absolute; top: 56px; left: 0; right: 0; bottom: 0;
+  padding: 12px 4px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  text-align: center;
+}
+.note-card {
+  display: inline-block; width: 46%; margin: 1.6%;
+  background: #FFFFFF; border-radius: 16px;
+  padding: 14px 16px; text-align: left;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  vertical-align: top; min-height: 96px;
+}
+.note-card:active { background: #F7F9FB; }
+.note-card .nc-title {
+  font-size: 16px; font-weight: 600; color: #1B1B1B;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.note-card .nc-sub { font-size: 13px; color: #8C8C8C; margin-top: 6px; }
+.note-card .nc-date { font-size: 12px; color: #A8A8A8; margin-top: 10px; }
+#emptyHint {
+  position: absolute; top: 40%; left: 0; right: 0;
+  text-align: center; color: #A8A8A8; font-size: 15px; display: none;
+}
+#fabNew {
+  position: absolute; right: 20px; bottom: 20px;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: #0381FE; color: #FFFFFF;
+  font-size: 34px; font-weight: 300; line-height: 54px; text-align: center;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+}
+#fabNew:active { background: #0270DB; }
 
-    #notebookGrid {
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-flex-wrap: wrap;
-      flex-wrap: wrap;
-      margin: 0 -6px;
-    }
-    .notebook-card {
-      -webkit-flex: 0 0 50%;
-      flex: 0 0 50%;
-      padding: 6px;
-      max-width: 50%;
-    }
-    .notebook-card-inner {
-      background: #ffffff;
-      border-radius: 16px;
-      overflow: hidden;
-      -webkit-box-shadow: 0 4px 12px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-      cursor: pointer;
-      transition: -webkit-transform 0.15s ease;
-      transition: transform 0.15s ease;
-      min-height: 200px;
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-orient: vertical;
-      -webkit-box-direction: normal;
-      -webkit-flex-direction: column;
-      flex-direction: column;
-    }
-    body.dark .notebook-card-inner {
-      background: #1c1c1e;
-      -webkit-box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-    }
-    .notebook-card-inner:active { -webkit-transform: scale(0.97); transform: scale(0.97); }
-    .notebook-thumb {
-      height: 130px;
-      background: #ffffff;
-      position: relative;
-      overflow: hidden;
-      border-bottom: 1px solid rgba(0,0,0,0.05);
-    }
-    .notebook-thumb canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-    }
-    .notebook-thumb .nb-cover {
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-align: center;
-      -webkit-align-items: center;
-      align-items: center;
-      -webkit-box-pack: center;
-      -webkit-justify-content: center;
-      justify-content: center;
-      color: #ffffff;
-      font-size: 56px;
-      font-weight: 200;
-      opacity: 0.92;
-    }
-    .notebook-info {
-      padding: 10px 12px;
-      -webkit-flex: 1 1 auto;
-      flex: 1 1 auto;
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-orient: vertical;
-      -webkit-box-direction: normal;
-      -webkit-flex-direction: column;
-      flex-direction: column;
-    }
-    .notebook-title {
-      font-size: 15px;
-      font-weight: 600;
-      color: inherit;
-      margin: 0 0 2px 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .notebook-meta {
-      font-size: 12px;
-      color: #8e8e93;
-    }
-    body.dark .notebook-meta { color: #aeaeb2; }
+/* ---------- notebook drawer ---------- */
+#drawerBackdrop {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.32); display: none; z-index: 39;
+}
+#drawer {
+  position: absolute; top: 0; left: 0; bottom: 0; width: 288px;
+  background: #FFFFFF; z-index: 40;
+  -webkit-transform: translateX(-102%); transform: translateX(-102%);
+  transition: -webkit-transform 0.22s ease-out; transition: transform 0.22s ease-out;
+  display: -webkit-flex; display: flex;
+  -webkit-flex-direction: column; flex-direction: column;
+}
+#drawer.open { -webkit-transform: none; transform: none; }
+#drawer .d-hdr {
+  height: 56px; border-bottom: 1px solid #E5E5E5;
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  padding: 0 6px; font-weight: 600; font-size: 16px;
+}
+#drawer .d-hdr .lbl { -webkit-flex: 1; flex: 1; padding-left: 10px; }
+#nbList { -webkit-flex: 1; flex: 1; overflow-y: auto; }
+.nb-row {
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  height: 52px; padding: 0 18px;
+}
+.nb-row:active { background: #F4F6F8; }
+.nb-row .dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 14px; }
+.nb-row .nm { -webkit-flex: 1; flex: 1; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nb-row .ct { font-size: 13px; color: #A8A8A8; }
+#newNbBtn { height: 52px; color: #0381FE; font-size: 15px; font-weight: 600; text-align: left; padding: 0 18px; }
 
-    .fab {
-      position: absolute;
-      bottom: calc(28px + env(safe-area-inset-bottom, 0px));
-      right: 24px;
-      width: 60px;
-      height: 60px;
-      border-radius: 30px;
-      background: #0a84ff;
-      color: #ffffff;
-      border: 0;
-      font-size: 30px;
-      font-weight: 300;
-      -webkit-box-shadow: 0 6px 16px rgba(10,132,255,0.4), 0 2px 6px rgba(0,0,0,0.15);
-      box-shadow: 0 6px 16px rgba(10,132,255,0.4), 0 2px 6px rgba(0,0,0,0.15);
-      cursor: pointer;
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-align: center;
-      -webkit-align-items: center;
-      align-items: center;
-      -webkit-box-pack: center;
-      -webkit-justify-content: center;
-      justify-content: center;
-      z-index: 30;
-      transition: -webkit-transform 0.15s ease;
-      transition: transform 0.15s ease;
-    }
-    .fab:active { -webkit-transform: scale(0.92); transform: scale(0.92); }
+/* ---------- editor canvas ---------- */
+#drawView { background: #F1F2F4; }
+#canvasWrap { position: absolute; top: 56px; left: 0; right: 0; bottom: 0; overflow: hidden; }
+#noteCanvas { position: absolute; top: 0; left: 0; }
 
-    /* ============================================================
-       DRAW VIEW — top bar + canvas + bottom toolbar
-       ============================================================ */
-    #drawView { background: #ffffff; }
-    body.dark #drawView { background: #1c1c1e; }
+/* pending-touch guide ring (frozen at touch-down, never moved) */
+#pendingDot {
+  position: absolute; width: 22px; height: 22px;
+  margin: -13px 0 0 -13px; border-radius: 50%;
+  border: 2px solid rgba(3,129,254,0.5);
+  display: none; pointer-events: none; z-index: 15;
+}
+#pendingDot.rejected { border-color: rgba(226,35,26,0.75); }
 
-    .topbar {
-      -webkit-flex: 0 0 auto;
-      flex: 0 0 auto;
-      min-height: 52px;
-      padding: 0 8px;
-      padding-top: env(safe-area-inset-top, 0px);
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-align: center;
-      -webkit-align-items: center;
-      align-items: center;
-      background: rgba(255,255,255,0.85);
-      -webkit-backdrop-filter: blur(20px) saturate(180%);
-      backdrop-filter: blur(20px) saturate(180%);
-      border-bottom: 1px solid rgba(0,0,0,0.06);
-      z-index: 10;
-    }
-    body.dark .topbar {
-      background: rgba(28,28,30,0.85);
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-    }
-    .topbar .nb-name {
-      -webkit-flex: 1 1 auto;
-      flex: 1 1 auto;
-      font-size: 16px;
-      font-weight: 600;
-      text-align: center;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      padding: 0 4px;
-    }
-    .topbar .page-pill {
-      -webkit-flex: 0 0 auto;
-      flex: 0 0 auto;
-      font-size: 12px;
-      font-weight: 600;
-      color: #8e8e93;
-      padding: 4px 10px;
-      background: rgba(120,120,128,0.12);
-      border-radius: 10px;
-      margin: 0 4px;
-    }
-    .topbar .top-icon {
-      color: #0a84ff;
-      font-size: 22px;
-      width: 44px;
-      height: 44px;
-      border-radius: 22px;
-      background: transparent;
-      border: 0;
-      cursor: pointer;
-      -webkit-appearance: none;
-      appearance: none;
-    }
-    .topbar .top-icon:active { background: rgba(0,0,0,0.06); }
-    body.dark .topbar .top-icon:active { background: rgba(255,255,255,0.08); }
+/* ---------- floating tool capsule (Samsung Tab style) ---------- */
+#toolbar {
+  position: absolute; right: 10px; top: 50%; margin-top: -150px;
+  width: 54px; border-radius: 27px;
+  background: rgba(255,255,255,0.97);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+  border: 1px solid rgba(0,0,0,0.05);
+  padding: 8px 0; z-index: 20;
+}
+.tb-btn {
+  width: 54px; height: 46px; position: relative;
+  display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center;
+  -webkit-justify-content: center; justify-content: center;
+  color: #666666; border-radius: 14px;
+}
+.tb-btn:active { background: #EFF0F2; }
+.tb-btn.on { background: rgba(3,129,254,0.12); color: #0381FE; }
+.tb-btn.dis { color: #C8C8C8; }
+.tb-sep { height: 1px; margin: 5px 13px; background: #E5E5E5; }
+#penBadge {
+  position: absolute; right: 10px; bottom: 9px;
+  width: 7px; height: 7px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.9);
+}
 
-    .canvas-wrap {
-      -webkit-flex: 1 1 auto;
-      flex: 1 1 auto;
-      position: relative;
-      overflow: hidden;
-    }
-    #canvas {
-      position: absolute;
-      top: 0; left: 0;
-      display: block;
-      background: #ffffff;
-      touch-action: none;
-    }
-    body.dark #canvas {
-      background: #262628;
-      -webkit-box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
-    }
+/* ---------- pen palette ---------- */
+#penPalette {
+  position: absolute; right: 74px; top: 50%; margin-top: -224px;
+  width: 300px; background: #FFFFFF; border-radius: 24px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+  padding: 16px 16px 10px 16px; display: none; z-index: 22;
+}
+#penChips {
+  display: -webkit-flex; display: flex;
+  -webkit-justify-content: space-between; justify-content: space-between;
+}
+.pen-chip {
+  width: 52px; height: 74px; border-radius: 14px;
+  border: 1px solid #E0E0E0; background: #FFFFFF;
+  text-align: center; padding-top: 7px;
+}
+.pen-chip.on { border: 2px solid #0381FE; background: #F5FAFF; }
+.pen-chip canvas { display: block; margin: 0 auto; }
+.pen-chip .pn { font-size: 10px; color: #666666; margin-top: 5px; }
+#thickRow { margin-top: 14px; }
+#thickLbl { font-size: 12px; color: #8C8C8C; margin-bottom: 2px; }
+#thicknessRange {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 28px; background: transparent; margin: 0;
+}
+#thicknessRange::-webkit-slider-runnable-track {
+  height: 4px; background: #E0E0E0; border-radius: 2px;
+}
+#thicknessRange::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: #FFFFFF; border: 2px solid #0381FE; margin-top: -10px;
+}
+#previewCanvas { display: block; margin: 4px auto 0 auto; }
+#colorRow { margin-top: 10px; text-align: left; }
+.sw {
+  display: inline-block; width: 28px; height: 28px;
+  border-radius: 50%; margin: 0 5px 7px 0;
+  border: 1px solid rgba(0,0,0,0.10); vertical-align: top;
+}
+.sw.on { box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4px #0381FE; }
 
-    /* Bottom toolbar */
-    .toolbar {
-      -webkit-flex: 0 0 auto;
-      flex: 0 0 auto;
-      min-height: 64px;
-      padding: 8px 6px 6px 6px;
-      padding-bottom: env(safe-area-inset-bottom, 6px);
-      background: rgba(248,248,248,0.92);
-      -webkit-backdrop-filter: blur(20px) saturate(180%);
-      backdrop-filter: blur(20px) saturate(180%);
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-align: center;
-      -webkit-align-items: center;
-      align-items: center;
-      -webkit-box-pack: start;
-      -webkit-justify-content: flex-start;
-      justify-content: flex-start;
-      overflow-x: auto;
-      overflow-y: hidden;
-      -webkit-overflow-scrolling: touch;
-      white-space: nowrap;
-      z-index: 10;
-      -webkit-box-shadow: 0 -1px 0 rgba(0,0,0,0.08);
-      box-shadow: 0 -1px 0 rgba(0,0,0,0.08);
-    }
-    body.dark .toolbar {
-      background: rgba(28,28,30,0.92);
-      -webkit-box-shadow: 0 -1px 0 rgba(255,255,255,0.06);
-      box-shadow: 0 -1px 0 rgba(255,255,255,0.06);
-    }
-    .tool-btn {
-      -webkit-appearance: none;
-      appearance: none;
-      background: rgba(0,0,0,0.06);
-      color: #1c1c1e;
-      border: 0;
-      border-radius: 10px;
-      min-width: 44px;
-      min-height: 44px;
-      margin: 0 3px;
-      padding: 6px 8px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      -webkit-flex: 0 0 auto;
-      flex: 0 0 auto;
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-orient: vertical;
-      -webkit-box-direction: normal;
-      -webkit-flex-direction: column;
-      flex-direction: column;
-      -webkit-box-align: center;
-      -webkit-align-items: center;
-      align-items: center;
-      -webkit-box-pack: center;
-      -webkit-justify-content: center;
-      justify-content: center;
-      transition: -webkit-transform 0.12s ease, background 0.12s ease;
-      transition: transform 0.12s ease, background 0.12s ease;
-    }
-    body.dark .tool-btn {
-      background: rgba(255,255,255,0.12);
-      color: #ffffff;
-    }
-    .tool-btn:active { -webkit-transform: scale(0.92); transform: scale(0.92); }
-    .tool-btn.active {
-      background: #0a84ff;
-      color: #ffffff;
-    }
-    .tool-btn .ico {
-      width: 22px; height: 22px;
-      display: block;
-    }
-    .tool-btn .lbl {
-      font-size: 10.5px;
-      font-weight: 500;
-      margin-top: 2px;
-      letter-spacing: 0.2px;
-    }
-    /* Strict ("Max") palm rejection: orange instead of blue */
-    .tool-btn.active.maxed {
-      background: #ff9500;
-      color: #ffffff;
-    }
+/* ---------- eraser panel ---------- */
+#eraserPanel {
+  position: absolute; right: 74px; top: 50%; margin-top: -120px;
+  width: 208px; background: #FFFFFF; border-radius: 20px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+  padding: 14px 16px; display: none; z-index: 22;
+}
+#eraserPanel .ep-h { font-size: 12px; color: #8C8C8C; margin-bottom: 6px; }
+.ep-modes { display: -webkit-flex; display: flex; }
+.ep-mode {
+  -webkit-flex: 1; flex: 1; height: 34px; border-radius: 10px;
+  background: #F4F6F8; color: #474747; font-size: 13px; font-weight: 600;
+}
+.ep-mode.first { border-radius: 10px 3px 3px 10px; margin-right: 2px; }
+.ep-mode.last  { border-radius: 3px 10px 10px 3px; margin-left: 2px; }
+.ep-mode.on { background: rgba(3,129,254,0.12); color: #0381FE; }
+#sizeRow { margin-top: 12px; text-align: left; }
+.ep-size {
+  display: inline-block; border-radius: 50%; background: #C9CDD2;
+  border: 0; margin: 0 8px 0 0; vertical-align: middle; position: relative;
+}
+.ep-size.on { background: #0381FE; outline: 2px solid rgba(3,129,254,0.25); }
 
-    /* Pending-touch indicator: a small ring that follows a touch
-       which has landed but not yet proven to be a stroke. It is a
-       DOM overlay, so it never pollutes the ink canvas. */
-    #pendingDot {
-      position: absolute;
-      left: -100px;
-      top: -100px;
-      width: 26px;
-      height: 26px;
-      border-radius: 13px;
-      border: 2px solid rgba(10,132,255,0.55);
-      background: rgba(10,132,255,0.12);
-      margin: 0;
-      padding: 0;
-      z-index: 5;
-      pointer-events: none;
-      display: none;
-      -webkit-box-sizing: border-box;
-      box-sizing: border-box;
-    }
-    #pendingDot.rejected {
-      border-color: rgba(255,59,48,0.8);
-      background: rgba(255,59,48,0.15);
-    }
+/* ---------- more (kebab) menu ---------- */
+#moreMenu {
+  position: absolute; top: 60px; right: 8px; width: 268px;
+  background: #FFFFFF; border-radius: 16px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+  padding: 8px 0; display: none; z-index: 25;
+  max-height: 85%; overflow-y: auto;
+}
+.mrow {
+  min-height: 46px; padding: 4px 18px;
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  font-size: 15px; color: #1B1B1B;
+}
+.mrow:active { background: #F4F6F8; }
+.mrow .lbl { -webkit-flex: 1; flex: 1; }
+.mrow .val { color: #0381FE; font-size: 14px; font-weight: 600; }
+.mrow.warn .lbl { color: #E2231A; }
+.mrow.warn .val { color: #E2231A; }
 
-    .tdiv {
-      width: 1px;
-      height: 32px;
-      background: rgba(255,255,255,0.18);
-      margin: 0 4px;
-      -webkit-flex: 0 0 1px;
-      flex: 0 0 1px;
-    }
+/* ---------- toast ---------- */
+#toast {
+  position: absolute; bottom: 26px; left: 50%;
+  -webkit-transform: translateX(-50%) translateY(8px); transform: translateX(-50%) translateY(8px);
+  background: rgba(38,38,38,0.92); color: #FFFFFF;
+  padding: 10px 18px; border-radius: 12px; font-size: 14px;
+  opacity: 0; transition: opacity 0.16s, -webkit-transform 0.16s, transform 0.16s;
+  pointer-events: none; z-index: 50; white-space: nowrap; max-width: 88%;
+  overflow: hidden; text-overflow: ellipsis;
+}
+#toast.show {
+  opacity: 1; -webkit-transform: translateX(-50%) translateY(0); transform: translateX(-50%) translateY(0);
+}
 
-    .swatch-btn {
-      -webkit-appearance: none;
-      appearance: none;
-      background: rgba(0,0,0,0.06);
-      color: #1c1c1e;
-      border: 0;
-      border-radius: 10px;
-      min-width: 44px;
-      min-height: 44px;
-      margin: 0 3px;
-      padding: 4px;
-      cursor: pointer;
-      -webkit-flex: 0 0 auto;
-      flex: 0 0 auto;
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-align: center;
-      -webkit-align-items: center;
-      align-items: center;
-      -webkit-box-pack: center;
-      -webkit-justify-content: center;
-      justify-content: center;
-      transition: -webkit-transform 0.12s ease;
-      transition: transform 0.12s ease;
-    }
-    body.dark .swatch-btn {
-      background: rgba(255,255,255,0.12);
-      color: #ffffff;
-    }
-    .swatch-btn:active { -webkit-transform: scale(0.92); transform: scale(0.92); }
-    .swatch-btn .dot {
-      width: 26px;
-      height: 26px;
-      border-radius: 13px;
-      border: 2px solid rgba(255,255,255,0.4);
-    }
+/* ---------- export overlay ---------- */
+.overlay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6); z-index: 30; display: none;
+  padding: 56px 16px 16px 16px; text-align: center;
+}
+.overlay.on { display: block; }
+#exportImg {
+  max-width: 100%; max-height: 78%;
+  background: #FFFFFF; border-radius: 4px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4); display: block; margin: 0 auto;
+}
+#exportHint { color: #E8E8E8; font-size: 13px; margin-top: 14px; }
+#exportCloseBtn {
+  margin-top: 14px; color: #FFFFFF; font-size: 15px; font-weight: 600;
+  background: rgba(255,255,255,0.16); border-radius: 18px; padding: 10px 26px;
+}
 
-    /* ============================================================
-       OVERLAYS — pages view, color picker, size picker, export
-       ============================================================ */
-    .overlay {
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.4);
-      z-index: 200;
-      display: none;
-      -webkit-box-orient: vertical;
-      -webkit-box-direction: normal;
-      -webkit-flex-direction: column;
-      flex-direction: column;
-      -webkit-box-align: center;
-      -webkit-align-items: center;
-      align-items: center;
-      -webkit-box-pack: center;
-      -webkit-justify-content: center;
-      justify-content: center;
-      padding: 20px;
-    }
-    .overlay.active { display: -webkit-box; display: -webkit-flex; display: flex; }
+/* scroll position pill (bottom-left, Samsung style) */
+#scrollPill {
+  position: absolute; left: 14px; bottom: 14px;
+  background: rgba(38,38,38,0.85); color: #FFFFFF;
+  font-size: 12px; padding: 5px 12px; border-radius: 12px;
+  z-index: 14; display: none; pointer-events: none;
+}
 
-    .sheet {
-      background: #ffffff;
-      border-radius: 18px;
-      max-width: 100%;
-      max-height: 86%;
-      overflow: hidden;
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-orient: vertical;
-      -webkit-box-direction: normal;
-      -webkit-flex-direction: column;
-      flex-direction: column;
-      -webkit-box-shadow: 0 20px 50px rgba(0,0,0,0.3);
-      box-shadow: 0 20px 50px rgba(0,0,0,0.3);
-    }
-    body.dark .sheet { background: #2c2c2e; color: #ffffff; }
-
-    .sheet-head {
-      -webkit-flex: 0 0 auto;
-      flex: 0 0 auto;
-      padding: 16px 20px 8px 20px;
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-align: center;
-      -webkit-align-items: center;
-      align-items: center;
-      -webkit-box-pack: justify;
-      -webkit-justify-content: space-between;
-      justify-content: space-between;
-    }
-    .sheet-head h2 {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 600;
-    }
-    .sheet-body {
-      -webkit-flex: 1 1 auto;
-      flex: 1 1 auto;
-      overflow: auto;
-      -webkit-overflow-scrolling: touch;
-      padding: 8px 20px 20px 20px;
-    }
-
-    /* Color grid */
-    .color-grid {
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-flex-wrap: wrap;
-      flex-wrap: wrap;
-      margin: -4px;
-    }
-    .color-cell {
-      -webkit-flex: 0 0 25%;
-      flex: 0 0 25%;
-      padding: 4px;
-      max-width: 25%;
-    }
-    .color-cell-inner {
-      width: 56px;
-      height: 56px;
-      margin: 0 auto;
-      position: relative;
-      border-radius: 28px;
-      cursor: pointer;
-    }
-    .color-cell-inner .fill {
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      border-radius: 28px;
-      border: 3px solid transparent;
-    }
-    .color-cell-inner.active .fill {
-      border-color: #0a84ff;
-      -webkit-box-shadow: 0 0 0 2px rgba(10,132,255,0.3);
-      box-shadow: 0 0 0 2px rgba(10,132,255,0.3);
-    }
-
-    /* Size picker */
-    .size-list {
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-orient: vertical;
-      -webkit-box-direction: normal;
-      -webkit-flex-direction: column;
-      flex-direction: column;
-    }
-    .size-row {
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-align: center;
-      -webkit-align-items: center;
-      align-items: center;
-      padding: 10px 4px;
-      border-bottom: 1px solid rgba(0,0,0,0.06);
-      cursor: pointer;
-    }
-    body.dark .size-row { border-bottom-color: rgba(255,255,255,0.08); }
-    .size-row.active { color: #0a84ff; }
-    .size-row .dot {
-      -webkit-flex: 0 0 60px;
-      flex: 0 0 60px;
-      height: 60px;
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-align: center;
-      -webkit-align-items: center;
-      align-items: center;
-      -webkit-box-pack: center;
-      -webkit-justify-content: center;
-      justify-content: center;
-    }
-    .size-row .dot .circle {
-      background: currentColor;
-      border-radius: 50%;
-    }
-    .size-row .lbl {
-      -webkit-flex: 1 1 auto;
-      flex: 1 1 auto;
-      font-size: 16px;
-      font-weight: 500;
-    }
-
-    /* Pages view */
-    #pagesSheet { width: 320px; max-width: 92%; }
-    .page-thumb-list {
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-orient: vertical;
-      -webkit-box-direction: normal;
-      -webkit-flex-direction: column;
-      flex-direction: column;
-    }
-    .page-thumb {
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-align: center;
-      -webkit-align-items: center;
-      align-items: center;
-      padding: 8px 0;
-      border-bottom: 1px solid rgba(0,0,0,0.06);
-      cursor: pointer;
-    }
-    body.dark .page-thumb { border-bottom-color: rgba(255,255,255,0.08); }
-    .page-thumb.active .thumb-frame {
-      border-color: #0a84ff;
-      -webkit-box-shadow: 0 0 0 2px rgba(10,132,255,0.3);
-      box-shadow: 0 0 0 2px rgba(10,132,255,0.3);
-    }
-    .thumb-frame {
-      -webkit-flex: 0 0 100px;
-      flex: 0 0 100px;
-      width: 100px;
-      height: 75px;
-      background: #ffffff;
-      border: 2px solid rgba(0,0,0,0.1);
-      border-radius: 6px;
-      overflow: hidden;
-      position: relative;
-    }
-    body.dark .thumb-frame { background: #1c1c1e; border-color: rgba(255,255,255,0.15); }
-    .thumb-frame canvas { display: block; width: 100%; height: 100%; }
-    .page-thumb .meta {
-      -webkit-flex: 1 1 auto;
-      flex: 1 1 auto;
-      padding-left: 14px;
-      font-size: 14px;
-      font-weight: 500;
-    }
-    .page-thumb .del {
-      -webkit-flex: 0 0 auto;
-      flex: 0 0 auto;
-      color: #ff3b30;
-      font-size: 22px;
-      width: 44px;
-      height: 44px;
-      background: transparent;
-      border: 0;
-      cursor: pointer;
-    }
-
-    /* New page button */
-    .new-page-btn {
-      display: block;
-      width: 100%;
-      margin-top: 10px;
-      padding: 12px;
-      background: #0a84ff;
-      color: #ffffff;
-      border: 0;
-      border-radius: 10px;
-      font-size: 15px;
-      font-weight: 600;
-      min-height: 44px;
-      cursor: pointer;
-      transition: -webkit-transform 0.12s ease;
-      transition: transform 0.12s ease;
-    }
-    .new-page-btn:active { -webkit-transform: scale(0.97); transform: scale(0.97); }
-    .primary-btn:active { -webkit-transform: scale(0.97); transform: scale(0.97); }
-    .color-cell-inner:active .fill { opacity: 0.6; }
-    .size-row:active { opacity: 0.6; }
-    .page-thumb:active { opacity: 0.6; }
-
-    /* Export overlay */
-    #exportSheet { width: 360px; max-width: 92%; }
-    #exportImg {
-      max-width: 100%;
-      max-height: 60vh;
-      border: 1px solid rgba(0,0,0,0.1);
-      display: block;
-      margin: 0 auto 14px auto;
-      -webkit-touch-callout: default;
-      background: #ffffff;
-    }
-    .export-note {
-      font-size: 13px;
-      color: #6e6e73;
-      text-align: center;
-      margin: 0 0 14px 0;
-      line-height: 1.45;
-    }
-    body.dark .export-note { color: #aeaeb2; }
-    .primary-btn {
-      background: #0a84ff;
-      color: #ffffff;
-      border: 0;
-      border-radius: 10px;
-      padding: 12px 22px;
-      font-size: 15px;
-      font-weight: 600;
-      min-width: 110px;
-      min-height: 44px;
-      cursor: pointer;
-      width: 100%;
-    }
-
-    /* Warning toast */
-    #warning {
-      position: absolute;
-      top: calc(env(safe-area-inset-top, 0px) + 60px);
-      left: 12px;
-      right: 12px;
-      padding: 10px 14px;
-      background: rgba(255,243,205,0.96);
-      color: #856404;
-      border: 1px solid #ffe69c;
-      border-radius: 10px;
-      font-size: 13px;
-      line-height: 1.4;
-      z-index: 50;
-      display: none;
-      -webkit-box-shadow: 0 4px 14px rgba(0,0,0,0.15);
-      box-shadow: 0 4px 14px rgba(0,0,0,0.15);
-      -webkit-backdrop-filter: blur(10px);
-      backdrop-filter: blur(10px);
-    }
-    body.dark #warning {
-      background: rgba(255,214,10,0.12);
-      color: #ffd60a;
-      border-color: rgba(255,214,10,0.3);
-    }
-  </style>
+/* storage warning banner */
+#warning {
+  position: absolute; top: 60px; left: 12px; right: 12px;
+  background: #FFF3D6; border: 1px solid #EAD38A; color: #6B5514;
+  border-radius: 10px; padding: 10px 14px; font-size: 13px;
+  display: none; z-index: 45;
+}
+</style>
 </head>
 <body>
+
+<!-- ============ NOTES HOME ============ -->
+<div id="homeView" class="view on">
+  <div class="hdr">
+    <button id="menuBtn" class="ibtn" aria-label="Notebooks">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <line x1="3.5" y1="6.5" x2="20.5" y2="6.5"/><line x1="3.5" y1="12" x2="20.5" y2="12"/><line x1="3.5" y1="17.5" x2="20.5" y2="17.5"/>
+      </svg>
+    </button>
+    <div class="ttl left" id="homeTitle">Notes</div>
+    <span style="width:44px"></span>
+  </div>
+  <div id="notesGrid"></div>
+  <div id="emptyHint">No notes yet.<br>Tap the blue + button to create one.</div>
+  <button id="fabNew" aria-label="New note">+</button>
+</div>
+
+<!-- ============ NOTEBOOK DRAWER ============ -->
+<div id="drawerBackdrop"></div>
+<div id="drawer">
+  <div class="d-hdr">
+    <button id="drawerCloseBtn" class="ibtn">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/>
+      </svg>
+    </button>
+    <div class="lbl">Notebooks</div>
+    <button id="nbRenameBtn" class="ibtn" style="width:36px;height:36px">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+        <path d="M4 20 l1-4.5 L16.5 4 a2 2 0 0 1 3.5 3.5 L8.5 19 z"/>
+      </svg>
+    </button>
+  </div>
+  <div id="nbList"></div>
+  <button id="newNbBtn">+ New notebook</button>
+</div>
+
+<!-- ============ EDITOR ============ -->
+<div id="drawView" class="view">
+  <div class="hdr">
+    <button id="backBtn" class="ibtn" aria-label="Back to notes">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14.5 5 L7 12 l7.5 7"/>
+      </svg>
+    </button>
+    <button class="ttl" id="noteTitle">Untitled</button>
+    <button id="palmBtn">Palm: Max</button>
+    <button id="moreBtn" class="ibtn" aria-label="More">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/>
+      </svg>
+    </button>
+  </div>
+
+  <div id="canvasWrap">
+    <canvas id="noteCanvas"></canvas>
+    <div id="pendingDot"></div>
+    <div id="scrollPill"></div>
+  </div>
+
+  <!-- floating tool capsule -->
+  <div id="toolbar">
+    <button id="penBtn" class="tb-btn on" aria-label="Pen settings">
+      <span id="penBadge" style="background:#000000"></span>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 16.5 L15 5.5 a2.3 2.3 0 0 1 3.6 3.6 L7.5 20 H4 v-3.5 z"/>
+        <path d="M13.5 7 l3.5 3.5"/>
+      </svg>
+    </button>
+    <button id="eraserBtn" class="tb-btn" aria-label="Eraser">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9.5 19.5 L4.5 14.5 a1.6 1.6 0 0 1 0-2.3 L12.5 4.2 a1.6 1.6 0 0 1 2.3 0 L19.8 9.2 a1.6 1.6 0 0 1 0 2.3 L12.9 19.5 z"/>
+        <path d="M8.5 8.5 l7 7"/>
+      </svg>
+    </button>
+    <div class="tb-sep"></div>
+    <button id="undoBtn" class="tb-btn dis" aria-label="Undo">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8.5 4.5 L3.5 9.5 l5 5"/>
+        <path d="M4 9.5 h10.5 a5 5 0 0 1 0 10 h-4.5"/>
+      </svg>
+    </button>
+    <button id="redoBtn" class="tb-btn dis" aria-label="Redo">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15.5 4.5 L20.5 9.5 l-5 5"/>
+        <path d="M20 9.5 H9.5 a5 5 0 0 0 0 10 H14"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- pen palette -->
+  <div id="penPalette">
+    <div id="penChips"></div>
+    <div id="thickRow">
+      <div id="thickLbl">Thickness</div>
+      <input type="range" id="thicknessRange" min="0" max="5" step="1" value="2">
+    </div>
+    <canvas id="previewCanvas" width="536" height="88"></canvas>
+    <div id="colorRow"></div>
+  </div>
+
+  <!-- eraser panel -->
+  <div id="eraserPanel">
+    <div class="ep-h">Mode</div>
+    <div class="ep-modes">
+      <button class="ep-mode first on" id="epStroke">Stroke</button>
+      <button class="ep-mode last" id="epArea">Area</button>
+    </div>
+    <div class="ep-h" style="margin-top:12px">Size</div>
+    <div id="sizeRow"></div>
+  </div>
+
+  <!-- kebab menu -->
+  <div id="moreMenu"></div>
+
+  <div id="toast"></div>
   <div id="warning"></div>
 
-  <!-- ============== HOME VIEW ============== -->
-  <div id="homeView" class="view active">
-    <div class="home-header">
-      <h1>Notebooks</h1>
-      <button id="darkToggle" class="icon-btn">&#9790;</button>
-    </div>
-    <div class="scroll-area">
-      <div id="notebookGrid"></div>
-    </div>
-    <button id="newNotebookBtn" class="fab">+</button>
-  </div>
-
-  <!-- ============== DRAW VIEW ============== -->
-  <div id="drawView" class="view">
-    <div class="topbar">
-      <button id="backBtn" class="top-icon">&#8249;</button>
-      <div class="nb-name" id="nbName">Notes</div>
-      <span class="page-pill" id="pageInd">1 / 1</span>
-      <button id="pagesBtn" class="top-icon">&#9776;</button>
-    </div>
-    <div class="canvas-wrap">
-      <canvas id="canvas"></canvas>
-    </div>
-    <div class="toolbar" id="toolbar">
-      <button class="tool-btn active" data-tool="pen">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
-        <span class="lbl">Pen</span>
-      </button>
-      <button class="tool-btn" data-tool="marker">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l-6 6v3h3l6-6"/><path d="M22 4l-7 7-3-3 7-7 3 3z"/></svg>
-        <span class="lbl">Marker</span>
-      </button>
-      <button class="tool-btn" data-tool="highlighter">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><rect x="9" y="3" width="6" height="14" rx="1" transform="rotate(45 12 10)"/></svg>
-        <span class="lbl">Highlight</span>
-      </button>
-      <button class="tool-btn" data-tool="pencil">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
-        <span class="lbl">Pencil</span>
-      </button>
-      <button class="tool-btn" data-tool="eraser">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H7L3 16c-1-1-1-3 0-4l7-7c1-1 3-1 4 0l9 9c1 1 1 3 0 4l-3 3"/><path d="M16 16L8 8"/></svg>
-        <span class="lbl">Erase</span>
-      </button>
-      <span class="tdiv"></span>
-      <button class="swatch-btn" id="colorBtn"><span class="dot" id="colorDot" style="background:#000000"></span></button>
-      <button class="swatch-btn" id="sizeBtn"><span class="dot" style="background:#ffffff; width:18px; height:18px; border-radius:9px;"></span></button>
-      <span class="tdiv"></span>
-      <button class="tool-btn" id="undoBtn">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>
-        <span class="lbl">Undo</span>
-      </button>
-      <button class="tool-btn" id="redoBtn">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 019-9 9 9 0 016 2.3L21 13"/></svg>
-        <span class="lbl">Redo</span>
-      </button>
-      <button class="tool-btn" id="clearBtn">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-        <span class="lbl">Clear</span>
-      </button>
-      <span class="tdiv"></span>
-      <button class="tool-btn" id="exportBtn">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        <span class="lbl">PNG</span>
-      </button>
-      <span class="tdiv"></span>
-      <button class="tool-btn active" id="palmRejectBtn">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 00-4 0v5"/><path d="M14 10V4a2 2 0 00-4 0v6"/><path d="M10 10.5V6a2 2 0 00-4 0v8c0 4 3 7 7 7s7-3 7-7v-3a2 2 0 00-4 0v1"/></svg>
-        <span class="lbl">Palm: Med</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- ============== PAGES SHEET ============== -->
-  <div id="pagesOverlay" class="overlay">
-    <div class="sheet" id="pagesSheet">
-      <div class="sheet-head">
-        <h2>Pages</h2>
-        <button class="icon-btn" id="pagesClose">&#10005;</button>
-      </div>
-      <div class="sheet-body">
-        <div id="pageThumbList" class="page-thumb-list"></div>
-        <button class="new-page-btn" id="addPageBtn">+ New Page</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============== COLOR PICKER ============== -->
-  <div id="colorOverlay" class="overlay">
-    <div class="sheet" style="width:300px; max-width:92%;">
-      <div class="sheet-head">
-        <h2>Color</h2>
-        <button class="icon-btn" id="colorClose">&#10005;</button>
-      </div>
-      <div class="sheet-body">
-        <div id="colorGrid" class="color-grid"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============== SIZE PICKER ============== -->
-  <div id="sizeOverlay" class="overlay">
-    <div class="sheet" style="width:300px; max-width:92%;">
-      <div class="sheet-head">
-        <h2>Stroke Size</h2>
-        <button class="icon-btn" id="sizeClose">&#10005;</button>
-      </div>
-      <div class="sheet-body">
-        <div id="sizeList" class="size-list"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============== EXPORT OVERLAY ============== -->
+  <!-- export overlay -->
   <div id="exportOverlay" class="overlay">
-    <div class="sheet" id="exportSheet">
-      <div class="sheet-head">
-        <h2>Export as PNG</h2>
-        <button class="icon-btn" id="exportCloseBtn">&#10005;</button>
-      </div>
-      <div class="sheet-body" style="text-align:center;">
-        <p class="export-note">Press and hold the image, then tap <b>Save Image</b> to save to Photos.</p>
-        <img id="exportImg" alt="Exported page">
-        <button class="primary-btn" id="exportDoneBtn">Done</button>
-      </div>
-    </div>
+    <img id="exportImg" alt="Export preview">
+    <div id="exportHint">Press and hold the image, then tap "Save Image"</div>
+    <button id="exportCloseBtn">Close</button>
   </div>
+</div>
 
-  <script>
-  /* ================================================================
-     MATHNOTES v2.2 — single-file ES5 app for Safari 9 / iOS 9.3.5
-     Palm rejection v3.1: movement gate + arbitration + anti-bounce
-     dots (replaces v3.0's multi-touch gate, which blocked strokes
-     whenever the palm stayed on screen).
-     Deployment marker: search for "PALM_ROCK_PX" to verify the live
-     file is this version.
-     ================================================================
-     ARCHITECTURE
-       Section A: DRAWING ENGINE  (touch/mouse, stroke model, storage,
-                                   rendering, undo/redo, pages, export)
-       Section B: UI / VIEWS      (home gallery, draw view, pages sheet,
-                                   color/size pickers, export overlay)
-       Section C: BOOT             (init, event wiring)
-     The engine has no knowledge of markup. A future v3 can reskin
-     Section B without touching Section A.
-     ================================================================ */
-  (function () {
-    'use strict';
+<script>
+/* ============================================================
+ * MathNotes v4.0 "Samsung Edition"  (deployment marker: SCLASS_V4)
+ * Single-file handwriting notes for a 2012 iPad 3 (iOS 9.3.5).
+ * Everything is ES5: var, function declarations, no arrow
+ * functions, no template strings, no Promises, no Pointer Events.
+ *
+ * WHAT IS NEW IN v4
+ *   - Samsung Notes style interface: floating tool capsule on the
+ *     right edge, pen palette with five real pen renderers
+ *     (ballpoint, fountain, calligraphy, pencil, highlighter),
+ *     ruled scrolling paper with discrete pages.
+ *   - Tile-cached rendering: finished strokes are baked into
+ *     offscreen tiles so scrolling never redraws every stroke.
+ *   - S-Class palm rejection: every new touch is observed as a
+ *     "probe". A probe becomes ink only if it MOVES like writing
+ *     (speed + direction coherence + travel). Palm contacts are
+ *     permanently remembered in place and time, so a drifting
+ *     palm can never wake up and steal the pen again.
+ *   - Two-finger pan with momentum (content scrolls with two
+ *     coherent fingers, writing is never blocked by it).
+ *   - Mid-stroke palm discard: a committed stroke that behaves
+ *     like slow straight drift is auto-removed (undoable).
+ * ============================================================ */
+(function () {
+'use strict';
 
-    /* ============================================================
-       SECTION A — DRAWING ENGINE
-       ============================================================ */
+/* ---------- feature detection (iOS 9 safe) ---------- */
+var storageOk = true;
+try { localStorage.setItem('mn_probe', '1'); localStorage.removeItem('mn_probe'); }
+catch (e) { storageOk = false; }
 
-    var STORAGE_KEY_V1 = 'mathnotes_v1';
-    var STORAGE_KEY_V2 = 'mathnotes_v2';
-    var ERASE_RADIUS    = 16;
-    var MAX_UNDO       = 100;
-    var MAX_REDO       = 100;
+/* ---------- constants ---------- */
+var STORAGE_KEY_V4 = 'mathnotes_v4';
+var STORAGE_KEY_V2 = 'mathnotes_v2';
+var STORAGE_KEY_V1 = 'mathnotes_v1';
 
-    var COLOR_PALETTE = [
-      '#000000', '#5b5b5b', '#e63946', '#f77f00',
-      '#fcbf49', '#06a77d', '#118ab2', '#073b4c',
-      '#6a4c93', '#d62898', '#8d5524', '#ffffff'
-    ];
-    var NOTEBOOK_COLORS = ['#0a84ff', '#ff9500', '#ff3b30', '#34c759',
-                           '#5856d6', '#af52de', '#ff2d55', '#5ac8fa'];
+var PALM_OFF = 0, PALM_MED = 1, PALM_MAX = 2;
+var PALM_NAMES = ['Off', 'Med', 'Max'];
 
-    var SIZE_PRESETS = [
-      { name: 'Extra Fine', w: 1.5 },
-      { name: 'Fine',       w: 3 },
-      { name: 'Medium',     w: 5 },
-      { name: 'Bold',       w: 8 },
-      { name: 'Heavy',      w: 13 }
-    ];
+var PAGE_H   = 1000;   /* document px per page  */
+var GAP_H    = 20;     /* gray gap between pages */
+var TILE_H   = 256;    /* offscreen tile height (document px) */
+var MAX_TILES = 30;    /* tile cache entries kept alive */
+var FIRST_BASE = 56;   /* first ruled line distance from page top */
 
-    var PEN_OPACITY = {
-      pen:         1.0,
-      marker:      0.55,
-      highlighter: 0.22,
-      pencil:      0.85
-    };
-    var PEN_WIDTH_MULT = {
-      pen:         1.0,
-      marker:      1.4,
-      highlighter: 3.0,
-      pencil:      0.9
-    };
-    var PEN_CAP = {
-      pen:         'round',
-      marker:      'round',
-      highlighter: 'butt',
-      pencil:      'round'
-    };
-    var PEN_BLEND = {
-      pen:         'source-over',
-      marker:      'source-over',
-      highlighter: 'multiply',
-      pencil:      'source-over'
-    };
+var TPL_RULED = 0, TPL_GRID = 1, TPL_DOTTED = 2, TPL_BLANK = 3;
+var TPL_NAMES = ['Ruled', 'Grid', 'Dotted', 'Blank'];
 
-    var dpr = window.devicePixelRatio || 1;
+var HAND_R = 0, HAND_L = 1, HAND_BOTH = 2;
+var HAND_NAMES = ['Right', 'Left', 'Both'];
 
-    /* DOM refs */
-    var canvas, ctx, canvasWrap, toolbarEl, warningEl;
-    var pageIndEl, nbNameEl;
-    var homeView, drawView, notebookGrid;
-    var pagesOverlay, colorOverlay, sizeOverlay, exportOverlay;
-    var exportImg, colorDotEl;
+var ERASER_MODES = ['Stroke', 'Area'];
+var ERASER_SIZES = [16, 28, 44, 64];
 
-    /* State */
-    var notebooks = [];        /* [{id,title,color,pages:[{strokes,undoStack,redoStack}]}] */
-    var currentNotebook = 0;
-    var currentPage = 0;
-    var currentTool  = 'pen';
-    var currentColor = '#000000';
-    var currentSize  = 3;      /* index into SIZE_PRESETS */
-    var isDrawing    = false;
-    var currentStroke = null;
-    var storageOk    = true;
-    var darkMode     = false;
-    var saveTimer    = null;
+var NB_COLORS = ['#0381FE', '#E2231A', '#36C0A1', '#8E50E6', '#F58300', '#1428A0'];
 
-    /* ---------- Palm rejection state (v3.1) ----------
-     * HARDWARE REALITY: a 2012 iPad 3 has no active digitizer, and
-     * iOS 9 Safari usually reports Touch.radiusX / radiusY as the
-     * spec default (1), so a radius check alone never fires on this
-     * device. Palm rejection must therefore be behavioural:
-     *
-     *   Layer 1 - RADIUS: if the hardware does report a real contact
-     *             area, touches wider than PALM_RADIUS_MAX are
-     *             rejected. Harmless no-op on iPad 3.
-     *   Layer 2 - MOVEMENT GATE (the core): a touch does not ink
-     *             until it has travelled far enough from touchdown.
-     *             Writing moves; a resting palm does not. The anchor
-     *             is replayed when the stroke commits, so nothing is
-     *             lost. A quick no-travel lift queues a tap-dot that
-     *             is only inked if the palm does not bounce straight
-     *             back onto the same spot (anti-bounce dots).
-     *   Layer 3 - ARBITRATION: several touches may be "pending" at
-     *             once; the FIRST to travel far enough commits and
-     *             instantly declares every other touch a palm. This
-     *             replaces v3.0's blanket "a second touch on screen
-     *             blocks every new stroke" rule, which made strokes
-     *             fail whenever the palm stayed down. Max adds:
-     *             late arrivals travel further (PALM_JOIN_MIN),
-     *             settled touches travel further (PALM_SETTLE_MIN),
-     *             and stale pendings are purged when a fresh touch
-     *             appears (the pen just landed).
-     *   Layer 4 - IDENTIFIER LOCK: once a stroke is committed, only
-     *             its own touch drives it; all other touches are
-     *             ignored until the screen clears.
-     *
-     * The "Palm" toolbar button cycles the level:
-     *   Off    - v2 behaviour: ink on touchdown, identifier lock only
-     *   Medium - radius + movement gate + arbitration (default)
-     *   Max    - Medium + join/settle penalties + stale purge
-     */
-    var PALM_OFF    = 0;
-    var PALM_MEDIUM = 1;
-    var PALM_STRICT = 2;
-    var palmLevel = PALM_MEDIUM;   /* persisted as settings.palmLevel */
+/* pen kind ids */
+var PEN_BALL = 0, PEN_FOUNTAIN = 1, PEN_CALLI = 2, PEN_PENCIL = 3, PEN_HIGH = 4;
+var PENS = [
+  { name: 'Ballpoint',  wMin: 1.2, wMax: 8,  alpha: 1,    kind: PEN_BALL },
+  { name: 'Fountain',   wMin: 1.5, wMax: 12, alpha: 1,    kind: PEN_FOUNTAIN },
+  { name: 'Calligraphy',wMin: 1.5, wMax: 12, alpha: 1,    kind: PEN_CALLI },
+  { name: 'Pencil',     wMin: 1,   wMax: 10, alpha: 0.85, kind: PEN_PENCIL },
+  { name: 'Highlighter',wMin: 6,   wMax: 22, alpha: 0.35, kind: PEN_HIGH }
+];
 
-    var PALM_RADIUS_MAX = 20;      /* CSS px contact radius above this = palm */
-    var PALM_MOVE_MIN   = 5;       /* CSS px of travel before a fresh touch may ink */
-    var PALM_TAP_MS     = 350;     /* no-travel touch lifted faster = tap dot */
-    var PALM_TAP_MIN_MS = 80;      /* lifted faster than THIS = noise: never dots */
-    var PALM_JOIN_MIN   = 12;      /* Max: a touch arriving while another is pending */
-    var PALM_STALE_MS   = 250;     /* Max: pendings older than this die on new touchdown */
-    var PALM_SETTLE_MS  = 600;     /* Max: a pending untouched this long is settled */
-    var PALM_SETTLE_MIN = 16;      /* Max: a settled touch must travel this to ink */
-    var PALM_ROCK_PX    = 18;      /* re-land within this of a queued dot = bounce */
-    var PALM_DOT_DELAY  = 200;     /* ms a tap-dot waits for a palm bounce */
+var COLORS = [
+  '#000000', '#7F7F7F', '#E2231A', '#F58300',
+  '#F5D300', '#36C0A1', '#0381FE', '#1428A0',
+  '#8E50E6', '#F763C6', '#9C6632', '#0B7285'
+];
 
-    var activeTouchId = null;      /* identifier of the committed stroke's touch */
-    var touchStates   = {};        /* per-touch record: pending or ignored */
-    var pendingDotEl  = null;      /* indicator ring element */
-    var pendingDotId  = null;      /* identifier the indicator follows */
-    var rejectFlashTimer = null;   /* hides the red "rejected" ring */
-    var canvasRect    = null;      /* cached canvas rect (see touchPos) */
+/* S-Class tuning (document px, ms) */
+var SC = {
+  PROBE_MIN_AGE:   80,     /* ms a touch must exist before it may ink */
+  COMMIT_SPEED:    0.09,   /* smoothed px/ms needed to commit */
+  COMMIT_COH:      0.42,   /* window direction coherence 0..1 */
+  COMMIT_NET:      6,      /* travel from anchor needed to commit */
+  FAST_NET:        12,     /* fast-writer express lane */
+  FAST_SPEED:      0.16,
+  DECISIVE_NET:    40,     /* decisive travel always inks */
+  SUSPECT_BOOST:   1.35,   /* stricter thresholds for suspect touches */
+  SUSPECT_AGE_MULT:1.4,
+  PALM_AGE:        400,    /* ms after which a still touch is palm */
+  PALM_IDLE:       0.04,   /* slower than this and old = palm */
+  PALM_SIT_NET:    4,      /* travel under this with age 900ms = palm */
+  PALM_SIT_AGE:    900,
+  TEAM_MS:         100,    /* arrival window for a palm "team" */
+  TEAM_PX:         48,
+  MEM_MS:          3500,   /* palm memory lifetime */
+  MEM_PX:          55,     /* palm memory radius */
+  ZONE_BOTTOM:     104,    /* handedness soft zone (px) */
+  ZONE_SIDE:       112,
+  BIG_RADIUS:      18,     /* contact radius treated as palm (if reported) */
+  TAP_MS:          320,    /* tap window for dots */
+  BOUNCE_MS:       220,    /* dot queued this long before it appears */
+  BOUNCE_PX:       18,     /* re-land inside this cancels the dot */
+  DISCARD_SPEED:   0.022,  /* mid-stroke discard: slower than this */
+  DISCARD_MS:      600,
+  DISCARD_STRAIGHT:0.93,
+  DISCARD_PATH:    25,
+  PAN_DEG:         35,     /* coherence cone for two-finger pan */
+  PAN_RATIO:       3,
+  PAN_SPEED:       0.05,
+  MOM_DECAY:       0.94
+};
 
-    var PALM_LEVEL_LBL = ['Palm: Off', 'Palm: Med', 'Palm: Max'];
+/* ---------- element handles ---------- */
+function byId(id) { return document.getElementById(id); }
+var homeView = byId('homeView'), drawView = byId('drawView');
+var notesGrid = byId('notesGrid'), emptyHint = byId('emptyHint'), homeTitle = byId('homeTitle');
+var canvasWrap = byId('canvasWrap'), cvs = byId('noteCanvas');
+var pendingDot = byId('pendingDot'), scrollPill = byId('scrollPill');
+var noteTitleBtn = byId('noteTitle'), palmBtn = byId('palmBtn');
+var toolbar = byId('toolbar'), penBtn = byId('penBtn'), eraserBtn = byId('eraserBtn');
+var undoBtn = byId('undoBtn'), redoBtn = byId('redoBtn');
+var penPalette = byId('penPalette'), penChips = byId('penChips');
+var thicknessRange = byId('thicknessRange'), previewCanvas = byId('previewCanvas');
+var colorRow = byId('colorRow'), penBadge = byId('penBadge');
+var eraserPanel = byId('eraserPanel'), sizeRow = byId('sizeRow');
+var moreMenu = byId('moreMenu'), toastEl = byId('toast'), warningEl = byId('warning');
+var drawer = byId('drawer'), drawerBackdrop = byId('drawerBackdrop'), nbList = byId('nbList');
+var exportOverlay = byId('exportOverlay'), exportImg = byId('exportImg');
 
-    /* ---------- Storage layer (graceful degradation) ---------- */
-    function showWarning(msg) {
-      if (!warningEl) return;
-      warningEl.textContent = msg;
-      warningEl.style.display = 'block';
-    }
-    function hideWarning() {
-      if (warningEl) warningEl.style.display = 'none';
-    }
+var ctx = null;
+if (cvs.getContext) ctx = cvs.getContext('2d');
 
-    function genId() {
-      return 'nb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
-    }
-    function newNotebook(title) {
-      return {
-        id: genId(),
-        title: title || 'Untitled',
-        color: NOTEBOOK_COLORS[notebooks.length % NOTEBOOK_COLORS.length],
-        pages: [ { strokes: [], undoStack: [], redoStack: [] } ]
-      };
-    }
-    function newPage() {
-      return { strokes: [], undoStack: [], redoStack: [] };
-    }
+/* ---------- app state ---------- */
+var dpr = Math.max(window.devicePixelRatio || 1, 1);
+if (dpr > 2) dpr = 2;
 
-    /* Migration from v1: wrap v1's flat page array as one notebook */
-    function migrateFromV1() {
-      var old = null;
-      try {
-        var raw = localStorage.getItem(STORAGE_KEY_V1);
-        if (raw) old = JSON.parse(raw);
-      } catch (e) { old = null; }
-      if (!old || !old.pages || old.pages.length === 0) return null;
+var notebooks = [];          /* [{id,title,color,notes:[noteId]}] */
+var notes = {};              /* noteId -> {id,title,cr,mod,scroll,strokes} */
+var curNotebook = 0;
+var curNoteId = null;
+var settings = {
+  palmLevel: PALM_MAX,
+  hand: HAND_R,
+  spacing: 38,
+  template: TPL_RULED,
+  guideDots: true,
+  paperDark: false,
+  scrollHintShown: false,
+  pen: PEN_BALL,
+  widthStep: 2,
+  color: '#000000'
+};
 
-      var pages = [];
-      for (var i = 0; i < old.pages.length; i++) {
-        var strokes = (old.pages[i] && old.pages[i].strokes) ? old.pages[i].strokes : [];
-        /* upgrade each stroke with new fields */
-        var upgraded = [];
-        for (var j = 0; j < strokes.length; j++) {
-          var s = strokes[j];
-          if (s && s.points && s.points.length > 0) {
-            upgraded.push({
-              type:    s.type || 'pen',
-              color:   s.color || '#000000',
-              width:   s.width || 4,
-              opacity: s.opacity != null ? s.opacity : 1.0,
-              points:  s.points
-            });
-          }
+var viewW = 768, viewH = 968, wrapRect = { left: 0, top: 0 };
+var scrollY = 0, docH = PAGE_H;
+var tiles = {}, tileOrder = [];
+var renderQueued = false;
+
+var undoStack = [], redoStack = [];
+var strokeSeq = 1;
+
+var saveTimer = null;
+var activeNote = function () { return notes[curNoteId]; };
+
+/* ---------- tiny utils ---------- */
+function lim(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function dist(ax, ay, bx, by) { var dx = ax - bx, dy = ay - by; return Math.sqrt(dx * dx + dy * dy); }
+function fmtDate(ms) {
+  var d = new Date(ms);
+  var M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return M[d.getMonth()] + ' ' + d.getDate();
+}
+function genId() { return 'n' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36); }
+
+/* ---------- toast ---------- */
+var toastTimer = null;
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.className = 'show';
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { toastEl.className = ''; toastTimer = null; }, 1900);
+}
+function showWarning(msg) {
+  warningEl.textContent = msg;
+  warningEl.style.display = 'block';
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { warningEl.style.display = 'none'; toastTimer = null; }, 6000);
+}
+
+/* ---------- storage: migrate + save ---------- */
+function migrateFromV2orV1() {
+  var raw = null, src = null;
+  if (storageOk) {
+    try {
+      raw = localStorage.getItem(STORAGE_KEY_V2);
+      if (!raw) raw = localStorage.getItem(STORAGE_KEY_V1);
+      if (raw) src = JSON.parse(raw);
+    } catch (e) { src = null; }
+  }
+  if (!src || !src.notebooks || !src.notebooks.length) return null;
+
+  var nbs = [], noteMap = {};
+  for (var i = 0; i < src.notebooks.length; i++) {
+    var nb = src.notebooks[i];
+    var ids = [];
+    var pages = (nb && nb.pages) ? nb.pages : [];
+    for (var j = 0; j < pages.length; j++) {
+      var oldStrokes = (pages[j] && pages[j].strokes) ? pages[j].strokes : [];
+      var strokes = [];
+      for (var k = 0; k < oldStrokes.length; k++) {
+        var s = oldStrokes[k];
+        if (!s || !s.points || !s.points.length) continue;
+        var pen = PEN_BALL;
+        if (s.type === 'pencil') pen = PEN_PENCIL;
+        else if (s.type === 'highlighter') pen = PEN_HIGH;
+        else if (s.type === 'fountain') pen = PEN_FOUNTAIN;
+        var pts = [];
+        for (var m = 0; m < s.points.length; m++) {
+          var p = s.points[m];
+          pts.push([+p[0], +p[1], m * 16]);
         }
-        if (upgraded.length > 0 || pages.length === 0) {
-          pages.push({ strokes: upgraded, undoStack: [], redoStack: [] });
-        }
+        strokes.push(mkStroke(pen, s.width || 3, s.color || '#000000', pts));
       }
-      if (pages.length === 0) pages.push({ strokes: [], undoStack: [], redoStack: [] });
-
-      return {
-        version: 2,
-        notebooks: [ {
-          id: 'nb_migrated',
-          title: 'My Notes',
-          color: '#0a84ff',
-          pages: pages
-        } ],
-        currentNotebook: 0,
-        currentPage: 0,
-        settings: { darkMode: false }
-      };
-    }
-
-    function loadFromStorage() {
-      var data = null;
-      if (storageOk) {
-        try {
-          var raw = localStorage.getItem(STORAGE_KEY_V2);
-          if (raw) data = JSON.parse(raw);
-        } catch (e) {
-          storageOk = false;
-          showWarning('Could not read saved notes (' + e.message + '). Starting fresh.');
-        }
-      }
-      if (!data) {
-        data = migrateFromV1();
-      }
-      if (data && data.notebooks && data.notebooks.length > 0) {
-        notebooks = [];
-        for (var i = 0; i < data.notebooks.length; i++) {
-          var nb = data.notebooks[i];
-          var pages = [];
-          for (var j = 0; j < nb.pages.length; j++) {
-            var p = nb.pages[j];
-            pages.push({
-              strokes:   (p && p.strokes) ? p.strokes : [],
-              undoStack: [],
-              redoStack: []
-            });
-          }
-          if (pages.length === 0) pages.push(newPage());
-          notebooks.push({
-            id:    nb.id || genId(),
-            title: nb.title || 'Untitled',
-            color: nb.color || NOTEBOOK_COLORS[i % NOTEBOOK_COLORS.length],
-            pages: pages
-          });
-        }
-        currentNotebook = data.currentNotebook || 0;
-        if (currentNotebook >= notebooks.length) currentNotebook = notebooks.length - 1;
-        currentPage = data.currentPage || 0;
-        var cnb = notebooks[currentNotebook];
-        if (currentPage >= cnb.pages.length) currentPage = cnb.pages.length - 1;
-        darkMode = !!(data.settings && data.settings.darkMode);
-        /* v3 palm level, migrating the old v2 boolean toggle */
-        if (data.settings && typeof data.settings.palmLevel === 'number') {
-          palmLevel = data.settings.palmLevel;
-        } else if (data.settings && data.settings.palmReject === false) {
-          palmLevel = PALM_OFF;
-        } else {
-          palmLevel = PALM_MEDIUM;
-        }
-        if (palmLevel !== PALM_OFF && palmLevel !== PALM_MEDIUM && palmLevel !== PALM_STRICT) {
-          palmLevel = PALM_MEDIUM;
-        }
-      } else {
-        notebooks = [ newNotebook('My Notes') ];
-        currentNotebook = 0;
-        currentPage = 0;
+      if (strokes.length || pages.length === 1) {
+        var id = genId();
+        noteMap[id] = { id: id, title: (pages.length > 1 ? 'Page ' + (j + 1) : (nb.title || 'Note')), cr: Date.now(), mod: Date.now(), scroll: 0, strokes: strokes };
+        ids.push(id);
       }
     }
+    if (!ids.length) continue;
+    nbs.push({ id: genId(), title: nb.title || 'My Notes', color: nb.color || NB_COLORS[i % NB_COLORS.length], notes: ids });
+  }
+  if (!nbs.length) return null;
+  return { notebooks: nbs, notes: noteMap, cur: { nb: 0, note: nbs[0].notes[0] } };
+}
 
-    /* Debounced, with an immediate flush for page exit. Serialising
-       the whole notebook blocks the main thread; on a 2012 iPad a
-       120 ms debounce meant the freeze landed right as the user
-       began the next stroke, which read as lag. 500 ms keeps the
-       write in natural pauses, and pagehide/beforeunload flush it
-       when the tab actually leaves. */
-    var SAVE_DEBOUNCE_MS = 500;
-    function doSaveNow() {
-      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-      if (!storageOk) return;
-      var toSave = {
-        version: 2,
-        notebooks: [],
-        currentNotebook: currentNotebook,
-        currentPage: currentPage,
-        settings: { darkMode: darkMode, palmLevel: palmLevel }
-      };
-      for (var i = 0; i < notebooks.length; i++) {
-        var nb = notebooks[i];
-        var nbPages = [];
-        for (var j = 0; j < nb.pages.length; j++) {
-          nbPages.push({ strokes: nb.pages[j].strokes });
-        }
-        toSave.notebooks.push({
-          id: nb.id, title: nb.title, color: nb.color, pages: nbPages
-        });
-      }
-      try {
-        localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(toSave));
-      } catch (e) {
-        storageOk = false;
-        showWarning('Cannot save notes. You may be in Private Browsing mode, or storage is full. Notes will not persist after reload.');
-      }
-    }
-    function saveToStorage() {
-      if (saveTimer) clearTimeout(saveTimer);
-      saveTimer = setTimeout(function () {
-        saveTimer = null;
-        doSaveNow();
-      }, SAVE_DEBOUNCE_MS);
-    }
+function loadAll() {
+  var data = null;
+  if (storageOk) {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY_V4);
+      if (raw) data = JSON.parse(raw);
+    } catch (e) { data = null; }
+  }
+  if (!data) data = migrateFromV2orV1();
+  if (!data) {
+    var nid = genId();
+    notebooks = [{ id: genId(), title: 'My Notes', color: NB_COLORS[0], notes: [nid] }];
+    notes = {};
+    notes[nid] = { id: nid, title: 'Untitled', cr: Date.now(), mod: Date.now(), scroll: 0, strokes: [] };
+    curNotebook = 0; curNoteId = nid;
+    return;
+  }
+  notebooks = data.notebooks || [];
+  notes = data.notes || {};
+  curNotebook = lim(data.cur && typeof data.cur.nb === 'number' ? data.cur.nb : 0, 0, notebooks.length - 1);
+  curNoteId = (data.cur && data.cur.note) || null;
+  if (!curNoteId || !notes[curNoteId]) {
+    curNoteId = notebooks[curNotebook] && notebooks[curNotebook].notes[0] || null;
+  }
+  if (data.set) {
+    if (typeof data.set.palmLevel === 'number') settings.palmLevel = data.set.palmLevel;
+    if (typeof data.set.hand === 'number') settings.hand = data.set.hand;
+    if (data.set.spacing === 32 || data.set.spacing === 38 || data.set.spacing === 44) settings.spacing = data.set.spacing;
+    if (typeof data.set.template === 'number') settings.template = data.set.template;
+    if (typeof data.set.guideDots === 'boolean') settings.guideDots = data.set.guideDots;
+    if (typeof data.set.paperDark === 'boolean') settings.paperDark = data.set.paperDark;
+    if (typeof data.set.scrollHintShown === 'boolean') settings.scrollHintShown = data.set.scrollHintShown;
+    if (typeof data.set.pen === 'number') settings.pen = data.set.pen;
+    if (typeof data.set.widthStep === 'number') settings.widthStep = lim(data.set.widthStep, 0, 5);
+    if (data.set.color && COLORS.indexOf(data.set.color) >= 0) settings.color = data.set.color;
+  }
+}
 
-    /* ---------- Geometry helpers ---------- */
-    function distToSegment(px, py, x1, y1, x2, y2) {
-      var dx = x2 - x1, dy = y2 - y1;
-      var len2 = dx * dx + dy * dy;
-      if (len2 === 0) {
-        var ex0 = px - x1, ey0 = py - y1;
-        return Math.sqrt(ex0 * ex0 + ey0 * ey0);
-      }
-      var t = ((px - x1) * dx + (py - y1) * dy) / len2;
-      if (t < 0) t = 0;
-      else if (t > 1) t = 1;
-      var cx = x1 + t * dx, cy = y1 + t * dy;
-      var ex = px - cx, ey = py - cy;
-      return Math.sqrt(ex * ex + ey * ey);
+function serializeNote(n) {
+  var out = [];
+  var st = n.strokes;
+  for (var i = 0; i < st.length; i++) {
+    var s = st[i];
+    var pts = [];
+    var p = s.pts;
+    for (var j = 0; j < p.length; j++) {
+      pts.push([Math.round(p[j][0] * 10) / 10, Math.round(p[j][1] * 10) / 10, Math.round(p[j][2])]);
     }
-    function strokeHit(stroke, x, y, radius) {
-      var pts = stroke.points;
-      if (!pts || pts.length === 0) return false;
-      var r = Math.max(radius, (stroke.width || 4) / 2);
-      if (pts.length === 1) {
-        var dx = pts[0].x - x, dy = pts[0].y - y;
-        return Math.sqrt(dx * dx + dy * dy) <= r;
-      }
-      for (var i = 0; i < pts.length - 1; i++) {
-        if (distToSegment(x, y, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y) <= r) {
-          return true;
-        }
-      }
-      return false;
-    }
+    out.push({ id: s.id, pen: s.pen, w: s.w, color: s.color, a: s.a, ord: s.ord, pts: pts });
+  }
+  return out;
+}
 
-    /* ---------- Stroke rendering ---------- */
-    function applyStrokeStyle(stroke) {
-      var op = stroke.opacity != null ? stroke.opacity : 1.0;
-      ctx.globalAlpha = op;
-      ctx.globalCompositeOperation = PEN_BLEND[stroke.type] || 'source-over';
-      ctx.strokeStyle = stroke.color;
-      ctx.fillStyle   = stroke.color;
-      ctx.lineWidth   = stroke.width;
-      ctx.lineCap     = PEN_CAP[stroke.type] || 'round';
-      ctx.lineJoin    = 'round';
+function doSaveNow() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  if (!storageOk) return;
+  var payload = { v: 4, notebooks: notebooks, notes: {}, cur: { nb: curNotebook, note: curNoteId }, set: settings };
+  var total = 0;
+  for (var i = 0; i < notebooks.length; i++) {
+    var ids = notebooks[i].notes;
+    for (var j = 0; j < ids.length; j++) {
+      var n = notes[ids[j]];
+      if (!n) continue;
+      payload.notes[ids[j]] = { id: n.id, title: n.title, cr: n.cr, mod: n.mod, scroll: Math.round(n.scroll), strokes: serializeNote(n) };
+      total++;
     }
-    function resetCtxStyle() {
-      ctx.globalAlpha = 1.0;
-      ctx.globalCompositeOperation = 'source-over';
-    }
+  }
+  try {
+    var txt = JSON.stringify(payload);
+    if (txt.length > 4200000) showWarning('This note collection is very large. Save may fail - consider exporting a PNG backup.');
+    localStorage.setItem(STORAGE_KEY_V4, txt);
+  } catch (e) {
+    storageOk = false;
+    showWarning('Cannot save (storage full or Private Browsing). Notes will not persist after reload.');
+  }
+}
+function saveSoon() {
+  if (!storageOk) return;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(doSaveNow, 700);
+}
 
-    function renderStroke(stroke) {
-      var pts = stroke.points;
-      if (!pts || pts.length === 0) { return; }
-      applyStrokeStyle(stroke);
-      if (pts.length === 1) {
-        ctx.beginPath();
-        ctx.arc(pts[0].x, pts[0].y, Math.max(0.5, stroke.width / 2), 0, Math.PI * 2);
-        ctx.fill();
-        resetCtxStyle();
-        return;
+/* ============================================================
+ * RENDERING ENGINE
+ * Paper + tile cache + five pen renderers + live ink.
+ * Finished strokes are baked into 256px offscreen tiles so
+ * scrolling only composites tiles (fast on a 2012 iPad).
+ * ============================================================ */
+
+function mkStroke(pen, w, color, pts) {
+  var s = { id: genId(), pen: pen, w: w, color: color, a: PENS[pen].alpha, pts: pts, ord: strokeSeq++ };
+  return s;
+}
+
+function penCap(pen) { return pen === PEN_HIGH ? 'butt' : 'round'; }
+
+function pointSpeedAt(s, i) {
+  if (i < 1) i = 1;
+  var p = s.pts, a = p[i - 1], b = p[i];
+  var dt = b[2] - a[2];
+  if (dt < 4) dt = 4;
+  return dist(a[0], a[1], b[0], b[1]) / dt;
+}
+
+function segAngleAt(s, i) {
+  var p = s.pts, n = p.length;
+  var a = p[i > 0 ? i - 1 : 0], b = p[i < n - 1 ? i + 1 : n - 1];
+  return Math.atan2(b[1] - a[1], b[0] - a[0]);
+}
+
+function strokeWidthAt(s, i) {
+  var base = s.w;
+  if (s.pen === PEN_BALL) return base;
+  if (s.pen === PEN_HIGH) return Math.max(base * 2.4, 9);
+  if (s.pen === PEN_PENCIL) return base * 1.05;
+  if (s.pen === PEN_FOUNTAIN) {
+    var v = pointSpeedAt(s, i);
+    return base * (0.62 + 0.75 * lim(1 - v / 0.45, 0, 1));
+  }
+  if (s.pen === PEN_CALLI) {
+    var th = segAngleAt(s, i);
+    return base * (0.35 + 1.05 * Math.abs(Math.sin(th + Math.PI / 4)));
+  }
+  return base;
+}
+
+/* one quadratic segment: vertex at point i, between the midpoints
+ * of its neighbours (classic midpoint smoothing). */
+function drawSmoothSeg(c, s, i) {
+  var p = s.pts, n = p.length;
+  var m0x, m0y, m1x, m1y;
+  if (i === 1) { m0x = p[0][0]; m0y = p[0][1]; }
+  else { m0x = (p[i - 1][0] + p[i][0]) / 2; m0y = (p[i - 1][1] + p[i][1]) / 2; }
+  if (i >= n - 1) { m1x = p[i][0]; m1y = p[i][1]; }
+  else { m1x = (p[i][0] + p[i + 1][0]) / 2; m1y = (p[i][1] + p[i + 1][1]) / 2; }
+  var w = strokeWidthAt(s, i);
+  c.lineWidth = w;
+  c.beginPath();
+  c.moveTo(m0x, m0y);
+  c.quadraticCurveTo(p[i][0], p[i][1], m1x, m1y);
+  c.stroke();
+  if (s.pen === PEN_PENCIL) {
+    var o = ((i * 73) % 5 - 2) * 0.3;
+    c.globalAlpha = s.a * 0.25;
+    c.lineWidth = w * 0.7;
+    c.beginPath();
+    c.moveTo(m0x + o, m0y + o * 0.8);
+    c.quadraticCurveTo(p[i][0] + o, p[i][1] + o * 0.8, m1x + o, m1y + o * 0.8);
+    c.stroke();
+    c.globalAlpha = s.a;
+  }
+}
+
+function drawDot(c, s) {
+  var p = s.pts[0];
+  c.fillStyle = s.color;
+  if (s.pen === PEN_HIGH) {
+    c.fillRect(p[0] - s.w, p[1] - s.w * 0.5, s.w * 2, s.w);
+  } else {
+    c.beginPath();
+    c.arc(p[0], p[1], Math.max(s.w / 2, 1.3), 0, 6.2832);
+    c.fill();
+  }
+}
+
+function renderStrokeFull(c, s) {
+  var n = s.pts.length;
+  if (!n) return;
+  c.save();
+  c.globalAlpha = s.a;
+  c.strokeStyle = s.color;
+  c.fillStyle = s.color;
+  c.lineCap = penCap(s.pen);
+  c.lineJoin = 'round';
+  if (n === 1) { drawDot(c, s); c.restore(); return; }
+  for (var i = 1; i < n; i++) drawSmoothSeg(c, s, i);
+  c.restore();
+}
+
+/* ---------- stroke bbox + tile cache ---------- */
+function strokeBBox(s) {
+  if (s.bb) return s.bb;
+  var p = s.pts, x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, i;
+  for (i = 0; i < p.length; i++) {
+    if (p[i][0] < x0) x0 = p[i][0];
+    if (p[i][1] < y0) y0 = p[i][1];
+    if (p[i][0] > x1) x1 = p[i][0];
+    if (p[i][1] > y1) y1 = p[i][1];
+  }
+  var pad = Math.max(s.w * 3, 10) + 4;
+  s.bb = { x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad };
+  return s.bb;
+}
+
+function invalidateRange(y0, y1) {
+  var i0 = Math.floor(y0 / TILE_H), i1 = Math.floor(y1 / TILE_H);
+  for (var i = i0; i <= i1; i++) delete tiles[i];
+}
+function invalidateAll() { tiles = {}; tileOrder = []; }
+
+function sortedStrokesForBand(y0, y1) {
+  var list = [], n = activeNote();
+  if (!n) return list;
+  var st = n.strokes;
+  for (var i = 0; i < st.length; i++) {
+    var bb = strokeBBox(st[i]);
+    if (bb.y1 >= y0 && bb.y0 <= y1) list.push(st[i]);
+  }
+  list.sort(function (a, b) { return a.ord - b.ord; });
+  return list;
+}
+
+function getTile(i) {
+  if (tiles[i]) {
+    var k = tileOrder.indexOf(i);
+    if (k >= 0) { tileOrder.splice(k, 1); tileOrder.push(i); }
+    return tiles[i];
+  }
+  var top = i * TILE_H;
+  if (i < 0 || top >= docH) return null;
+  var c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(viewW * dpr));
+  c.height = Math.round(TILE_H * dpr);
+  var tc = c.getContext('2d');
+  if (!tc) return null;
+  tc.setTransform(dpr, 0, 0, dpr, 0, -top * dpr);
+  var st = sortedStrokesForBand(top, top + TILE_H);
+  for (var j = 0; j < st.length; j++) renderStrokeFull(tc, st[j]);
+  tiles[i] = c;
+  tileOrder.push(i);
+  if (tileOrder.length > MAX_TILES) {
+    var drop = tileOrder.shift();
+    if (drop !== i) delete tiles[drop];
+  }
+  return c;
+}
+
+/* ---------- paper ---------- */
+function drawPaper(c) {
+  var y0 = scrollY, y1 = scrollY + viewH;
+  var dark = settings.paperDark;
+  var gapBg  = dark ? '#141414' : '#F1F2F4';
+  var paperBg = dark ? '#20242A' : '#FFFFFF';
+  var lineCol = dark ? '#3A434C' : '#D8DDE3';
+  var dotCol = dark ? '#47515C' : '#D0D4D9';
+  var numCol = dark ? '#6A7178' : '#A0A0A0';
+  c.fillStyle = gapBg;
+  c.fillRect(0, y0 - 1, viewW, viewH + 2);
+  var pFirst = Math.max(0, Math.floor(y0 / (PAGE_H + GAP_H)) - 1);
+  var pLast = Math.floor(y1 / (PAGE_H + GAP_H)) + 1;
+  for (var p = pFirst; p <= pLast; p++) {
+    var top = p * (PAGE_H + GAP_H);
+    if (top + PAGE_H <= y0) continue;
+    if (top >= y1) continue;
+    c.fillStyle = paperBg;
+    c.fillRect(0, top, viewW, PAGE_H);
+    var tpl = settings.template;
+    if (tpl === TPL_RULED) {
+      c.strokeStyle = lineCol; c.lineWidth = 1;
+      c.beginPath();
+      for (var y = top + FIRST_BASE; y <= top + PAGE_H - 16; y += settings.spacing) {
+        c.moveTo(0, y + 0.5); c.lineTo(viewW, y + 0.5);
       }
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      if (pts.length === 2) {
-        ctx.lineTo(pts[1].x, pts[1].y);
-      } else {
-        /* Smooth full-curve render: midpoint quadratic through every point */
-        for (var i = 1; i < pts.length - 1; i++) {
-          var mx = (pts[i].x + pts[i + 1].x) / 2;
-          var my = (pts[i].y + pts[i + 1].y) / 2;
-          ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
-        }
-        ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
-      }
-      ctx.stroke();
-      resetCtxStyle();
-    }
-
-    function clearCanvasPixels() {
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.restore();
-    }
-    function renderPage() {
-      clearCanvasPixels();
-      var page = currentPageObj();
-      if (page) {
-        for (var i = 0; i < page.strokes.length; i++) {
-          renderStroke(page.strokes[i]);
-        }
-      }
-      if (currentStroke) renderStroke(currentStroke);
-      updatePageIndicator();
-    }
-
-    function resizeCanvas() {
-      if (!canvas || !ctx) return;
-      var cssW = canvasWrap.offsetWidth;
-      var cssH = canvasWrap.offsetHeight;
-      if (cssW < 60) cssW = 60;
-      if (cssH < 60) cssH = 60;
-      canvas.style.width  = cssW + 'px';
-      canvas.style.height = cssH + 'px';
-      canvas.width  = Math.floor(cssW * dpr);
-      canvas.height = Math.floor(cssH * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      canvasRect = null;           /* cached rect is stale after resize */
-      renderPage();
-    }
-
-    /* ---------- Page accessor ---------- */
-    function currentPageObj() {
-      var nb = notebooks[currentNotebook];
-      if (!nb) return null;
-      return nb.pages[currentPage];
-    }
-
-    /* ---------- Stroke lifecycle (incremental + smooth) ----------
-       SMOOTHNESS TECHNIQUE: midpoint quadratic curves.
-       When a new point P[n] arrives and we already have P[n-2] and P[n-1],
-       we draw a quadratic curve from midpoint(P[n-2], P[n-1]) to
-       midpoint(P[n-1], P[n]) using P[n-1] as the control point. This
-       produces a C1-continuous smooth curve incrementally — the same
-       technique used by Apple PencilKit. Round line caps fill the
-       tiny seams between segments, so the result looks continuous.
-       ---------------------------------------------------------------- */
-    function effectiveWidth(tool, sizeIdx) {
-      var mult = PEN_WIDTH_MULT[tool] || 1.0;
-      return SIZE_PRESETS[sizeIdx].w * mult;
-    }
-
-    function startStroke(x, y) {
-      if (currentTool === 'eraser') return;
-      var w = effectiveWidth(currentTool, currentSize);
-      var op = PEN_OPACITY[currentTool] != null ? PEN_OPACITY[currentTool] : 1.0;
-      currentStroke = {
-        type:    currentTool,
-        color:   currentColor,
-        width:   w,
-        opacity: op,
-        points:  [{ x: x, y: y }]
-      };
-      /* Draw initial dot so single taps render. The style stays
-         applied for the whole stroke (endStroke resets it) -
-         re-applying it for every segment was measurable overhead
-         on 2012 hardware. */
-      applyStrokeStyle(currentStroke);
-      ctx.beginPath();
-      ctx.arc(x, y, Math.max(0.5, w / 2), 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    function continueStroke(x, y) {
-      if (!isDrawing) return;
-      if (currentTool !== 'eraser' && currentStroke) {
-        var pts = currentStroke.points;
-        var n = pts.length;
-        var last = pts[n - 1];
-        var dx = x - last.x, dy = y - last.y;
-        if (dx * dx + dy * dy < 0.8) return;   /* skip sub-pixel jitter */
-
-        ctx.beginPath();
-        if (n === 1) {
-          /* First move: straight line from pts[0] to (x,y).
-             Next move will smooth over this with a midpoint curve. */
-          ctx.moveTo(pts[0].x, pts[0].y);
-          ctx.lineTo(x, y);
-        } else {
-          /* Midpoint quadratic for smoothness */
-          var pPrev = pts[n - 2];
-          var mid0x = (pPrev.x + last.x) / 2;
-          var mid0y = (pPrev.y + last.y) / 2;
-          var mid1x = (last.x + x) / 2;
-          var mid1y = (last.y + y) / 2;
-          ctx.moveTo(mid0x, mid0y);
-          ctx.quadraticCurveTo(last.x, last.y, mid1x, mid1y);
-        }
-        ctx.stroke();
-        pts.push({ x: x, y: y });
-        return;
-      }
-      if (currentTool === 'eraser') {
-        eraseAt(x, y);
-        return;
-      }
-    }
-
-    function endStroke() {
-      resetCtxStyle();               /* stroke style does not leak */
-      if (!isDrawing) {
-        currentStroke = null;
-        return;
-      }
-      isDrawing = false;
-      if (currentStroke && currentStroke.points.length > 0) {
-        var page = currentPageObj();
-        if (page) {
-          page.strokes.push(currentStroke);
-          page.undoStack.push({ type: 'draw', stroke: currentStroke });
-          page.redoStack = [];   /* new action invalidates redo */
-          if (page.undoStack.length > MAX_UNDO) page.undoStack.shift();
-          saveToStorage();
-        }
-      }
-      currentStroke = null;
-      /* NO renderPage() — stroke already drawn incrementally */
-    }
-
-    /* ---------- Eraser (object-level) ---------- */
-    function eraseAt(x, y) {
-      var page = currentPageObj();
-      if (!page) return;
-      var removed = [], kept = [];
-      for (var i = 0; i < page.strokes.length; i++) {
-        var s = page.strokes[i];
-        if (strokeHit(s, x, y, ERASE_RADIUS)) removed.push(s);
-        else kept.push(s);
-      }
-      if (removed.length > 0) {
-        page.strokes = kept;
-        page.undoStack.push({ type: 'erase', strokes: removed });
-        page.redoStack = [];
-        if (page.undoStack.length > MAX_UNDO) page.undoStack.shift();
-        saveToStorage();
-        renderPage();   /* erase requires a full re-render */
-      }
-    }
-
-    /* ---------- Undo / Redo ---------- */
-    function undo() {
-      var page = currentPageObj();
-      if (!page || page.undoStack.length === 0) return;
-      var action = page.undoStack.pop();
-      if (action.type === 'draw') {
-        var idx = page.strokes.indexOf(action.stroke);
-        if (idx >= 0) page.strokes.splice(idx, 1);
-        page.redoStack.push(action);
-      } else if (action.type === 'erase') {
-        for (var i = 0; i < action.strokes.length; i++) {
-          page.strokes.push(action.strokes[i]);
-        }
-        page.redoStack.push(action);
-      } else if (action.type === 'clear') {
-        page.strokes = action.strokes;
-        page.redoStack.push(action);
-      }
-      if (page.redoStack.length > MAX_REDO) page.redoStack.shift();
-      saveToStorage();
-      renderPage();
-    }
-    function redo() {
-      var page = currentPageObj();
-      if (!page || page.redoStack.length === 0) return;
-      var action = page.redoStack.pop();
-      if (action.type === 'draw') {
-        page.strokes.push(action.stroke);
-        page.undoStack.push(action);
-      } else if (action.type === 'erase') {
-        /* remove again */
-        var kept = [];
-        for (var i = 0; i < page.strokes.length; i++) {
-          var found = false;
-          for (var j = 0; j < action.strokes.length; j++) {
-            if (page.strokes[i] === action.strokes[j]) { found = true; break; }
-          }
-          if (!found) kept.push(page.strokes[i]);
-        }
-        page.strokes = kept;
-        page.undoStack.push(action);
-      } else if (action.type === 'clear') {
-        page.undoStack.push({ type: 'clear', strokes: page.strokes.slice() });
-        page.strokes = [];
-      }
-      if (page.undoStack.length > MAX_UNDO) page.undoStack.shift();
-      saveToStorage();
-      renderPage();
-    }
-
-    /* ---------- Clear page ---------- */
-    function clearPage() {
-      var page = currentPageObj();
-      if (!page || page.strokes.length === 0) return;
-      if (!confirm('Clear all strokes on this page?')) return;
-      var snapshot = page.strokes.slice();
-      page.undoStack.push({ type: 'clear', strokes: snapshot });
-      page.redoStack = [];
-      if (page.undoStack.length > MAX_UNDO) page.undoStack.shift();
-      page.strokes = [];
-      saveToStorage();
-      renderPage();
-    }
-
-    /* ---------- Navigation ---------- */
-    function goToPage(idx) {
-      var nb = notebooks[currentNotebook];
-      if (!nb) return;
-      if (idx < 0 || idx >= nb.pages.length) return;
-      if (idx === currentPage) return;
-      endStroke();
-      resetTouchTracking();
-      currentPage = idx;
-      saveToStorage();
-      renderPage();
-    }
-    function nextPage() {
-      var nb = notebooks[currentNotebook];
-      if (!nb) return;
-      goToPage(currentPage + 1);
-    }
-    function prevPage() {
-      goToPage(currentPage - 1);
-    }
-    function addPage() {
-      var nb = notebooks[currentNotebook];
-      if (!nb) return;
-      nb.pages.push(newPage());
-      saveToStorage();
-      goToPage(nb.pages.length - 1);
-    }
-    function deletePage(idx) {
-      var nb = notebooks[currentNotebook];
-      if (!nb) return;
-      if (nb.pages.length <= 1) {
-        alert('A notebook must have at least one page.');
-        return;
-      }
-      if (!confirm('Delete page ' + (idx + 1) + '?')) return;
-      nb.pages.splice(idx, 1);
-      if (currentPage >= nb.pages.length) currentPage = nb.pages.length - 1;
-      saveToStorage();
-      renderPage();
-      refreshPagesList();
-    }
-
-    /* ---------- Notebook ops ---------- */
-    function openNotebook(idx) {
-      if (idx < 0 || idx >= notebooks.length) return;
-      endStroke();
-      resetTouchTracking();
-      currentNotebook = idx;
-      currentPage = 0;
-      saveToStorage();
-      showView('draw');
-      nbNameEl.textContent = notebooks[idx].title;
-      /* Wait for layout to settle before sizing the canvas */
-      setTimeout(function () {
-        resizeCanvas();
-        renderPage();
-      }, 60);
-    }
-    function createNotebook() {
-      var title = prompt('Notebook name:', 'Notebook ' + (notebooks.length + 1));
-      if (title === null) return;
-      if (!title) title = 'Untitled';
-      notebooks.push(newNotebook(title));
-      saveToStorage();
-      renderHome();
-    }
-    function renameNotebook(idx) {
-      var nb = notebooks[idx];
-      if (!nb) return;
-      var t = prompt('Rename notebook:', nb.title);
-      if (t === null) return;
-      if (!t) t = 'Untitled';
-      nb.title = t;
-      saveToStorage();
-      renderHome();
-      if (idx === currentNotebook) nbNameEl.textContent = t;
-    }
-    function deleteNotebook(idx) {
-      if (notebooks.length <= 1) {
-        alert('You must have at least one notebook.');
-        return;
-      }
-      var nb = notebooks[idx];
-      if (!confirm('Delete notebook "' + nb.title + '" and all its pages?')) return;
-      notebooks.splice(idx, 1);
-      if (currentNotebook >= notebooks.length) currentNotebook = notebooks.length - 1;
-      currentPage = 0;
-      saveToStorage();
-      renderHome();
-    }
-
-    /* ---------- Export PNG ---------- */
-    function exportPNG() {
-      endStroke();
-      renderPage();
-      var dataURL;
-      try {
-        dataURL = canvas.toDataURL('image/png');
-      } catch (e) {
-        alert('Export failed: ' + e.message);
-        return;
-      }
-      exportImg.src = dataURL;
-      exportOverlay.className = 'overlay active';
-    }
-
-    /* ---------- Position helpers ----------
-     * getPos(e) - works for mouse and old single-touch code paths.
-     * touchPos(touch) - takes a specific Touch object (for palm-reject
-     * identifier-locked drawing).
-     */
-    function getPos(e) {
-      var rect = canvas.getBoundingClientRect();
-      var cx, cy;
-      if (e.touches && e.touches.length > 0) {
-        cx = e.touches[0].clientX; cy = e.touches[0].clientY;
-      } else if (e.changedTouches && e.changedTouches.length > 0) {
-        cx = e.changedTouches[0].clientX; cy = e.changedTouches[0].clientY;
-      } else {
-        cx = e.clientX; cy = e.clientY;
-      }
-      return { x: cx - rect.left, y: cy - rect.top };
-    }
-    function touchPos(touch) {
-      /* Canvas layout cannot change while touches are down (fixed
-         full-screen app), so the rect is cached per touchdown and
-         invalidated on resize. Without this, every touchmove for
-         every touch point forced a synchronous layout query - a
-         large part of the lag reported on 2012 hardware. */
-      var rect = canvasRect || canvas.getBoundingClientRect();
-      return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
-    }
-
-    /* ---------- Palm rejection helpers ---------- */
-    function getTouchRadius(touch) {
-      if (!touch) return 0;
-      var rx = touch.radiusX || 0;
-      var ry = touch.radiusY || 0;
-      if (rx > 0 && ry > 0) return Math.max(rx, ry);
-      return rx || ry || 0;
-    }
-    /* Layer 1 - only meaningful when the hardware reports a real
-       contact area (radius above 1). Never fires on iPad 3; kept
-       because it costs nothing and helps devices that do report it. */
-    function radiusRejected(touch) {
-      if (palmLevel === PALM_OFF) return false;
-      var r = getTouchRadius(touch);
-      if (r <= 1) return false;
-      return r > PALM_RADIUS_MAX;
-    }
-    function findTouchById(e, id) {
-      var list = e.touches || e.changedTouches || [];
-      for (var i = 0; i < list.length; i++) {
-        if (list[i].identifier === id) return list[i];
-      }
-      return null;
-    }
-
-    /* ---------- Pending-touch indicator ----------
-     * A translucent ring follows a touch that has landed but not yet
-     * proven itself. It vanishes the moment the stroke commits and
-     * flashes red when a touch is rejected. DOM-only (never drawn on
-     * the canvas), so it cannot pollute ink and costs almost nothing.
-     * The canvas is positioned at the top-left corner of
-     * .canvas-wrap, so canvas CSS coordinates work directly here. */
-    function ensurePendingDot() {
-      if (pendingDotEl) return pendingDotEl;
-      pendingDotEl = document.createElement('div');
-      pendingDotEl.id = 'pendingDot';
-      if (canvasWrap) canvasWrap.appendChild(pendingDotEl);
-      return pendingDotEl;
-    }
-    function showPendingDot(id, x, y) {
-      var d = ensurePendingDot();
-      pendingDotId = id;
-      d.className = '';
-      d.style.display = 'block';
-      d.style.left = (x - 13) + 'px';
-      d.style.top  = (y - 13) + 'px';
-    }
-    function movePendingDot(x, y) {
-      /* retired - kept only so old call sites (none) stay obvious */
-      if (!pendingDotEl) return;
-      if (pendingDotEl.style.display === 'none') return;
-      pendingDotEl.style.left = (x - 13) + 'px';
-      pendingDotEl.style.top  = (y - 13) + 'px';
-    }
-    function hidePendingDot() {
-      if (pendingDotEl) pendingDotEl.style.display = 'none';
-      pendingDotId = null;
-    }
-    /* NOTE: the ring intentionally does NOT follow the touch while
-       it is pending. Repositioning a DOM element on every touchmove
-       forced a layout at 60 Hz - the other half of the reported lag.
-       Pre-commit travel is at most a few pixels, so a static ring is
-       visually identical. */
-    function flashRejected(x, y) {
-      var d = ensurePendingDot();
-      d.className = 'rejected';
-      d.style.display = 'block';
-      d.style.left = (x - 13) + 'px';
-      d.style.top  = (y - 13) + 'px';
-      if (rejectFlashTimer) clearTimeout(rejectFlashTimer);
-      rejectFlashTimer = setTimeout(function () {
-        rejectFlashTimer = null;
-        hidePendingDot();
-      }, 320);
-    }
-
-    /* ---------- Touch bookkeeping ----------
-     * touchStates maps touch.identifier to a record:
-     *   { state: 'ignored' }
-     *   { state: 'pending', sx, sy, lx, ly, t0, maxD2, need }
-     * "need" is the travel (CSS px) this touch must show before it
-     * may ink (raised for late arrivals and settled touches in Max).
-     * Only touches currently on screen have records; pruneTouchStates
-     * self-heals if Safari misses a touchend/touchcancel. */
-    function pruneTouchStates(e) {
-      var live = e.touches || [];
-      for (var k in touchStates) {
-        if (!touchStates.hasOwnProperty(k)) continue;
-        var found = false;
-        for (var i = 0; i < live.length; i++) {
-          if (String(live[i].identifier) === k) { found = true; break; }
-        }
-        if (!found) delete touchStates[k];
-      }
-      /* if the touch the indicator follows vanished, hide it */
-      if (pendingDotId !== null && !touchStates[pendingDotId]) hidePendingDot();
-    }
-    /* Declare every un-proven touch a palm. Used when a real stroke
-       commits, and by the Strict multi-touch gate. */
-    function cancelAllPendings(flash, fx, fy) {
-      var hadPending = false;
-      for (var k in touchStates) {
-        if (!touchStates.hasOwnProperty(k)) continue;
-        if (touchStates[k].state === 'pending') {
-          touchStates[k].state = 'ignored';
-          hadPending = true;
-        }
-      }
-      if (flash && hadPending) flashRejected(fx, fy);
-      hidePendingDot();
-    }
-    /* The pending touch has travelled far enough: begin the real
-       stroke now. The touchdown anchor is replayed first, so the
-       first few pixels of travel are not lost. */
-    function commitPending(id) {
-      var st = touchStates[id];
-      if (!st || st.state !== 'pending') return;
-      delete touchStates[id];
-      hidePendingDot();
-      /* A real stroke is starting, so any queued tap-dot was a
-         genuine tap, not a palm bounce - ink it now. */
-      flushTapDot();
-      activeTouchId = id;
-      isDrawing = true;
-      startStroke(st.sx, st.sy);
-      continueStroke(st.lx, st.ly);
-      /* A confirmed stroke means every other touch is a palm. */
-      cancelAllPendings(false);
-    }
-    /* Wipe all pending tracking (page / notebook switches). */
-    function resetTouchTracking() {
-      touchStates = {};
-      cancelTapDot();
-      lastBounce = null;
-      hidePendingDot();
-    }
-
-    /* ---------- Tap-dot queue (anti palm-bounce) ----------
-     * A quick no-travel lift is ambiguous: a deliberate finger tap
-     * (a decimal point) or one bounce of a rocking palm. Palms rock
-     * in place - land, lift, land again on the same spot within a
-     * few hundred milliseconds - so a qualifying tap is NOT inked
-     * immediately. It waits PALM_DOT_DELAY:
-     *   - a new touch landing within PALM_ROCK_PX puts the dot "on
-     *     hold" (bounce suspected); if that touch commits a stroke
-     *     the dot was real and inks instantly (commitPending calls
-     *     flushTapDot), otherwise the hold outlives the timer and
-     *     the dot is dropped;
-     *   - a new touch landing elsewhere means the pen is active: the
-     *     queued dot inks immediately.
-     * lastBounce remembers a confirmed bounce so a whole rocking
-     * chain (bounce after bounce) stays suppressed. */
-    var tapDotTimer = null;
-    var tapDot      = null;      /* { x, y, hold } or null */
-    var lastBounce  = null;      /* { x, y, at } or null */
-
-    function drawTapDot(x, y) {
-      if (currentTool === 'eraser') return;
-      isDrawing = true;
-      startStroke(x, y);
-      endStroke();
-    }
-    function cancelTapDot() {
-      if (tapDotTimer) clearTimeout(tapDotTimer);
-      tapDotTimer = null;
-      tapDot = null;
-    }
-    function flushTapDot() {
-      if (!tapDot) return;
-      var d = tapDot;
-      cancelTapDot();
-      drawTapDot(d.x, d.y);
-    }
-    function queueTapDot(x, y) {
-      if (tapDot) {
-        if (tapDot.hold) cancelTapDot();   /* bounce #2: drop #1 */
-        else flushTapDot();                /* second real tap: ink #1 */
-      }
-      tapDot = { x: x, y: y, hold: false };
-      if (tapDotTimer) clearTimeout(tapDotTimer);
-      tapDotTimer = setTimeout(function () {
-        tapDotTimer = null;
-        if (!tapDot) return;
-        if (tapDot.hold) { tapDot = null; return; }   /* bounce: no dot */
-        flushTapDot();
-      }, PALM_DOT_DELAY);
-    }
-    /* A new touch landed at (x, y). Near the queued dot = suspected
-       bounce (hold it). Far away = pen activity elsewhere (ink the
-       queued dot now). */
-    function tapDotOnNewTouch(x, y) {
-      if (!tapDot) return;
-      var dx = x - tapDot.x, dy = y - tapDot.y;
-      if (dx * dx + dy * dy <= PALM_ROCK_PX * PALM_ROCK_PX) {
-        tapDot.hold = true;
-        lastBounce = { x: x, y: y, at: Date.now() };
-      } else {
-        flushTapDot();
+      c.stroke();
+    } else if (tpl === TPL_GRID) {
+      c.strokeStyle = lineCol; c.lineWidth = 1;
+      c.beginPath();
+      for (var gx = 24; gx < viewW; gx += 24) { c.moveTo(gx + 0.5, top); c.lineTo(gx + 0.5, top + PAGE_H); }
+      for (var gy = top + 24; gy <= top + PAGE_H - 8; gy += 24) { c.moveTo(0, gy + 0.5); c.lineTo(viewW, gy + 0.5); }
+      c.stroke();
+    } else if (tpl === TPL_DOTTED) {
+      c.fillStyle = dotCol;
+      for (var dy = top + 20; dy <= top + PAGE_H - 12; dy += 24) {
+        for (var dx = 12; dx < viewW; dx += 24) c.fillRect(dx - 1, dy - 1, 2, 2);
       }
     }
-    function d2near(ax, ay, bx, by) {
-      var dx = ax - bx, dy = ay - by;
-      return dx * dx + dy * dy;
+    c.fillStyle = numCol;
+    c.font = '12px Helvetica, Arial, sans-serif';
+    c.textAlign = 'center';
+    var gy2 = top + PAGE_H + GAP_H / 2;
+    if (gy2 >= y0 - 10 && gy2 <= y1 + 10) c.fillText(String(p + 1), viewW / 2, gy2 + 4);
+  }
+}
+
+/* ---------- document height + scroll ---------- */
+function recomputeDoc() {
+  var maxY = 0, n = activeNote();
+  if (n) {
+    for (var i = 0; i < n.strokes.length; i++) {
+      var bb = strokeBBox(n.strokes[i]);
+      if (bb.y1 > maxY) maxY = bb.y1;
     }
+  }
+  var needed = maxY + settings.spacing * 2.5;
+  var pages = Math.max(1, Math.ceil(needed / PAGE_H));
+  var target = pages * (PAGE_H + GAP_H) - GAP_H;
+  docH = target < PAGE_H ? PAGE_H : target;
+  pillTotalDirty = true;
+  clampScroll();
+}
+function clampScroll() {
+  var max = Math.max(0, docH - viewH);
+  if (scrollY > max) scrollY = max;
+  if (scrollY < 0) scrollY = 0;
+}
 
-    /* ---------- Max-level arbitration helpers ---------- */
-    /* Pendings that have sat un-proven longer than PALM_STALE_MS are
-       palms: a fresh touch just appeared, and the pen never waits
-       that long before moving. */
-    function cancelStalePendings() {
-      var now = Date.now();
-      for (var k in touchStates) {
-        if (!touchStates.hasOwnProperty(k)) continue;
-        var st = touchStates[k];
-        if (st.state === 'pending' && (now - st.t0) > PALM_STALE_MS) {
-          st.state = 'ignored';
-        }
-      }
+/* ---------- render loop ---------- */
+var lastRenderScrollY = -1;
+var pillTotalDirty = false;
+function requestRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  window.requestAnimationFrame(render);
+}
+function render() {
+  renderQueued = false;
+  if (!ctx) return;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, cvs.width, cvs.height);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, -scrollY * dpr);
+  drawPaper(ctx);
+  var i0 = Math.floor(scrollY / TILE_H);
+  var i1 = Math.floor((scrollY + viewH) / TILE_H);
+  var i;
+  for (i = i0; i <= i1; i++) {
+    var t = getTile(i);
+    if (t) ctx.drawImage(t, 0, i * TILE_H, viewW, TILE_H);
+  }
+  for (var id in inkNow) {
+    if (inkNow.hasOwnProperty(id)) renderStrokeFull(ctx, inkNow[id].stroke);
+  }
+  if (eraserTouchId !== null) drawEraserCursor(ctx);
+  if (Math.abs(scrollY - lastRenderScrollY) > 0.5 || pillTotalDirty) updateScrollPill();
+  pillTotalDirty = false;
+  lastRenderScrollY = scrollY;
+}
+
+/* ---------- resize ---------- */
+function resizeView() {
+  var w = canvasWrap.clientWidth || canvasWrap.offsetWidth || 768;
+  var h = canvasWrap.clientHeight || canvasWrap.offsetHeight || 968;
+  if (w < 60) w = 768;
+  if (h < 60) h = 968;
+  viewW = w; viewH = h;
+  cvs.width = Math.round(viewW * dpr);
+  cvs.height = Math.round(viewH * dpr);
+  cvs.style.width = viewW + 'px';
+  cvs.style.height = viewH + 'px';
+  invalidateAll();
+  wrapRect = canvasWrap.getBoundingClientRect();
+  clampScroll();
+  requestRender();
+}
+
+/* ---------- history ---------- */
+function updateUndoButtons() {
+  undoBtn.className = 'tb-btn' + (undoStack.length ? '' : ' dis');
+  redoBtn.className = 'tb-btn' + (redoStack.length ? '' : ' dis');
+}
+function pushUndo(op) {
+  undoStack.push(op);
+  if (undoStack.length > 60) undoStack.shift();
+  redoStack.length = 0;
+  updateUndoButtons();
+}
+function addStroke(n, s) {
+  n.strokes.push(s);
+  var bb = strokeBBox(s);
+  invalidateRange(bb.y0, bb.y1);
+  requestRender();
+}
+function removeStroke(n, s) {
+  var idx = n.strokes.indexOf(s);
+  if (idx >= 0) n.strokes.splice(idx, 1);
+  var bb = strokeBBox(s);
+  invalidateRange(bb.y0, bb.y1);
+  requestRender();
+}
+function applyOp(op, reverse) {
+  var n = activeNote();
+  if (!n) return;
+  var i;
+  if (op.t === 'add') {
+    if (reverse) removeStroke(n, op.s);
+    else addStroke(n, op.s);
+  } else {
+    if (reverse) { for (i = 0; i < op.list.length; i++) addStroke(n, op.list[i]); }
+    else { for (i = 0; i < op.list.length; i++) removeStroke(n, op.list[i]); }
+  }
+}
+function doUndo() {
+  if (!undoStack.length) return;
+  var op = undoStack.pop();
+  applyOp(op, true);
+  redoStack.push(op);
+  recomputeDoc(); updateUndoButtons(); requestRender(); saveSoon();
+  toast('Undone');
+}
+function doRedo() {
+  if (!redoStack.length) return;
+  var op = redoStack.pop();
+  applyOp(op, false);
+  undoStack.push(op);
+  recomputeDoc(); updateUndoButtons(); requestRender(); saveSoon();
+  toast('Redone');
+}
+
+/* ---------- export ---------- */
+function exportPNG() {
+  var n = activeNote();
+  if (!n) return;
+  closePanels();
+  var totalPages = Math.max(1, Math.ceil(docH / (PAGE_H + GAP_H)));
+  var usePages = Math.min(totalPages, 3);
+  var W = Math.round(viewW * dpr);
+  var H = Math.round(usePages * (PAGE_H + GAP_H) * dpr) - Math.round(GAP_H * dpr);
+  var c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  var ec = c.getContext('2d');
+  if (!ec) { toast('Export failed on this device'); return; }
+  ec.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ec.fillStyle = '#FFFFFF';
+  ec.fillRect(0, 0, viewW, H / dpr);
+  ec.strokeStyle = '#D8DDE3';
+  ec.lineWidth = 1;
+  ec.beginPath();
+  for (var p = 0; p < usePages; p++) {
+    var top = p * (PAGE_H + GAP_H);
+    for (var y = top + FIRST_BASE; y <= top + PAGE_H - 16; y += settings.spacing) {
+      ec.moveTo(0, y + 0.5); ec.lineTo(viewW, y + 0.5);
     }
-    function hasOtherPending() {
-      for (var k in touchStates) {
-        if (!touchStates.hasOwnProperty(k)) continue;
-        if (touchStates[k].state === 'pending') return true;
-      }
-      return false;
+  }
+  ec.stroke();
+  var st = [];
+  for (var i = 0; i < n.strokes.length; i++) st.push(n.strokes[i]);
+  st.sort(function (a, b) { return a.ord - b.ord; });
+  for (var k = 0; k < st.length; k++) renderStrokeFull(ec, st[k]);
+  if (totalPages > usePages) toast('Exported first ' + usePages + ' pages');
+  try {
+    exportImg.src = c.toDataURL('image/png');
+    exportOverlay.className = 'overlay on';
+  } catch (e) {
+    toast('Export failed (canvas too large)');
+  }
+}
+
+/* ============================================================
+ * S-CLASS PALM REJECTION + INPUT ENGINE
+ * Every touch begins as a probe. It earns ink only by moving
+ * like writing (speed + direction coherence + travel). Palm
+ * verdicts are permanent and remembered in place and time.
+ * Two coherent fingers = pan gesture with momentum.
+ * ============================================================ */
+
+var touchStates = {};   /* identifier -> {kind, state, ...} */
+var inkNow = {};        /* identifier -> {stroke} live ink */
+var palmMem = [];       /* recent palm contact points {x,y,t} */
+var gesture = null;     /* active two-finger pan */
+var momentum = null;
+var momRAF = 0;
+var eraserTouchId = null;
+var pendingDotId = null;
+var rejectFlashTimer = null;
+var dotQueue = null;
+var lastBounce = null;
+
+var tool = 'pen';       /* 'pen' | 'eraser' */
+var eraserMode = 0;     /* 0 = stroke, 1 = area */
+var eraserSize = 28;
+var scrollPillTimer = null;
+
+function currentPenWidth() {
+  var pdef = PENS[settings.pen];
+  return pdef.wMin + (pdef.wMax - pdef.wMin) * settings.widthStep / 5;
+}
+
+function docPoint(t) {
+  return {
+    x: t.clientX - wrapRect.left,
+    y: t.clientY - wrapRect.top + scrollY
+  };
+}
+
+/* ---------- palm memory ---------- */
+function palmMemAdd(x, y, t) {
+  palmMem.push({ x: x, y: y, t: t });
+  if (palmMem.length > 12) palmMem.shift();
+}
+function prunePalmMemNear(x, y) {
+  var out = [], i;
+  for (i = 0; i < palmMem.length; i++) {
+    if (dist(palmMem[i].x, palmMem[i].y, x, y) > SC.MEM_PX * 0.8) out.push(palmMem[i]);
+  }
+  palmMem = out;
+}
+
+/* ---------- guide ring ---------- */
+function showPendingDot(id, x, y) {
+  if (pendingDotId !== null) return;      /* one ring at a time */
+  pendingDotId = id;
+  pendingDot.className = '';
+  pendingDot.style.left = (x + wrapRect.left) + 'px';
+  pendingDot.style.top = (y - scrollY + wrapRect.top) + 'px';
+  pendingDot.style.display = 'block';
+}
+function hidePendingDot(id) {
+  if (id !== undefined && id !== null && pendingDotId !== id) return;
+  pendingDot.style.display = 'none';
+  pendingDotId = null;
+  if (rejectFlashTimer) { clearTimeout(rejectFlashTimer); rejectFlashTimer = null; }
+}
+function flashRejectedDot() {
+  pendingDot.className = 'rejected';
+  if (rejectFlashTimer) clearTimeout(rejectFlashTimer);
+  rejectFlashTimer = setTimeout(function () {
+    rejectFlashTimer = null;
+    pendingDot.style.display = 'none';
+    pendingDotId = null;
+  }, 160);
+}
+
+/* ---------- suspect detection (cluster, memory, zone, bounce) ---------- */
+function computeSuspect(st, touch, now) {
+  var k, o;
+  for (k in touchStates) {
+    if (!touchStates.hasOwnProperty(k)) continue;
+    o = touchStates[k];
+    if (o.kind !== 'probe') continue;
+    /* palm team: two contacts landing close together in time */
+    if (Math.abs(o.t0 - now) < SC.TEAM_MS && dist(o.sx, o.sy, st.sx, st.sy) < SC.TEAM_PX) {
+      o.suspect = true;
+      return true;
     }
-
-    /* ---------- Canvas event wiring ---------- */
-    function initCanvasEvents() {
-      function onTouchStart(e) {
-        e.preventDefault();
-        pruneTouchStates(e);
-        /* Cache the canvas rect once per touchdown; touchmove then
-           never queries layout (see touchPos). */
-        canvasRect = canvas.getBoundingClientRect();
-
-        /* Identifier lock: a committed stroke is in progress, so any
-           touch arriving now is a palm - ignore it. (Includes v2's
-           recovery for a missed touchend.) */
-        if (activeTouchId !== null) {
-          var stillActive = findTouchById(e, activeTouchId);
-          if (stillActive) {
-            for (var i = 0; i < e.changedTouches.length; i++) {
-              touchStates[e.changedTouches[i].identifier] = { state: 'ignored' };
-            }
-            return;
-          }
-          activeTouchId = null;
-          endStroke();
-        }
-
-        var strict = (palmLevel === PALM_STRICT);
-
-        /* Max: the pen just touched down - stationary touches that
-           never proved themselves are declared palms right now. */
-        if (strict) cancelStalePendings();
-
-        for (var j = 0; j < e.changedTouches.length; j++) {
-          var t = e.changedTouches[j];
-          var id = t.identifier;
-          var p = touchPos(t);
-
-          /* Any new landing interacts with a queued tap-dot: near
-             it = suspected bounce (hold), far = ink it now. */
-          tapDotOnNewTouch(p.x, p.y);
-
-          if (radiusRejected(t)) {               /* Layer 1 */
-            touchStates[id] = { state: 'ignored' };
-            continue;
-          }
-
-          /* Eraser keeps v2 semantics: act on touchdown so a quick
-             tap still deletes a stroke. No movement proof needed. */
-          if (currentTool === 'eraser') {
-            activeTouchId = id;
-            isDrawing = true;
-            eraseAt(p.x, p.y);
-            continue;
-          }
-          /* Off keeps v2 semantics: ink on touchdown. */
-          if (palmLevel === PALM_OFF) {
-            activeTouchId = id;
-            isDrawing = true;
-            startStroke(p.x, p.y);
-            continue;
-          }
-          /* Medium/Max: hold the touch as "pending" until it proves
-             it moves. Several touches may be pending at once; the
-             first to travel far enough wins (arbitration). In Max a
-             touch arriving while another is pending must travel
-             further - late arrivals are usually the palm joining
-             after the pen. */
-          touchStates[id] = {
-            state: 'pending',
-            sx: p.x, sy: p.y,      /* touchdown anchor */
-            lx: p.x, ly: p.y,      /* last seen point */
-            t0: Date.now(),
-            maxD2: 0,              /* max squared displacement */
-            need: (strict && hasOtherPending()) ? PALM_JOIN_MIN
-                                                : PALM_MOVE_MIN
-          };
-          showPendingDot(id, p.x, p.y);
-        }
-      }
-
-      function onTouchMove(e) {
-        e.preventDefault();
-
-        /* Committed stroke: identifier lock; other touches do not
-           exist as far as drawing is concerned. */
-        if (activeTouchId !== null) {
-          var t = findTouchById(e, activeTouchId);
-          if (t) {
-            var p = touchPos(t);
-            if (currentTool === 'eraser') eraseAt(p.x, p.y);
-            else continueStroke(p.x, p.y);
-          }
-          return;
-        }
-
-        /* No committed stroke yet: advance every pending touch. The
-           first to travel far enough commits; that commit declares
-           all the others palms (arbitration). */
-        var strict = (palmLevel === PALM_STRICT);
-
-        for (var j = 0; j < e.changedTouches.length; j++) {
-          var t2 = e.changedTouches[j];
-          var id = t2.identifier;
-          var st = touchStates[id];
-          if (!st || st.state !== 'pending') continue;
-
-          var p2 = touchPos(t2);
-          st.lx = p2.x;
-          st.ly = p2.y;
-          var dx = p2.x - st.sx, dy = p2.y - st.sy;
-          var d2 = dx * dx + dy * dy;
-          if (d2 > st.maxD2) st.maxD2 = d2;
-
-          /* Layer 2: travel gate. Fresh touches need st.need (5 px,
-             or 12 px in Max when sharing the screen with another
-             pending touch). A touch that has SAT still pending for
-             a long time is a settled palm: in Max it must travel
-             PALM_SETTLE_MIN before it may ink, so palm creep and
-             palm repositioning slides never draw. */
-          var need = st.need || PALM_MOVE_MIN;
-          if (strict && (Date.now() - st.t0) > PALM_SETTLE_MS &&
-              need < PALM_SETTLE_MIN) {
-            need = PALM_SETTLE_MIN;
-          }
-          if (d2 >= need * need) {
-            commitPending(id);
-          }
-        }
-      }
-
-      function onTouchEnd(e) {
-        e.preventDefault();
-        for (var i = 0; i < e.changedTouches.length; i++) {
-          var id = e.changedTouches[i].identifier;
-
-          if (id === activeTouchId) {
-            /* the committed stroke's own touch lifted */
-            endStroke();
-            activeTouchId = null;
-            continue;
-          }
-          var st = touchStates[id];
-          if (!st) continue;                     /* pruned or unknown */
-          delete touchStates[id];
-          if (pendingDotId === id) hidePendingDot();
-
-          if (st.state === 'pending' && currentTool !== 'eraser') {
-            var dur = Date.now() - st.t0;
-            /* Quick no-travel touch = tap: keep v2's tap-to-dot, but
-               queue it so a palm bouncing back onto the spot can
-               still cancel it (see tap-dot queue). Lifts faster than
-               PALM_TAP_MIN_MS are micro-bounce noise: never a dot. */
-            if (dur <= PALM_TAP_MS && dur >= PALM_TAP_MIN_MS &&
-                st.maxD2 < PALM_MOVE_MIN * PALM_MOVE_MIN) {
-              var nowL = Date.now();
-              var chain = lastBounce &&
-                (nowL - lastBounce.at) <= 800 &&
-                d2near(st.lx, st.ly, lastBounce.x, lastBounce.y) <=
-                  PALM_ROCK_PX * PALM_ROCK_PX;
-              if (chain) {
-                /* another bounce of the same rocking palm */
-                lastBounce = { x: st.lx, y: st.ly, at: nowL };
-              } else {
-                queueTapDot(st.lx, st.ly);
-              }
-            }
-            /* otherwise: a resting palm lifted - discard silently */
-          }
-        }
-      }
-
-      /* touchcancel: same as end, except a cancelled touch never
-         counts as a tap (the system took the gesture over, not the
-         user lifting a finger). */
-      function onTouchCancel(e) {
-        e.preventDefault();
-        for (var i = 0; i < e.changedTouches.length; i++) {
-          var id = e.changedTouches[i].identifier;
-          if (id === activeTouchId) {
-            endStroke();
-            activeTouchId = null;
-          } else if (touchStates[id]) {
-            delete touchStates[id];
-            if (pendingDotId === id) hidePendingDot();
-          }
-        }
-      }
-
-      canvas.addEventListener('touchstart',  onTouchStart,  false);
-      canvas.addEventListener('touchmove',   onTouchMove,   false);
-      canvas.addEventListener('touchend',    onTouchEnd,    false);
-      canvas.addEventListener('touchcancel', onTouchCancel, false);
-
-      /* Mouse events (desktop testing - same engine, no palm rejection) */
-      function onMouseDown(e) {
-        var p = getPos(e);
-        isDrawing = true;
-        if (currentTool === 'eraser') eraseAt(p.x, p.y);
-        else startStroke(p.x, p.y);
-      }
-      function onMouseMove(e) {
-        if (!isDrawing) return;
-        var p = getPos(e);
-        continueStroke(p.x, p.y);
-      }
-      function onMouseUp()   { endStroke(); }
-      function onMouseLeave() { if (isDrawing) endStroke(); }
-      canvas.addEventListener('mousedown',  onMouseDown,  false);
-      canvas.addEventListener('mousemove',  onMouseMove,  false);
-      canvas.addEventListener('mouseup',    onMouseUp,    false);
-      canvas.addEventListener('mouseleave', onMouseLeave, false);
-
-      canvas.addEventListener('gesturestart',  function (e) { e.preventDefault(); }, false);
-      canvas.addEventListener('gesturechange', function (e) { e.preventDefault(); }, false);
-      canvas.addEventListener('gestureend',    function (e) { e.preventDefault(); }, false);
+    /* landing right next to a touch already classified palm */
+    if (o.state === 'palm' && dist(o.x, o.y, st.sx, st.sy) < 64) return true;
+  }
+  /* palm memory: this spot recently hosted a palm */
+  var i;
+  for (i = 0; i < palmMem.length; i++) {
+    if (now - palmMem[i].t < SC.MEM_MS && dist(palmMem[i].x, palmMem[i].y, st.sx, st.sy) < SC.MEM_PX) {
+      return true;
     }
+  }
+  /* bounce chain: quick tap-lift-land cycle = palm bounce */
+  if (lastBounce && now - lastBounce.t < 800 && dist(lastBounce.x, lastBounce.y, st.sx, st.sy) < 26) return true;
+  /* handedness soft zone (Max only, one hand chosen) */
+  if (settings.palmLevel === PALM_MAX && settings.hand !== HAND_BOTH) {
+    var screenY = st.sy - scrollY;
+    if (screenY > viewH - SC.ZONE_BOTTOM) return true;
+    if (settings.hand === HAND_R && st.sx > viewW - SC.ZONE_SIDE) return true;
+    if (settings.hand === HAND_L && st.sx < SC.ZONE_SIDE) return true;
+  }
+  /* oversized contact area, if the hardware reports one */
+  if ((touch.radiusX || 0) > SC.BIG_RADIUS) return true;
+  return false;
+}
 
-    function initGlobalEvents() {
-      document.addEventListener('gesturestart',  function (e) { e.preventDefault(); }, false);
-      document.addEventListener('gesturechange', function (e) { e.preventDefault(); }, false);
-      document.addEventListener('dblclick',      function (e) { e.preventDefault(); }, false);
+function anyInkActive() {
+  for (var k in inkNow) {
+    if (inkNow.hasOwnProperty(k)) return true;
+  }
+  return false;
+}
 
-      var resizeTimer = null;
-      function onResize() {
-        if (resizeTimer) clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(function () {
-          if (isDrawing) endStroke();
-          if (drawView.className.indexOf('active') >= 0) {
-            resizeCanvas();
-          } else {
-            renderHomeThumbs();
-          }
-        }, 150);
-      }
-      window.addEventListener('resize',            onResize, false);
-      window.addEventListener('orientationchange', onResize, false);
-      /* flush pending note saves when the tab actually leaves, so
-         the 500 ms debounce can never lose the last stroke */
-      window.addEventListener('pagehide',     doSaveNow, false);
-      window.addEventListener('beforeunload', doSaveNow, false);
+/* ---------- touch lifecycle ---------- */
+function beginTouch(touch, now) {
+  var pt = docPoint(touch);
+  var id = touch.identifier;
+
+  if (tool === 'eraser') {
+    /* eraser is movement-gated so a resting palm cannot erase: it
+       becomes live after 3 px of travel (a deliberate wipe) */
+    touchStates[id] = { kind: 'erase', id: id, x: pt.x, y: pt.y, sx: pt.x, sy: pt.y, cx: touch.clientX, cy: touch.clientY, live: false };
+    eraserTouchId = id;
+    return;
+  }
+
+  /* a queued tap-dot + an immediate re-land at the same spot = bounce */
+  if (dotQueue && dist(dotQueue.x, dotQueue.y, pt.x, pt.y) < SC.BOUNCE_PX) {
+    clearTimeout(dotQueue.timer);
+    dotQueue = null;
+    lastBounce = { x: pt.x, y: pt.y, t: now };
+    palmMemAdd(pt.x, pt.y, now);
+  }
+
+  var st = {
+    kind: 'probe', id: id,
+    state: 'probe',
+    sx: pt.x, sy: pt.y, x: pt.x, y: pt.y,
+    cx: touch.clientX, cy: touch.clientY,
+    t0: now, lastT: now,
+    path: [[pt.x, pt.y, now]],
+    pathLen: 0, net: 0,
+    vEMA: 0, skip: 0, coh: 1, dirs: [],
+    suspect: false, rx: touch.radiusX || 0
+  };
+
+  if (gesture) st.state = 'palm';                       /* do not disturb a pan */
+  else if (anyInkActive()) {                            /* a stroke owns the pen */
+    st.state = 'palm';
+    palmMemAdd(pt.x, pt.y, now);
+  } else if (settings.palmLevel === PALM_OFF) {
+    st.state = 'ink';
+  } else {
+    st.suspect = computeSuspect(st, touch, now);
+  }
+
+  touchStates[id] = st;
+
+  if (st.state === 'ink') startInkRecord(st, now);
+  else if (st.state === 'probe' && settings.guideDots) showPendingDot(id, pt.x, pt.y);
+}
+
+function startInkRecord(st, now) {
+  var s = mkStroke(settings.pen, currentPenWidth(), settings.color, st.path);
+  inkNow[st.id] = { stroke: s };
+  if (st.state === 'ink' && settings.palmLevel !== PALM_OFF) {
+    /* promotion: any other live probes become palm forever */
+    var k;
+    for (k in touchStates) {
+      if (!touchStates.hasOwnProperty(k)) continue;
+      var o = touchStates[k];
+      if (o !== st && o.kind === 'probe' && o.state === 'probe') verdictPalm(o, now);
     }
-
-    /* ============================================================
-       SECTION B — UI / VIEWS
-       ============================================================ */
-
-    function showView(name) {
-      homeView.className  = 'view' + (name === 'home'  ? ' active' : '');
-      drawView.className  = 'view' + (name === 'draw'  ? ' active' : '');
-      if (name === 'home') {
-        renderHome();
-      }
+    hidePendingDot(st.id);
+    prunePalmMemNear(st.sx, st.sy);
+    if (!settings.scrollHintShown) {
+      settings.scrollHintShown = true;
+      toast('Tip: scroll with two fingers');
+      saveSoon();
     }
+  }
+  requestRender();
+}
 
-    /* ---------- Home: notebook gallery ---------- */
-    function renderHome() {
-      notebookGrid.innerHTML = '';
-      for (var i = 0; i < notebooks.length; i++) {
-        (function (idx, nb) {
-          var card = document.createElement('div');
-          card.className = 'notebook-card';
-          var inner = document.createElement('div');
-          inner.className = 'notebook-card-inner';
+function verdictPalm(st, now) {
+  if (st.state === 'palm') return;
+  st.state = 'palm';
+  palmMemAdd(st.sx, st.sy, now);
+  if (pendingDotId === st.id && settings.guideDots) flashRejectedDot();
+  else if (pendingDotId === st.id) hidePendingDot(st.id);
+}
 
-          var thumb = document.createElement('div');
-          thumb.className = 'notebook-thumb';
-          thumb.style.background = nb.color;
-          var cover = document.createElement('div');
-          cover.className = 'nb-cover';
-          /* First letter as cover icon */
-          cover.textContent = (nb.title && nb.title.length > 0) ? nb.title.charAt(0).toUpperCase() : 'N';
-          thumb.appendChild(cover);
+function moveTouch(touch, now) {
+  var st = touchStates[touch.identifier];
+  if (!st) return;
+  var pt = docPoint(touch);
 
-          var info = document.createElement('div');
-          info.className = 'notebook-info';
-          var titleEl = document.createElement('div');
-          titleEl.className = 'notebook-title';
-          titleEl.textContent = nb.title;
-          var metaEl = document.createElement('div');
-          metaEl.className = 'notebook-meta';
-          metaEl.textContent = nb.pages.length + (nb.pages.length === 1 ? ' page' : ' pages');
-          info.appendChild(titleEl);
-          info.appendChild(metaEl);
+  if (st.kind === 'erase') {
+    st.x = pt.x; st.y = pt.y;
+    if (!st.live && dist(st.sx, st.sy, pt.x, pt.y) > 3) st.live = true;
+    if (st.live) eraseAt(pt.x, pt.y);
+    requestRender();
+    return;
+  }
+  if (st.kind === 'gesture') { st.x = pt.x; st.y = pt.y; st.cx = touch.clientX; st.cy = touch.clientY; return; }
+  if (st.state === 'palm') { st.x = pt.x; st.y = pt.y; return; }
+  if (st.state === 'ink') { appendInk(st, pt, now); return; }
 
-          inner.appendChild(thumb);
-          inner.appendChild(info);
-          card.appendChild(inner);
-          notebookGrid.appendChild(card);
+  /* --- probe update --- */
+  var prev = st.path[st.path.length - 1];
+  var dt = Math.max(now - st.lastT, 1);
+  var d = dist(prev[0], prev[1], pt.x, pt.y);
+  st.x = pt.x; st.y = pt.y; st.lastT = now;
+  st.cx = touch.clientX; st.cy = touch.clientY;
+  st.path.push([pt.x, pt.y, now]);
+  if (st.path.length > 400) st.path.shift();
+  st.pathLen += d;
+  st.net = dist(st.sx, st.sy, pt.x, pt.y);
+  var v = d / Math.max(dt, 4);
 
-          /* Tap = open, long-press = menu */
-          var tapTimer = null;
-          var longPressed = false;
-          bindTapAndLongPress(inner, function () {
-            if (longPressed) { longPressed = false; return; }
-            openNotebook(idx);
-          }, function () {
-            longPressed = true;
-            var choice = confirm(
-              'Notebook: ' + nb.title + '\n\nOK = Rename\nCancel = Delete'
-            );
-            if (choice) renameNotebook(idx);
-            else deleteNotebook(idx);
-          });
-        })(i, notebooks[i]);
-      }
+  if (st.skip < 3) st.skip++;
+  else st.vEMA = st.vEMA * 0.65 + v * 0.35;
+
+  if (d > 0.05) {
+    var ux = (pt.x - prev[0]) / d, uy = (pt.y - prev[1]) / d;
+    st.dirs.push([ux, uy]);
+    if (st.dirs.length > 8) st.dirs.shift();
+    var sx = 0, sy = 0, i;
+    for (i = 0; i < st.dirs.length; i++) { sx += st.dirs[i][0]; sy += st.dirs[i][1]; }
+    st.coh = Math.sqrt(sx * sx + sy * sy) / st.dirs.length;
+  }
+
+  if (settings.palmLevel === PALM_MED) {
+    if (st.net > SC.COMMIT_NET) promoteInk(st, now);
+  } else if (settings.palmLevel === PALM_MAX) {
+    tryCommit(st, now);
+  }
+}
+
+function tryCommit(st, now) {
+  var age = now - st.t0;
+  var boost = st.suspect ? SC.SUSPECT_BOOST : 1;
+  var needAge = SC.PROBE_MIN_AGE * (st.suspect ? SC.SUSPECT_AGE_MULT : 1);
+
+  if ((age > needAge && st.vEMA > SC.COMMIT_SPEED * boost &&
+       st.coh > SC.COMMIT_COH && st.net > SC.COMMIT_NET * boost) ||
+      (st.net > SC.FAST_NET * boost && st.vEMA > SC.FAST_SPEED * boost) ||
+      (st.net > SC.DECISIVE_NET && st.vEMA > 0.05)) {
+    promoteInk(st, now);
+    return;
+  }
+
+  /* palm verdict: old, slow, and barely travelled */
+  if (age > SC.PALM_AGE && st.net < 10 && (st.vEMA < SC.PALM_IDLE || age > SC.PALM_SIT_AGE)) {
+    verdictPalm(st, now);
+  } else if (age > SC.PALM_SIT_AGE && st.net < SC.PALM_SIT_NET) {
+    verdictPalm(st, now);
+  }
+}
+
+function promoteInk(st, now) {
+  st.state = 'ink';
+  startInkRecord(st, now);
+}
+
+function appendInk(st, pt, now) {
+  var ink = inkNow[st.id];
+  if (!ink) return;
+  var s = ink.stroke;
+  var prev = s.pts[s.pts.length - 1];
+  var dt = Math.max(now - st.lastT, 1);
+  var d = dist(prev[0], prev[1], pt.x, pt.y);
+  st.x = pt.x; st.y = pt.y; st.lastT = now;
+  s.pts.push([pt.x, pt.y, now]);
+  st.pathLen += d;
+  st.net = dist(st.sx, st.sy, pt.x, pt.y);
+  st.vEMA = st.vEMA * 0.65 + (d / Math.max(dt, 4)) * 0.35;
+
+  /* incremental live segment (one per move, never the tail) */
+  var k = s.pts.length - 1;
+  if (k >= 2) {
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, -scrollY * dpr);
+    ctx.globalAlpha = s.a;
+    ctx.strokeStyle = s.color;
+    ctx.lineCap = penCap(s.pen);
+    ctx.lineJoin = 'round';
+    drawSmoothSeg(ctx, s, k - 1);
+    ctx.restore();
+  }
+
+  /* mid-stroke palm discard (Max only) */
+  if (settings.palmLevel === PALM_MAX && s.pts.length > 6) {
+    var age = now - st.t0;
+    var straight = st.net / Math.max(st.pathLen, 1);
+    if (age > SC.DISCARD_MS && st.pathLen > SC.DISCARD_PATH &&
+        st.vEMA < SC.DISCARD_SPEED && straight > SC.DISCARD_STRAIGHT) {
+      discardActiveInk(st, now);
     }
+  }
+}
 
-    function renderHomeThumbs() {
-      /* hook for future thumbnail rendering; not used for now since
-         we use letter covers for performance */
+function discardActiveInk(st, now) {
+  delete inkNow[st.id];
+  st.state = 'palm';
+  palmMemAdd(st.sx, st.sy, now);
+  toast('Palm stroke discarded');
+  requestRender();
+}
+
+function finalizeInk(st, now) {
+  var ink = inkNow[st.id];
+  delete inkNow[st.id];
+  if (!ink) return;
+  var s = ink.stroke;
+  var n = activeNote();
+  if (!n) return;
+  n.strokes.push(s);
+  pushUndo({ t: 'add', s: s });
+  var bb = strokeBBox(s);
+  invalidateRange(bb.y0, bb.y1);
+  recomputeDoc();
+  saveSoon();
+  requestRender();
+}
+
+function queueTapDot(st, now) {
+  if (st.rx > 12) { palmMemAdd(st.sx, st.sy, now); return; }
+  if (dotQueue && dist(dotQueue.x, dotQueue.y, st.sx, st.sy) < SC.BOUNCE_PX) {
+    /* bounce: cancel the queued dot, remember the chain */
+    clearTimeout(dotQueue.timer);
+    dotQueue = null;
+    lastBounce = { x: st.sx, y: st.sy, t: now };
+    palmMemAdd(st.sx, st.sy, now);
+    return;
+  }
+  if (dotQueue) { flushDot(dotQueue); dotQueue = null; }
+  var q = { x: st.sx, y: st.sy, t: now, timer: null };
+  q.timer = setTimeout(function () {
+    if (dotQueue === q) dotQueue = null;
+    flushDot(q);
+  }, SC.BOUNCE_MS);
+  dotQueue = q;
+}
+
+function flushDot(q) {
+  var n = activeNote();
+  if (!n) return;
+  var s = mkStroke(settings.pen, currentPenWidth(), settings.color, [[q.x, q.y, q.t]]);
+  n.strokes.push(s);
+  pushUndo({ t: 'add', s: s });
+  var bb = strokeBBox(s);
+  invalidateRange(bb.y0, bb.y1);
+  recomputeDoc();
+  saveSoon();
+  requestRender();
+}
+
+function endTouch(touch, now, cancelled) {
+  var st = touchStates[touch.identifier];
+  if (!st) return;
+  delete touchStates[touch.identifier];
+
+  if (st.kind === 'erase') {
+    if (eraserTouchId === st.id) eraserTouchId = null;
+    requestRender();
+    return;
+  }
+  if (st.kind === 'gesture') {
+    gestureMemberEnd(now);
+    return;
+  }
+  if (st.state === 'ink') {
+    finalizeInk(st, now);
+    return;
+  }
+
+  /* probe that never earned ink */
+  var age = now - st.t0;
+  if (st.state === 'palm') {
+    palmMemAdd(st.sx, st.sy, now);
+  } else if (!cancelled && age < SC.TAP_MS && st.pathLen < 5) {
+    queueTapDot(st, now);
+  } else {
+    palmMemAdd(st.sx, st.sy, now);
+  }
+  if (pendingDotId === st.id) hidePendingDot(st.id);
+}
+
+/* ---------- two-finger pan + momentum ---------- */
+function recentVec(o, now) {
+  var p = o.path, m = p.length;
+  if (m < 2) return null;
+  var i = m - 1;
+  while (i > 0 && now - p[i - 1][2] < 120) i--;
+  var dx = p[m - 1][0] - p[i][0], dy = p[m - 1][1] - p[i][1];
+  var dt = Math.max(now - p[i][2], 16);
+  return { dx: dx, dy: dy, v: Math.sqrt(dx * dx + dy * dy) / dt };
+}
+
+function angDiff(a, b) {
+  var d = a - b;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return d;
+}
+
+function detectGesture(now) {
+  if (gesture) return;
+  if (tool !== 'pen') return;
+  if (anyInkActive()) return;
+  if (settings.palmLevel === PALM_OFF) return;
+
+  var vecs = [], k, o, rv;
+  for (k in touchStates) {
+    if (!touchStates.hasOwnProperty(k)) continue;
+    o = touchStates[k];
+    if (o.kind !== 'probe' || o.state === 'ink') continue;
+    rv = recentVec(o, now);
+    if (rv && rv.v > SC.PAN_SPEED) vecs.push({ id: k, rv: rv });
+  }
+  if (vecs.length < 2) return;
+
+  var ang0 = Math.atan2(vecs[0].rv.dy, vecs[0].rv.dx);
+  var ok = true, maxV = 0, minV = 1e9, i;
+  for (i = 0; i < vecs.length; i++) {
+    var a = Math.atan2(vecs[i].rv.dy, vecs[i].rv.dx);
+    if (Math.abs(angDiff(a, ang0)) > SC.PAN_DEG * Math.PI / 180) { ok = false; break; }
+    if (vecs[i].rv.v > maxV) maxV = vecs[i].rv.v;
+    if (vecs[i].rv.v < minV) minV = vecs[i].rv.v;
+  }
+  if (!ok) return;
+  if (maxV / Math.max(minV, 0.001) > SC.PAN_RATIO) return;
+
+  /* both fingers move together: this is a pan - convert ONLY the
+     touches that actually moved coherently */
+  var c = gestureCentroid(true);
+  if (!c || c.n < 2) return;
+  gesture = { lastCx: c.x, lastCy: c.y, lastT: now, v: 0 };
+  for (i = 0; i < vecs.length; i++) {
+    o = touchStates[vecs[i].id];
+    if (o && o.kind === 'probe' && o.state !== 'ink') {
+      o.kind = 'gesture';
+      if (pendingDotId === o.id) hidePendingDot(o.id);
     }
+  }
+  hidePendingDot();
+}
 
-    /* ---------- Pages sheet ---------- */
-    function refreshPagesList() {
-      var nb = notebooks[currentNotebook];
-      if (!nb) return;
-      var list = document.getElementById('pageThumbList');
-      list.innerHTML = '';
-      for (var i = 0; i < nb.pages.length; i++) {
-        (function (idx, page) {
-          var row = document.createElement('div');
-          row.className = 'page-thumb' + (idx === currentPage ? ' active' : '');
-          var frame = document.createElement('div');
-          frame.className = 'thumb-frame';
-          var tc = document.createElement('canvas');
-          tc.width = 200; tc.height = 150;
-          var tctx = tc.getContext('2d');
-          tctx.fillStyle = '#ffffff';
-          tctx.fillRect(0, 0, 200, 150);
-          tctx.setTransform(200.0 / canvasWrap.offsetWidth, 0, 0, 150.0 / canvasWrap.offsetHeight, 0, 0);
-          for (var j = 0; j < page.strokes.length; j++) {
-            var s = page.strokes[j];
-            tctx.globalAlpha = s.opacity != null ? s.opacity : 1.0;
-            tctx.globalCompositeOperation = PEN_BLEND[s.type] || 'source-over';
-            tctx.strokeStyle = s.color;
-            tctx.fillStyle   = s.color;
-            tctx.lineWidth   = s.width;
-            tctx.lineCap     = PEN_CAP[s.type] || 'round';
-            tctx.lineJoin    = 'round';
-            var pts = s.points;
-            if (pts.length === 1) {
-              tctx.beginPath();
-              tctx.arc(pts[0].x, pts[0].y, Math.max(0.5, s.width / 2), 0, Math.PI * 2);
-              tctx.fill();
-            } else if (pts.length >= 2) {
-              tctx.beginPath();
-              tctx.moveTo(pts[0].x, pts[0].y);
-              for (var k = 1; k < pts.length - 1; k++) {
-                var mx = (pts[k].x + pts[k + 1].x) / 2;
-                var my = (pts[k].y + pts[k + 1].y) / 2;
-                tctx.quadraticCurveTo(pts[k].x, pts[k].y, mx, my);
-              }
-              tctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
-              tctx.stroke();
-            }
-            tctx.globalAlpha = 1.0;
-            tctx.globalCompositeOperation = 'source-over';
-          }
-          frame.appendChild(tc);
+function gestureCentroid(includeProbes) {
+  /* screen coordinates: the centroid must NOT depend on scrollY,
+     otherwise panning feeds back into itself */
+  var cx = 0, cy = 0, n = 0, k;
+  for (k in touchStates) {
+    if (!touchStates.hasOwnProperty(k)) continue;
+    var o = touchStates[k];
+    if (o.kind === 'gesture') { cx += o.cx; cy += o.cy; n++; }
+    else if (includeProbes && o.kind === 'probe' && o.state !== 'ink') { cx += o.cx; cy += o.cy; n++; }
+  }
+  if (!n) return null;
+  return { x: cx / n, y: cy / n, n: n };
+}
 
-          var meta = document.createElement('div');
-          meta.className = 'meta';
-          meta.textContent = 'Page ' + (idx + 1);
+function applyGesture(now) {
+  if (!gesture) return;
+  var c = gestureCentroid(false);
+  if (!c || c.n < 2) { gesture = null; return; }
+  var dy = c.y - gesture.lastCy;
+  var dt = Math.max(now - gesture.lastT, 4);
+  scrollY += -dy;
+  gesture.v = gesture.v * 0.7 + (-dy / dt) * 0.3;
+  gesture.lastCy = c.y; gesture.lastT = now;
+  clampScroll();
+  requestRender();
+}
 
-          var del = document.createElement('button');
-          del.className = 'del';
-          del.innerHTML = '&#8722;';
-          del.addEventListener('click', function (e) {
-            e.stopPropagation();
-            deletePage(idx);
-          });
+function gestureMemberEnd(now) {
+  var c = gestureCentroid(false);
+  if (c && c.n >= 2) return;
+  var v = gesture ? gesture.v : 0;
+  gesture = null;
+  if (Math.abs(v) > 0.06) startMomentum(v);
+}
 
-          row.appendChild(frame);
-          row.appendChild(meta);
-          row.appendChild(del);
+function startMomentum(v) {
+  momentum = { v: v };
+  if (!momRAF) momRAF = window.requestAnimationFrame(momStep);
+}
+function stopMomentum() { momentum = null; }
 
-          row.addEventListener('click', function () {
-            goToPage(idx);
-            closeOverlay(pagesOverlay);
-          });
+function momStep() {
+  momRAF = 0;
+  if (!momentum) return;
+  scrollY += momentum.v * 16;
+  momentum.v *= SC.MOM_DECAY;
+  clampScroll();
+  requestRender();
+  if (Math.abs(momentum.v) > 0.02) momRAF = window.requestAnimationFrame(momStep);
+  else momentum = null;
+}
 
-          list.appendChild(row);
-        })(i, nb.pages[i]);
-      }
-    }
+/* ---------- eraser ---------- */
+function segDist(px, py, x1, y1, x2, y2) {
+  var dx = x2 - x1, dy = y2 - y1;
+  var L = dx * dx + dy * dy;
+  if (L < 0.0001) return dist(px, py, x1, y1);
+  var t = ((px - x1) * dx + (py - y1) * dy) / L;
+  t = lim(t, 0, 1);
+  return dist(px, py, x1 + t * dx, y1 + t * dy);
+}
 
-    /* ---------- Color picker ---------- */
-    function renderColorPicker() {
-      var grid = document.getElementById('colorGrid');
-      grid.innerHTML = '';
-      for (var i = 0; i < COLOR_PALETTE.length; i++) {
-        (function (color) {
-          var cell = document.createElement('div');
-          cell.className = 'color-cell';
-          var inner = document.createElement('div');
-          inner.className = 'color-cell-inner' + (color === currentColor ? ' active' : '');
-          var fill = document.createElement('div');
-          fill.className = 'fill';
-          fill.style.background = color;
-          if (color === '#ffffff') fill.style.border = '1px solid #cccccc';
-          inner.appendChild(fill);
-          cell.appendChild(inner);
-          cell.addEventListener('click', function () {
-            setColor(color);
-            closeOverlay(colorOverlay);
-          });
-          grid.appendChild(cell);
-        })(COLOR_PALETTE[i]);
-      }
-    }
-
-    /* ---------- Size picker ---------- */
-    function renderSizePicker() {
-      var list = document.getElementById('sizeList');
-      list.innerHTML = '';
-      for (var i = 0; i < SIZE_PRESETS.length; i++) {
-        (function (idx, preset) {
-          var row = document.createElement('div');
-          row.className = 'size-row' + (idx === currentSize ? ' active' : '');
-          var dot = document.createElement('div');
-          dot.className = 'dot';
-          var circle = document.createElement('div');
-          circle.className = 'circle';
-          var dotSize = Math.max(4, preset.w * 2.2);
-          circle.style.width  = dotSize + 'px';
-          circle.style.height = dotSize + 'px';
-          dot.appendChild(circle);
-          var lbl = document.createElement('div');
-          lbl.className = 'lbl';
-          lbl.textContent = preset.name + ' (' + preset.w + ' px)';
-          row.appendChild(dot);
-          row.appendChild(lbl);
-          row.addEventListener('click', function () {
-            setSize(idx);
-            closeOverlay(sizeOverlay);
-          });
-          list.appendChild(row);
-        })(i, SIZE_PRESETS[i]);
-      }
-    }
-
-    /* ---------- Tool / color / size state ---------- */
-    function setTool(tool) {
-      currentTool = tool;
-      var btns = toolbarEl.getElementsByTagName('button');
-      for (var i = 0; i < btns.length; i++) {
-        var b = btns[i];
-        if (b.className.indexOf('tool-btn') >= 0) {
-          var t = b.getAttribute('data-tool');
-          if (t === tool) b.className = 'tool-btn active';
-          else if (t) b.className = 'tool-btn';
-        }
-      }
-      updateSizeDot();
-    }
-    function setColor(color) {
-      currentColor = color;
-      colorDotEl.style.background = color;
-      if (currentTool === 'eraser') setTool('pen');
-    }
-    function setSize(idx) {
-      currentSize = idx;
-      updateSizeDot();
-      if (currentTool === 'eraser') setTool('pen');
-    }
-    function updateSizeDot() {
-      var dot = document.getElementById('sizeBtn').getElementsByTagName('span')[0];
-      var preset = SIZE_PRESETS[currentSize];
-      var w = Math.max(6, preset.w * 1.4);
-      var mult = PEN_WIDTH_MULT[currentTool] || 1.0;
-      w = Math.max(6, preset.w * mult * 1.4);
-      dot.style.width  = w + 'px';
-      dot.style.height = w + 'px';
-      dot.style.borderRadius = (w / 2) + 'px';
-      dot.style.background = currentTool === 'eraser' ? '#ffffff' : currentColor;
-    }
-
-    function updatePageIndicator() {
-      var nb = notebooks[currentNotebook];
-      var total = nb ? nb.pages.length : 1;
-      if (pageIndEl) pageIndEl.textContent = (currentPage + 1) + ' / ' + total;
-    }
-
-    /* ---------- Overlay helpers ---------- */
-    function openOverlay(o)  { o.className = 'overlay active'; }
-    function closeOverlay(o) { o.className = 'overlay'; }
-
-    /* ---------- Dark mode ---------- */
-    function applyDarkMode() {
-      if (darkMode) document.body.className = 'dark';
-      else document.body.className = '';
-      var darkBtn = document.getElementById('darkToggle');
-      if (darkBtn) darkBtn.innerHTML = darkMode ? '&#9728;' : '&#9790;';
-    }
-    function toggleDarkMode() {
-      darkMode = !darkMode;
-      applyDarkMode();
-      saveToStorage();
-      if (drawView.className.indexOf('active') >= 0) renderPage();
-    }
-
-    /* ---------- Palm rejection level (button cycles Off, Med, Max) ---------- */
-    function applyPalmLevel() {
-      var btn = document.getElementById('palmRejectBtn');
-      if (!btn) return;
-      var spans = btn.getElementsByTagName('span');
-      if (spans && spans.length > 0) {
-        spans[0].textContent = PALM_LEVEL_LBL[palmLevel] || PALM_LEVEL_LBL[PALM_MEDIUM];
-      }
-      if (palmLevel === PALM_OFF) btn.className = 'tool-btn';
-      else if (palmLevel === PALM_STRICT) btn.className = 'tool-btn active maxed';
-      else btn.className = 'tool-btn active';
-    }
-    function cyclePalmLevel() {
-      palmLevel = palmLevel + 1;
-      if (palmLevel > PALM_STRICT) palmLevel = PALM_OFF;
-      applyPalmLevel();
-      saveToStorage();
-      /* A mid-touch level change never disturbs a committed stroke;
-         touches still pending simply start following the new rules. */
-    }
-
-    /* ============================================================
-       SECTION C — BOOT / EVENT WIRING
-       ============================================================ */
-    function bindButton(el, handler) {
-      var lastTouch = 0;
-      el.addEventListener('touchstart', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        lastTouch = Date.now();
-        handler();
-      }, false);
-      el.addEventListener('click', function (e) {
-        e.preventDefault();
-        if (Date.now() - lastTouch < 600) return;
-        handler();
-      }, false);
-    }
-    function bindTapAndLongPress(el, onTap, onLong) {
-      var timer = null;
-      var started = 0;
-      var moved = false;
-      var lastX = 0, lastY = 0;
-      el.addEventListener('touchstart', function (e) {
-        if (e.touches.length !== 1) return;
-        started = Date.now();
-        moved = false;
-        lastX = e.touches[0].clientX;
-        lastY = e.touches[0].clientY;
-        var self = this;
-        timer = setTimeout(function () {
-          timer = null;
-          if (!moved) {
-            e.preventDefault();
-            onLong();
-          }
-        }, 550);
-      }, false);
-      el.addEventListener('touchmove', function (e) {
-        if (e.touches.length !== 1) return;
-        var dx = e.touches[0].clientX - lastX;
-        var dy = e.touches[0].clientY - lastY;
-        if (dx * dx + dy * dy > 100) moved = true;
-        if (moved && timer) { clearTimeout(timer); timer = null; }
-      }, false);
-      el.addEventListener('touchend', function (e) {
-        if (timer) {
-          clearTimeout(timer);
-          timer = null;
-          e.preventDefault();
-          onTap();
-        }
-      }, false);
-      /* Mouse fallback for desktop */
-      el.addEventListener('click', function (e) {
-        /* touchend already handled this */
-        if (Date.now() - started < 100) return;
-        onTap();
-      }, false);
-    }
-
-    function initUI() {
-      canvas      = document.getElementById('canvas');
-      ctx         = canvas.getContext('2d');
-      canvasWrap  = document.querySelector('.canvas-wrap');
-      toolbarEl   = document.getElementById('toolbar');
-      warningEl   = document.getElementById('warning');
-      pageIndEl   = document.getElementById('pageInd');
-      nbNameEl    = document.getElementById('nbName');
-      homeView    = document.getElementById('homeView');
-      drawView    = document.getElementById('drawView');
-      notebookGrid = document.getElementById('notebookGrid');
-      pagesOverlay  = document.getElementById('pagesOverlay');
-      colorOverlay  = document.getElementById('colorOverlay');
-      sizeOverlay   = document.getElementById('sizeOverlay');
-      exportOverlay = document.getElementById('exportOverlay');
-      exportImg     = document.getElementById('exportImg');
-      colorDotEl    = document.getElementById('colorDot');
-
-      /* Tool buttons */
-      var toolBtns = toolbarEl.getElementsByClassName('tool-btn');
-      for (var i = 0; i < toolBtns.length; i++) {
-        var b = toolBtns[i];
-        var t = b.getAttribute('data-tool');
-        if (!t) continue;
-        (function (tool, btn) {
-          bindButton(btn, function () { setTool(tool); });
-        })(t, b);
-      }
-
-      /* Action buttons */
-      bindButton(document.getElementById('undoBtn'),   undo);
-      bindButton(document.getElementById('redoBtn'),   redo);
-      bindButton(document.getElementById('clearBtn'),  clearPage);
-      bindButton(document.getElementById('exportBtn'), exportPNG);
-
-      /* Palm rejection level (tap cycles Off, Med, Max) */
-      bindButton(document.getElementById('palmRejectBtn'), cyclePalmLevel);
-
-      /* Color + size buttons open popovers */
-      bindButton(document.getElementById('colorBtn'), function () {
-        renderColorPicker();
-        openOverlay(colorOverlay);
-      });
-      bindButton(document.getElementById('sizeBtn'), function () {
-        renderSizePicker();
-        openOverlay(sizeOverlay);
-      });
-
-      /* Top bar */
-      bindButton(document.getElementById('backBtn'), function () {
-        endStroke();
-        showView('home');
-      });
-      bindButton(document.getElementById('pagesBtn'), function () {
-        refreshPagesList();
-        openOverlay(pagesOverlay);
-      });
-      bindButton(document.getElementById('addPageBtn'), function () {
-        addPage();
-        closeOverlay(pagesOverlay);
-      });
-
-      /* Overlay closers */
-      bindButton(document.getElementById('pagesClose'),  function () { closeOverlay(pagesOverlay); });
-      bindButton(document.getElementById('colorClose'),  function () { closeOverlay(colorOverlay); });
-      bindButton(document.getElementById('sizeClose'),   function () { closeOverlay(sizeOverlay); });
-      bindButton(document.getElementById('exportCloseBtn'), function () { closeOverlay(exportOverlay); exportImg.src = ''; });
-      bindButton(document.getElementById('exportDoneBtn'), function () { closeOverlay(exportOverlay); exportImg.src = ''; });
-
-      /* Home view */
-      bindButton(document.getElementById('newNotebookBtn'), createNotebook);
-      bindButton(document.getElementById('darkToggle'), toggleDarkMode);
-
-      /* Tap outside a sheet closes it */
-      pagesOverlay.addEventListener('click', function (e) { if (e.target === pagesOverlay) closeOverlay(pagesOverlay); });
-      colorOverlay.addEventListener('click', function (e) { if (e.target === colorOverlay) closeOverlay(colorOverlay); });
-      sizeOverlay.addEventListener('click',  function (e) { if (e.target === sizeOverlay)  closeOverlay(sizeOverlay); });
-      exportOverlay.addEventListener('click', function (e) { if (e.target === exportOverlay) { closeOverlay(exportOverlay); exportImg.src = ''; } });
-
-      setTool('pen');
-      setColor('#000000');
-      setSize(2);
-      applyDarkMode();
-      applyPalmLevel();
-    }
-
-    function init() {
-      initUI();
-      initCanvasEvents();
-      initGlobalEvents();
-      loadFromStorage();
-      /* Re-apply appearance settings AFTER load so a saved dark
-         mode / palm level actually restores (fixes v2 restore bug). */
-      applyDarkMode();
-      applyPalmLevel();
-      renderHome();
-      resizeCanvas();
-      renderPage();
-    }
-
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
-      init();
+function eraseAt(x, y) {
+  var n = activeNote();
+  if (!n) return;
+  var r = eraserSize / 2 + 2;
+  var st = n.strokes;
+  var hits = [], i, j;
+  for (i = 0; i < st.length; i++) {
+    var s = st[i];
+    var bb = strokeBBox(s);
+    if (x < bb.x0 - r || x > bb.x1 + r || y < bb.y0 - r || y > bb.y1 + r) continue;
+    var hit = false;
+    var p = s.pts;
+    if (p.length === 1) {
+      hit = dist(x, y, p[0][0], p[0][1]) <= r + s.w;
+    } else if (eraserMode === 1) {
+      var cx = lim(x, bb.x0, bb.x1), cy = lim(y, bb.y0, bb.y1);
+      hit = dist(x, y, cx, cy) <= r;
     } else {
-      document.addEventListener('DOMContentLoaded', init, false);
+      for (j = 1; j < p.length && !hit; j++) {
+        if (segDist(x, y, p[j - 1][0], p[j - 1][1], p[j][0], p[j][1]) <= r + s.w / 2) hit = true;
+      }
     }
-  })();
-  </script>
+    if (hit) hits.push(s);
+  }
+  if (hits.length) {
+    for (i = 0; i < hits.length; i++) removeStroke(n, hits[i]);
+    pushUndo({ t: 'erase', list: hits });
+    saveSoon();
+  }
+}
+
+function drawEraserCursor(c) {
+  var st = touchStates[eraserTouchId];
+  if (!st) return;
+  c.save();
+  c.beginPath();
+  c.arc(st.x, st.y, eraserSize / 2 + 2, 0, 6.2832);
+  c.strokeStyle = 'rgba(70,74,80,0.85)';
+  c.lineWidth = 1.5;
+  c.stroke();
+  c.restore();
+}
+
+/* ---------- scroll position pill ---------- */
+function updateScrollPill() {
+  var totalPages = Math.max(1, Math.ceil(docH / (PAGE_H + GAP_H)));
+  var page = Math.floor((scrollY + viewH / 2) / (PAGE_H + GAP_H)) + 1;
+  if (page > totalPages) page = totalPages;
+  scrollPill.textContent = page + ' / ' + totalPages;
+  scrollPill.style.display = 'block';
+  if (scrollPillTimer) clearTimeout(scrollPillTimer);
+  scrollPillTimer = setTimeout(function () { scrollPill.style.display = 'none'; }, 1300);
+}
+
+/* ---------- reset (note switch) ---------- */
+function resetTouchTracking() {
+  touchStates = {};
+  inkNow = {};
+  gesture = null;
+  momentum = null;
+  palmMem = [];
+  lastBounce = null;
+  eraserTouchId = null;
+  if (dotQueue) { clearTimeout(dotQueue.timer); dotQueue = null; }
+  hidePendingDot();
+}
+
+/* ---------- event wiring ---------- */
+function onTouchStart(e) {
+  e.preventDefault();
+  closePanels();
+  stopMomentum();
+  var now = Date.now();
+  var ch = e.changedTouches;
+  for (var i = 0; i < ch.length; i++) beginTouch(ch[i], now);
+}
+function onTouchMove(e) {
+  e.preventDefault();
+  var now = Date.now();
+  var ch = e.changedTouches;
+  for (var i = 0; i < ch.length; i++) moveTouch(ch[i], now);
+  detectGesture(now);
+  applyGesture(now);
+}
+function onTouchEnd(e) {
+  e.preventDefault();
+  var now = Date.now();
+  var cancelled = (e.type === 'touchcancel');
+  var ch = e.changedTouches;
+  for (var i = 0; i < ch.length; i++) endTouch(ch[i], now, cancelled);
+}
+
+canvasWrap.addEventListener('touchstart', onTouchStart, false);
+canvasWrap.addEventListener('touchmove', onTouchMove, false);
+canvasWrap.addEventListener('touchend', onTouchEnd, false);
+canvasWrap.addEventListener('touchcancel', onTouchEnd, false);
+document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
+
+/* mouse support for desktop testing (no palm rejection) */
+var mouseId = 'mouse';
+canvasWrap.addEventListener('mousedown', function (e) {
+  e.preventDefault();
+  stopMomentum();
+  var now = Date.now();
+  var touch = { identifier: mouseId, clientX: e.clientX, clientY: e.clientY, radiusX: 0 };
+  beginTouch(touch, now);
+});
+canvasWrap.addEventListener('mousemove', function (e) {
+  if (!touchStates[mouseId]) return;
+  var now = Date.now();
+  moveTouch({ identifier: mouseId, clientX: e.clientX, clientY: e.clientY, radiusX: 0 }, now);
+});
+window.addEventListener('mouseup', function (e) {
+  if (!touchStates[mouseId]) return;
+  endTouch({ identifier: mouseId, clientX: e.clientX, clientY: e.clientY, radiusX: 0 }, Date.now(), false);
+});
+
+/* flush saves when the tab leaves */
+window.addEventListener('pagehide', doSaveNow);
+window.addEventListener('beforeunload', doSaveNow);
+window.addEventListener('resize', function () { resizeView(); });
+window.addEventListener('orientationchange', function () { setTimeout(resizeView, 350); });
+
+/* ============================================================
+ * UI WIRING: home, drawer, toolbar, palette, menus, init
+ * ============================================================ */
+
+function showView(which) {
+  if (which === 'home') {
+    homeView.className = 'view on';
+    drawView.className = 'view';
+  } else {
+    homeView.className = 'view';
+    drawView.className = 'view on';
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* ---------- home ---------- */
+function renderHome() {
+  var nb = notebooks[curNotebook];
+  homeTitle.textContent = nb ? nb.title : 'Notes';
+  notesGrid.innerHTML = '';
+  var ids = nb ? nb.notes : [];
+  var i, j;
+  for (i = 0, j = 0; i < ids.length; i++) {
+    var n = notes[ids[i]];
+    if (!n) continue;
+    var card = document.createElement('button');
+    card.className = 'note-card';
+    card.innerHTML =
+      '<div class="nc-title">' + escapeHtml(n.title || 'Untitled') + '</div>' +
+      '<div class="nc-sub">' + n.strokes.length + ' strokes</div>' +
+      '<div class="nc-date">' + (n.mod ? fmtDate(n.mod) : fmtDate(n.cr)) + '</div>';
+    (function (id) {
+      card.addEventListener('click', function () { openNote(id); });
+    })(ids[i]);
+    notesGrid.appendChild(card);
+    j++;
+  }
+  emptyHint.style.display = j ? 'none' : 'block';
+}
+
+function openNote(id) {
+  var n = notes[id];
+  if (!n) return;
+  curNoteId = id;
+  undoStack = [];
+  redoStack = [];
+  resetTouchTracking();
+  invalidateAll();
+  scrollY = n.scroll || 0;
+  noteTitleBtn.textContent = n.title || 'Untitled';
+  updateUndoButtons();
+  recomputeDoc();
+  clampScroll();
+  showView('draw');
+  resizeView();
+  applyPalmUI();
+  saveSoon();
+}
+
+function goHome() {
+  var n = activeNote();
+  if (n) { n.scroll = scrollY; n.mod = Date.now(); }
+  doSaveNow();
+  closePanels();
+  showView('home');
+  renderHome();
+}
+
+function newNote() {
+  var id = genId();
+  notes[id] = { id: id, title: 'Untitled', cr: Date.now(), mod: Date.now(), scroll: 0, strokes: [] };
+  if (notebooks[curNotebook]) notebooks[curNotebook].notes.unshift(id);
+  openNote(id);
+  toast('New note created');
+}
+
+function renameCurrentNote() {
+  var n = activeNote();
+  if (!n) return;
+  var name = window.prompt('Note name', n.title || 'Untitled');
+  if (name !== null && name !== '') {
+    n.title = name;
+    n.mod = Date.now();
+    noteTitleBtn.textContent = n.title;
+    saveSoon();
+  }
+}
+
+function deleteCurrentNote() {
+  var n = activeNote();
+  if (!n) return;
+  closePanels();
+  if (!window.confirm('Delete this note permanently?')) return;
+  var nb = notebooks[curNotebook];
+  var idx = nb ? nb.notes.indexOf(n.id) : -1;
+  if (idx >= 0) nb.notes.splice(idx, 1);
+  delete notes[n.id];
+  doSaveNow();
+  showView('home');
+  renderHome();
+  toast('Note deleted');
+}
+
+function clearNote() {
+  var n = activeNote();
+  if (!n) return;
+  closePanels();
+  if (!n.strokes.length) return;
+  if (!window.confirm('Clear all writing on this note?')) return;
+  var old = n.strokes;
+  n.strokes = [];
+  pushUndo({ t: 'erase', list: old });
+  invalidateAll();
+  recomputeDoc();
+  saveSoon();
+  requestRender();
+  toast('Note cleared (undo available)');
+}
+
+/* ---------- drawer ---------- */
+function renderDrawer() {
+  nbList.innerHTML = '';
+  for (var i = 0; i < notebooks.length; i++) {
+    var nb = notebooks[i];
+    var row = document.createElement('button');
+    row.className = 'nb-row';
+    row.innerHTML =
+      '<span class="dot" style="background:' + nb.color + '"></span>' +
+      '<span class="nm">' + escapeHtml(nb.title) + '</span>' +
+      '<span class="ct">' + nb.notes.length + '</span>';
+    (function (idx) {
+      row.addEventListener('click', function () {
+        curNotebook = idx;
+        closeDrawer();
+        renderHome();
+        saveSoon();
+      });
+    })(i);
+    nbList.appendChild(row);
+  }
+}
+function openDrawer() { renderDrawer(); drawer.className = 'open'; drawerBackdrop.style.display = 'block'; }
+function closeDrawer() { drawer.className = ''; drawerBackdrop.style.display = 'none'; }
+
+/* ---------- pen palette ---------- */
+function drawSquiggle(canvasEl, pen, w, color) {
+  var c = canvasEl.getContext('2d');
+  if (!c) return;
+  var W = canvasEl.width / 2, H = canvasEl.height / 2;
+  c.setTransform(2, 0, 0, 2, 0, 0);
+  c.clearRect(0, 0, W, H);
+  var pts = [], t = 0;
+  for (var i = 0; i <= 26; i++) {
+    var x = 7 + (W - 14) * i / 26;
+    var y = H / 2 + Math.sin(i / 26 * Math.PI * 2) * (H / 2 - 7);
+    t += 6 + 42 * Math.abs(Math.sin(i / 26 * Math.PI));
+    pts.push([x, y, t]);
+  }
+  var s = mkStroke(pen, w, color, pts);
+  renderStrokeFull(c, s);
+}
+
+function buildPalette() {
+  penChips.innerHTML = '';
+  for (var i = 0; i < PENS.length; i++) {
+    var chip = document.createElement('button');
+    chip.className = 'pen-chip';
+    var mini = document.createElement('canvas');
+    mini.width = 88; mini.height = 52;
+    mini.style.width = '44px';
+    mini.style.height = '26px';
+    chip.appendChild(mini);
+    var nm = document.createElement('div');
+    nm.className = 'pn';
+    nm.textContent = PENS[i].name;
+    chip.appendChild(nm);
+    chip.setAttribute('data-pen', i);
+    (function (idx, el) {
+      el.addEventListener('click', function () {
+        settings.pen = idx;
+        applyPenUI();
+        saveSoon();
+      });
+    })(i, chip);
+    penChips.appendChild(chip);
+  }
+  colorRow.innerHTML = '';
+  for (var k = 0; k < COLORS.length; k++) {
+    var sw = document.createElement('button');
+    sw.className = 'sw';
+    sw.style.background = COLORS[k];
+    sw.setAttribute('data-color', COLORS[k]);
+    (function (col, el) {
+      el.addEventListener('click', function () {
+        settings.color = col;
+        applyPenUI();
+        saveSoon();
+      });
+    })(COLORS[k], sw);
+    colorRow.appendChild(sw);
+  }
+  previewCanvas.style.width = '268px';
+  previewCanvas.style.height = '44px';
+  thicknessRange.addEventListener('change', function () {
+    settings.widthStep = lim(parseInt(thicknessRange.value, 10) || 0, 0, 5);
+    applyPenUI();
+    saveSoon();
+  });
+}
+
+function applyPenUI() {
+  var chips = penChips.children;
+  for (var i = 0; i < chips.length; i++) {
+    chips[i].className = 'pen-chip' + (i === settings.pen ? ' on' : '');
+    var mini = chips[i].getElementsByTagName('canvas')[0];
+    if (mini) drawSquiggle(mini, i, 3, i === settings.pen ? settings.color : '#8A9098');
+  }
+  var sws = colorRow.children;
+  for (var k = 0; k < sws.length; k++) {
+    sws[k].className = 'sw' + (sws[k].getAttribute('data-color') === settings.color ? ' on' : '');
+  }
+  penBadge.style.background = settings.color;
+  thicknessRange.value = String(settings.widthStep);
+  drawSquiggle(previewCanvas, settings.pen, currentPenWidth(), settings.color);
+}
+
+/* ---------- eraser panel ---------- */
+function buildEraserPanel() {
+  var modeBtns = [byId('epStroke'), byId('epArea')];
+  modeBtns[0].addEventListener('click', function () { eraserMode = 0; applyEraserUI(); });
+  modeBtns[1].addEventListener('click', function () { eraserMode = 1; applyEraserUI(); });
+  sizeRow.innerHTML = '';
+  var dims = [14, 20, 28, 38];
+  for (var i = 0; i < ERASER_SIZES.length; i++) {
+    var b = document.createElement('button');
+    b.className = 'ep-size';
+    b.style.width = dims[i] + 'px';
+    b.style.height = dims[i] + 'px';
+    b.style.marginRight = (16 - dims[i] / 2) + 'px';
+    b.setAttribute('data-size', ERASER_SIZES[i]);
+    (function (sz, el) {
+      el.addEventListener('click', function () { eraserSize = sz; applyEraserUI(); });
+    })(ERASER_SIZES[i], b);
+    sizeRow.appendChild(b);
+  }
+  applyEraserUI();
+}
+
+function applyEraserUI() {
+  byId('epStroke').className = 'ep-mode first' + (eraserMode === 0 ? ' on' : '');
+  byId('epArea').className = 'ep-mode last' + (eraserMode === 1 ? ' on' : '');
+  var btns = sizeRow.children;
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].className = 'ep-size' + (parseInt(btns[i].getAttribute('data-size'), 10) === eraserSize ? ' on' : '');
+  }
+}
+
+/* ---------- more menu ---------- */
+var moreRowDefs = null;
+function buildMoreMenu() {
+  moreMenu.innerHTML = '';
+  moreRowDefs = [
+    { lbl: 'Export PNG', val: '', act: exportPNG },
+    { lbl: 'Template', val: TPL_NAMES[settings.template], act: function () { settings.template = (settings.template + 1) % 4; afterSettingChange(); } },
+    { lbl: 'Line spacing', val: settings.spacing + ' px', act: function () { settings.spacing = settings.spacing === 32 ? 38 : (settings.spacing === 38 ? 44 : 32); afterSettingChange(); } },
+    { lbl: 'Palm rejection', val: PALM_NAMES[settings.palmLevel], act: function () { settings.palmLevel = (settings.palmLevel + 1) % 3; applyPalmUI(); afterSettingChange(); } },
+    { lbl: 'Writing hand', val: HAND_NAMES[settings.hand], act: function () { settings.hand = (settings.hand + 1) % 3; afterSettingChange(); } },
+    { lbl: 'Touch guide', val: settings.guideDots ? 'On' : 'Off', act: function () { settings.guideDots = !settings.guideDots; hidePendingDot(); afterSettingChange(); } },
+    { lbl: 'Paper', val: settings.paperDark ? 'Dark' : 'Light', act: function () { settings.paperDark = !settings.paperDark; afterSettingChange(); } },
+    { lbl: 'Clear note', val: '', warn: true, act: clearNote },
+    { lbl: 'Delete note', val: '', warn: true, act: deleteCurrentNote },
+    { lbl: 'About', val: '', act: function () { window.alert('MathNotes v4.0 (Samsung Edition)\n\nWorks offline. Notes are saved in this browser (localStorage).\nScroll with two fingers. Palm rejection: ' + PALM_NAMES[settings.palmLevel] + '.'); } }
+  ];
+  for (var i = 0; i < moreRowDefs.length; i++) {
+    var d = moreRowDefs[i];
+    var row = document.createElement('button');
+    row.className = 'mrow' + (d.warn ? ' warn' : '');
+    row.innerHTML = '<span class="lbl">' + d.lbl + '</span>' + (d.val ? '<span class="val">' + d.val + '</span>' : '');
+    (function (def) {
+      row.addEventListener('click', function () {
+        if (moreMenu.style.display === 'block') moreMenu.style.display = 'none';
+        def.act();
+      });
+    })(d);
+    moreMenu.appendChild(row);
+  }
+}
+function afterSettingChange() {
+  buildMoreMenu();
+  requestRender();
+  saveSoon();
+}
+
+/* ---------- palm level ---------- */
+function applyPalmUI() {
+  palmBtn.textContent = 'Palm: ' + PALM_NAMES[settings.palmLevel];
+  palmBtn.className = settings.palmLevel === PALM_MAX ? 'maxed' : (settings.palmLevel === PALM_MED ? 'med' : '');
+}
+function cyclePalm() {
+  settings.palmLevel = (settings.palmLevel + 1) % 3;
+  applyPalmUI();
+  toast('Palm rejection: ' + PALM_NAMES[settings.palmLevel]);
+  saveSoon();
+}
+
+/* ---------- panels ---------- */
+function closePanels() {
+  penPalette.style.display = 'none';
+  eraserPanel.style.display = 'none';
+  moreMenu.style.display = 'none';
+}
+
+/* ---------- button wiring ---------- */
+byId('menuBtn').addEventListener('click', openDrawer);
+byId('drawerCloseBtn').addEventListener('click', closeDrawer);
+drawerBackdrop.addEventListener('click', closeDrawer);
+byId('newNbBtn').addEventListener('click', function () {
+  var name = window.prompt('Notebook name', 'New notebook');
+  if (name !== null && name !== '') {
+    notebooks.push({ id: genId(), title: name, color: NB_COLORS[notebooks.length % NB_COLORS.length], notes: [] });
+    curNotebook = notebooks.length - 1;
+    closeDrawer();
+    renderHome();
+    saveSoon();
+  }
+});
+byId('nbRenameBtn').addEventListener('click', function () {
+  var nb = notebooks[curNotebook];
+  if (!nb) return;
+  var name = window.prompt('Notebook name', nb.title);
+  if (name !== null && name !== '') {
+    nb.title = name;
+    renderDrawer();
+    renderHome();
+    saveSoon();
+  }
+});
+byId('fabNew').addEventListener('click', newNote);
+byId('backBtn').addEventListener('click', goHome);
+noteTitleBtn.addEventListener('click', renameCurrentNote);
+palmBtn.addEventListener('click', cyclePalm);
+byId('moreBtn').addEventListener('click', function () {
+  if (moreMenu.style.display === 'block') moreMenu.style.display = 'none';
+  else { buildMoreMenu(); moreMenu.style.display = 'block'; penPalette.style.display = 'none'; eraserPanel.style.display = 'none'; }
+});
+
+penBtn.addEventListener('click', function () {
+  tool = 'pen';
+  eraserBtn.className = 'tb-btn';
+  penBtn.className = 'tb-btn on';
+  eraserPanel.style.display = 'none';
+  if (penPalette.style.display === 'block') penPalette.style.display = 'none';
+  else { applyPenUI(); penPalette.style.display = 'block'; }
+});
+eraserBtn.addEventListener('click', function () {
+  tool = 'eraser';
+  penBtn.className = 'tb-btn';
+  eraserBtn.className = 'tb-btn on';
+  penPalette.style.display = 'none';
+  if (eraserPanel.style.display === 'block') eraserPanel.style.display = 'none';
+  else { applyEraserUI(); eraserPanel.style.display = 'block'; }
+});
+undoBtn.addEventListener('click', doUndo);
+redoBtn.addEventListener('click', doRedo);
+byId('exportCloseBtn').addEventListener('click', function () { exportOverlay.className = 'overlay'; });
+
+/* drawing on the canvas closes floating panels (closePanels is
+   called from onTouchStart in the input engine) */
+
+/* ---------- boot ---------- */
+function init() {
+  loadAll();
+  buildPalette();
+  buildEraserPanel();
+  buildMoreMenu();
+  applyPenUI();
+  applyPalmUI();
+  updateUndoButtons();
+  if (!storageOk) showWarning('Private Browsing detected: notes will NOT be saved after reload.');
+  if (curNoteId && notes[curNoteId]) openNote(curNoteId);
+  else { showView('home'); renderHome(); }
+  resizeView();
+}
+
+init();
+
+})();
+</script>
 </body>
 </html>
