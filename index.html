@@ -403,6 +403,36 @@
       margin-top: 2px;
       letter-spacing: 0.2px;
     }
+    /* Strict ("Max") palm rejection: orange instead of blue */
+    .tool-btn.active.maxed {
+      background: #ff9500;
+      color: #ffffff;
+    }
+
+    /* Pending-touch indicator: a small ring that follows a touch
+       which has landed but not yet proven to be a stroke. It is a
+       DOM overlay, so it never pollutes the ink canvas. */
+    #pendingDot {
+      position: absolute;
+      left: -100px;
+      top: -100px;
+      width: 26px;
+      height: 26px;
+      border-radius: 13px;
+      border: 2px solid rgba(10,132,255,0.55);
+      background: rgba(10,132,255,0.12);
+      margin: 0;
+      padding: 0;
+      z-index: 5;
+      pointer-events: none;
+      display: none;
+      -webkit-box-sizing: border-box;
+      box-sizing: border-box;
+    }
+    #pendingDot.rejected {
+      border-color: rgba(255,59,48,0.8);
+      background: rgba(255,59,48,0.15);
+    }
 
     .tdiv {
       width: 1px;
@@ -816,7 +846,7 @@
       <span class="tdiv"></span>
       <button class="tool-btn active" id="palmRejectBtn">
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 00-4 0v5"/><path d="M14 10V4a2 2 0 00-4 0v6"/><path d="M10 10.5V6a2 2 0 00-4 0v8c0 4 3 7 7 7s7-3 7-7v-3a2 2 0 00-4 0v1"/></svg>
-        <span class="lbl">Palm</span>
+        <span class="lbl">Palm: Med</span>
       </button>
     </div>
   </div>
@@ -878,7 +908,10 @@
 
   <script>
   /* ================================================================
-     MATHNOTES v2 — single-file ES5 app for Safari 9 / iOS 9.3.5
+     MATHNOTES v2.1 — single-file ES5 app for Safari 9 / iOS 9.3.5
+     Palm rejection v3: movement gate + multi-touch gate + levels.
+     Deployment marker: search for "palmLevel" to verify the live
+     file is this version.
      ================================================================
      ARCHITECTURE
        Section A: DRAWING ENGINE  (touch/mouse, stroke model, storage,
@@ -965,28 +998,51 @@
     var darkMode     = false;
     var saveTimer    = null;
 
-    /* ---------- Palm rejection state ----------
-     * On a 2012 iPad 3 with a capacitive stylus, true pressure-based
-     * palm rejection is impossible (no active digitizer). But Safari 9
-     * Touch Events DO expose Touch.radiusX / radiusY — the contact
-     * area of each touch. A stylus tip is small (~5-10px radius), a
-     * finger is medium (~15-25px), a palm is large (~25-50px+).
+    /* ---------- Palm rejection state (v3) ----------
+     * HARDWARE REALITY: a 2012 iPad 3 has no active digitizer, and
+     * iOS 9 Safari usually reports Touch.radiusX / radiusY as the
+     * spec default (1), so a radius check alone never fires on this
+     * device. Palm rejection must therefore be behavioural:
      *
-     * Two-layer palm rejection:
-     *   1. RADIUS CHECK: on touchstart, if the touch's radius exceeds
-     *      PALM_THRESHOLD, reject it silently (don't start a stroke).
-     *   2. IDENTIFIER LOCK: once a stroke starts with a particular
-     *      touch.identifier, ONLY that touch drives the stroke. Any
-     *      subsequent touches (palms arriving mid-stroke) are ignored
-     *      until the original touch lifts.
+     *   Layer 1 - RADIUS: if the hardware does report a real contact
+     *             area, touches wider than PALM_RADIUS_MAX are
+     *             rejected. Harmless no-op on iPad 3.
+     *   Layer 2 - MOVEMENT GATE (the important one): a touch does not
+     *             ink until it has travelled PALM_MOVE_MIN from its
+     *             touchdown point. Writing moves; a resting palm
+     *             does not. The touchdown point is replayed when the
+     *             stroke commits, so nothing is lost. A no-travel
+     *             touch lifted within PALM_TAP_MS still draws a dot
+     *             (tap-to-dot for decimal points etc).
+     *   Layer 3 - MULTI-TOUCH GATE (Strict level only): while two or
+     *             more touches are on screen, new touches are
+     *             rejected and un-proven (pending) touches are
+     *             cancelled. Writing must be a solo touch.
+     *   Layer 4 - IDENTIFIER LOCK: once a stroke is committed, only
+     *             its own touch drives it; all other touches are
+     *             ignored until the screen clears.
      *
-     * If the hardware doesn't report radius (returns 0 or 1 — the
-     * spec default), we skip the radius check and rely only on
-     * identifier locking. This still prevents multi-touch chaos.
+     * The "Palm" toolbar button cycles the level:
+     *   Off    - v2 behaviour: ink on touchdown, identifier lock only
+     *   Medium - radius + movement gate + identifier lock (default)
+     *   Strict - Medium + multi-touch gate
      */
-    var PALM_THRESHOLD = 20;      /* CSS px — touches with radius > this are rejected */
-    var palmReject     = true;   /* toggle, persisted to storage */
-    var activeTouchId  = null;   /* identifier of the touch currently drawing, or null */
+    var PALM_OFF    = 0;
+    var PALM_MEDIUM = 1;
+    var PALM_STRICT = 2;
+    var palmLevel = PALM_MEDIUM;   /* persisted as settings.palmLevel */
+
+    var PALM_RADIUS_MAX = 20;      /* CSS px contact radius above this = palm */
+    var PALM_MOVE_MIN   = 5;       /* CSS px of travel before a touch may ink */
+    var PALM_TAP_MS     = 350;     /* no-travel touch lifted faster = tap dot */
+
+    var activeTouchId = null;      /* identifier of the committed stroke's touch */
+    var touchStates   = {};        /* per-touch record: pending or ignored */
+    var pendingDotEl  = null;      /* indicator ring element */
+    var pendingDotId  = null;      /* identifier the indicator follows */
+    var rejectFlashTimer = null;   /* hides the red "rejected" ring */
+
+    var PALM_LEVEL_LBL = ['Palm: Off', 'Palm: Med', 'Palm: Max'];
 
     /* ---------- Storage layer (graceful degradation) ---------- */
     function showWarning(msg) {
@@ -1100,8 +1156,17 @@
         var cnb = notebooks[currentNotebook];
         if (currentPage >= cnb.pages.length) currentPage = cnb.pages.length - 1;
         darkMode = !!(data.settings && data.settings.darkMode);
-        palmReject = data.settings ? (data.settings.palmReject !== false) : true;
-        if (palmReject === undefined) palmReject = true;
+        /* v3 palm level, migrating the old v2 boolean toggle */
+        if (data.settings && typeof data.settings.palmLevel === 'number') {
+          palmLevel = data.settings.palmLevel;
+        } else if (data.settings && data.settings.palmReject === false) {
+          palmLevel = PALM_OFF;
+        } else {
+          palmLevel = PALM_MEDIUM;
+        }
+        if (palmLevel !== PALM_OFF && palmLevel !== PALM_MEDIUM && palmLevel !== PALM_STRICT) {
+          palmLevel = PALM_MEDIUM;
+        }
       } else {
         notebooks = [ newNotebook('My Notes') ];
         currentNotebook = 0;
@@ -1118,7 +1183,7 @@
           notebooks: [],
           currentNotebook: currentNotebook,
           currentPage: currentPage,
-          settings: { darkMode: darkMode, palmReject: palmReject }
+          settings: { darkMode: darkMode, palmLevel: palmLevel }
         };
         for (var i = 0; i < notebooks.length; i++) {
           var nb = notebooks[i];
@@ -1434,6 +1499,7 @@
       if (idx < 0 || idx >= nb.pages.length) return;
       if (idx === currentPage) return;
       endStroke();
+      resetTouchTracking();
       currentPage = idx;
       saveToStorage();
       renderPage();
@@ -1472,6 +1538,7 @@
     function openNotebook(idx) {
       if (idx < 0 || idx >= notebooks.length) return;
       endStroke();
+      resetTouchTracking();
       currentNotebook = idx;
       currentPage = 0;
       saveToStorage();
@@ -1561,17 +1628,14 @@
       if (rx > 0 && ry > 0) return Math.max(rx, ry);
       return rx || ry || 0;
     }
-    /* Returns true if this touch looks like a palm/finger (large contact
-       area) AND palm rejection is enabled. Returns false for stylus
-       touches, mouse events, or when palm rejection is off. */
-    function isPalmTouch(touch) {
-      if (!palmReject) return false;
+    /* Layer 1 - only meaningful when the hardware reports a real
+       contact area (radius above 1). Never fires on iPad 3; kept
+       because it costs nothing and helps devices that do report it. */
+    function radiusRejected(touch) {
+      if (palmLevel === PALM_OFF) return false;
       var r = getTouchRadius(touch);
-      /* r === 0 or 1 means the hardware doesn't report real contact
-         area - can't reject based on radius, fall through to
-         identifier-locking only. */
       if (r <= 1) return false;
-      return r > PALM_THRESHOLD;
+      return r > PALM_RADIUS_MAX;
     }
     function findTouchById(e, id) {
       var list = e.touches || e.changedTouches || [];
@@ -1581,65 +1645,276 @@
       return null;
     }
 
+    /* ---------- Pending-touch indicator ----------
+     * A translucent ring follows a touch that has landed but not yet
+     * proven itself. It vanishes the moment the stroke commits and
+     * flashes red when a touch is rejected. DOM-only (never drawn on
+     * the canvas), so it cannot pollute ink and costs almost nothing.
+     * The canvas is positioned at the top-left corner of
+     * .canvas-wrap, so canvas CSS coordinates work directly here. */
+    function ensurePendingDot() {
+      if (pendingDotEl) return pendingDotEl;
+      pendingDotEl = document.createElement('div');
+      pendingDotEl.id = 'pendingDot';
+      if (canvasWrap) canvasWrap.appendChild(pendingDotEl);
+      return pendingDotEl;
+    }
+    function showPendingDot(id, x, y) {
+      var d = ensurePendingDot();
+      pendingDotId = id;
+      d.className = '';
+      d.style.display = 'block';
+      d.style.left = (x - 13) + 'px';
+      d.style.top  = (y - 13) + 'px';
+    }
+    function movePendingDot(x, y) {
+      if (!pendingDotEl) return;
+      if (pendingDotEl.style.display === 'none') return;
+      pendingDotEl.style.left = (x - 13) + 'px';
+      pendingDotEl.style.top  = (y - 13) + 'px';
+    }
+    function hidePendingDot() {
+      if (pendingDotEl) pendingDotEl.style.display = 'none';
+      pendingDotId = null;
+    }
+    function flashRejected(x, y) {
+      var d = ensurePendingDot();
+      d.className = 'rejected';
+      d.style.display = 'block';
+      d.style.left = (x - 13) + 'px';
+      d.style.top  = (y - 13) + 'px';
+      if (rejectFlashTimer) clearTimeout(rejectFlashTimer);
+      rejectFlashTimer = setTimeout(function () {
+        rejectFlashTimer = null;
+        hidePendingDot();
+      }, 320);
+    }
+
+    /* ---------- Touch bookkeeping ----------
+     * touchStates maps touch.identifier to a record:
+     *   { state: 'ignored' }
+     *   { state: 'pending', sx, sy, lx, ly, t0, maxD2 }
+     * Only touches currently on screen have records; pruneTouchStates
+     * self-heals if Safari misses a touchend/touchcancel. */
+    function pruneTouchStates(e) {
+      var live = e.touches || [];
+      for (var k in touchStates) {
+        if (!touchStates.hasOwnProperty(k)) continue;
+        var found = false;
+        for (var i = 0; i < live.length; i++) {
+          if (String(live[i].identifier) === k) { found = true; break; }
+        }
+        if (!found) delete touchStates[k];
+      }
+      /* if the touch the indicator follows vanished, hide it */
+      if (pendingDotId !== null && !touchStates[pendingDotId]) hidePendingDot();
+    }
+    /* Declare every un-proven touch a palm. Used when a real stroke
+       commits, and by the Strict multi-touch gate. */
+    function cancelAllPendings(flash, fx, fy) {
+      var hadPending = false;
+      for (var k in touchStates) {
+        if (!touchStates.hasOwnProperty(k)) continue;
+        if (touchStates[k].state === 'pending') {
+          touchStates[k].state = 'ignored';
+          hadPending = true;
+        }
+      }
+      if (flash && hadPending) flashRejected(fx, fy);
+      hidePendingDot();
+    }
+    /* The pending touch has travelled far enough: begin the real
+       stroke now. The touchdown anchor is replayed first, so the
+       first few pixels of travel are not lost. */
+    function commitPending(id) {
+      var st = touchStates[id];
+      if (!st || st.state !== 'pending') return;
+      delete touchStates[id];
+      hidePendingDot();
+      activeTouchId = id;
+      isDrawing = true;
+      startStroke(st.sx, st.sy);
+      continueStroke(st.lx, st.ly);
+      /* A confirmed stroke means every other touch is a palm. */
+      cancelAllPendings(false);
+    }
+    /* Wipe all pending tracking (page / notebook switches). */
+    function resetTouchTracking() {
+      touchStates = {};
+      hidePendingDot();
+    }
+
     /* ---------- Canvas event wiring ---------- */
     function initCanvasEvents() {
       function onTouchStart(e) {
         e.preventDefault();
-        /* If a stroke is already in progress (we have an active touch),
-           this new touch is a palm or stray finger - ignore it. */
+        pruneTouchStates(e);
+
+        /* Identifier lock: a committed stroke is in progress, so any
+           touch arriving now is a palm - ignore it. (Includes v2's
+           recovery for a missed touchend.) */
         if (activeTouchId !== null) {
-          /* But verify the active touch is still present; if Safari
-             failed to fire touchend for it (rare), recover gracefully. */
           var stillActive = findTouchById(e, activeTouchId);
-          if (stillActive) return;
+          if (stillActive) {
+            for (var i = 0; i < e.changedTouches.length; i++) {
+              touchStates[e.changedTouches[i].identifier] = { state: 'ignored' };
+            }
+            return;
+          }
           activeTouchId = null;
           endStroke();
         }
-        /* Pick the smallest-radius non-palm touch from changedTouches.
-           If multiple touches started simultaneously (e.g. palm + stylus
-           landed together), prefer the one with the smallest radius -
-           that's the stylus. */
-        var chosen = null;
-        var chosenR = Infinity;
-        for (var i = 0; i < e.changedTouches.length; i++) {
-          var t = e.changedTouches[i];
-          var r = getTouchRadius(t);
-          if (isPalmTouch(t)) continue;          /* large-radius - palm */
-          if (r < chosenR) { chosen = t; chosenR = r; }
+
+        var multi  = (e.touches && e.touches.length >= 2);
+        var strict = (palmLevel === PALM_STRICT);
+
+        for (var j = 0; j < e.changedTouches.length; j++) {
+          var t = e.changedTouches[j];
+          var id = t.identifier;
+
+          if (radiusRejected(t)) {               /* Layer 1 */
+            touchStates[id] = { state: 'ignored' };
+            continue;
+          }
+          if (strict && multi) {                 /* Layer 3 */
+            touchStates[id] = { state: 'ignored' };
+            continue;
+          }
+          var p = touchPos(t);
+
+          /* Eraser keeps v2 semantics: act on touchdown so a quick
+             tap still deletes a stroke. No movement proof needed. */
+          if (currentTool === 'eraser') {
+            activeTouchId = id;
+            isDrawing = true;
+            eraseAt(p.x, p.y);
+            continue;
+          }
+          /* Off keeps v2 semantics: ink on touchdown. */
+          if (palmLevel === PALM_OFF) {
+            activeTouchId = id;
+            isDrawing = true;
+            startStroke(p.x, p.y);
+            continue;
+          }
+          /* Medium/Strict: hold the touch as "pending" until it
+             proves it moves. Nothing is drawn yet. */
+          touchStates[id] = {
+            state: 'pending',
+            sx: p.x, sy: p.y,      /* touchdown anchor */
+            lx: p.x, ly: p.y,      /* last seen point */
+            t0: Date.now(),
+            maxD2: 0               /* max squared displacement */
+          };
+          showPendingDot(id, p.x, p.y);
         }
-        if (!chosen) return;                    /* all touches were palms */
-        activeTouchId = chosen.identifier;
-        var p = touchPos(chosen);
-        isDrawing = true;
-        if (currentTool === 'eraser') eraseAt(p.x, p.y);
-        else startStroke(p.x, p.y);
+
+        /* Strict: un-proven touches that now share the screen are
+           cancelled outright (red-ring feedback). */
+        if (strict && multi) {
+          var fp = touchPos(e.changedTouches[0]);
+          cancelAllPendings(true, fp.x, fp.y);
+        }
       }
+
       function onTouchMove(e) {
         e.preventDefault();
-        if (activeTouchId === null) return;
-        var t = findTouchById(e, activeTouchId);
-        if (!t) return;                          /* our touch not in this event */
-        var p = touchPos(t);
-        continueStroke(p.x, p.y);
-      }
-      function onTouchEnd(e) {
-        e.preventDefault();
-        if (activeTouchId === null) return;
-        /* Check whether OUR touch is among those that ended */
-        var ours_ended = false;
-        for (var i = 0; i < e.changedTouches.length; i++) {
-          if (e.changedTouches[i].identifier === activeTouchId) {
-            ours_ended = true; break;
+
+        /* Committed stroke: identifier lock; other touches do not
+           exist as far as drawing is concerned. */
+        if (activeTouchId !== null) {
+          var t = findTouchById(e, activeTouchId);
+          if (t) {
+            var p = touchPos(t);
+            if (currentTool === 'eraser') eraseAt(p.x, p.y);
+            else continueStroke(p.x, p.y);
+          }
+          return;
+        }
+
+        /* No committed stroke: advance pending touches. */
+        var strict = (palmLevel === PALM_STRICT);
+        var multi  = (e.touches && e.touches.length >= 2);
+
+        for (var j = 0; j < e.changedTouches.length; j++) {
+          var t2 = e.changedTouches[j];
+          var id = t2.identifier;
+          var st = touchStates[id];
+          if (!st || st.state !== 'pending') continue;
+
+          if (strict && multi) {                 /* Layer 3 */
+            var rp = touchPos(t2);
+            st.state = 'ignored';
+            if (pendingDotId === id) flashRejected(rp.x, rp.y);
+            continue;
+          }
+
+          var p2 = touchPos(t2);
+          st.lx = p2.x;
+          st.ly = p2.y;
+          var dx = p2.x - st.sx, dy = p2.y - st.sy;
+          var d2 = dx * dx + dy * dy;
+          if (d2 > st.maxD2) st.maxD2 = d2;
+          if (pendingDotId === id) movePendingDot(p2.x, p2.y);
+
+          /* Layer 2: enough travel - this is a real stroke. */
+          if (d2 >= PALM_MOVE_MIN * PALM_MOVE_MIN) {
+            commitPending(id);
           }
         }
-        if (!ours_ended) return;                /* some other touch ended - palm lifted */
-        endStroke();
-        activeTouchId = null;
       }
+
+      function onTouchEnd(e) {
+        e.preventDefault();
+        for (var i = 0; i < e.changedTouches.length; i++) {
+          var id = e.changedTouches[i].identifier;
+
+          if (id === activeTouchId) {
+            /* the committed stroke's own touch lifted */
+            endStroke();
+            activeTouchId = null;
+            continue;
+          }
+          var st = touchStates[id];
+          if (!st) continue;                     /* pruned or unknown */
+          delete touchStates[id];
+          if (pendingDotId === id) hidePendingDot();
+
+          if (st.state === 'pending' && currentTool !== 'eraser') {
+            var dur = Date.now() - st.t0;
+            /* Quick no-travel touch = tap: keep v2's tap-to-dot. */
+            if (dur <= PALM_TAP_MS &&
+                st.maxD2 < PALM_MOVE_MIN * PALM_MOVE_MIN) {
+              isDrawing = true;
+              startStroke(st.lx, st.ly);
+              endStroke();
+            }
+            /* otherwise: a resting palm lifted - discard silently */
+          }
+        }
+      }
+
+      /* touchcancel: same as end, except a cancelled touch never
+         counts as a tap (the system took the gesture over, not the
+         user lifting a finger). */
+      function onTouchCancel(e) {
+        e.preventDefault();
+        for (var i = 0; i < e.changedTouches.length; i++) {
+          var id = e.changedTouches[i].identifier;
+          if (id === activeTouchId) {
+            endStroke();
+            activeTouchId = null;
+          } else if (touchStates[id]) {
+            delete touchStates[id];
+            if (pendingDotId === id) hidePendingDot();
+          }
+        }
+      }
+
       canvas.addEventListener('touchstart',  onTouchStart,  false);
       canvas.addEventListener('touchmove',   onTouchMove,   false);
       canvas.addEventListener('touchend',    onTouchEnd,    false);
-      canvas.addEventListener('touchcancel', onTouchEnd,    false);
+      canvas.addEventListener('touchcancel', onTouchCancel, false);
 
       /* Mouse events (desktop testing - same engine, no palm rejection) */
       function onMouseDown(e) {
@@ -1945,20 +2220,25 @@
       if (drawView.className.indexOf('active') >= 0) renderPage();
     }
 
-    /* ---------- Palm rejection toggle ---------- */
-    function applyPalmReject() {
+    /* ---------- Palm rejection level (button cycles Off, Med, Max) ---------- */
+    function applyPalmLevel() {
       var btn = document.getElementById('palmRejectBtn');
       if (!btn) return;
-      if (palmReject) btn.className = 'tool-btn active';
-      else btn.className = 'tool-btn';
+      var spans = btn.getElementsByTagName('span');
+      if (spans && spans.length > 0) {
+        spans[0].textContent = PALM_LEVEL_LBL[palmLevel] || PALM_LEVEL_LBL[PALM_MEDIUM];
+      }
+      if (palmLevel === PALM_OFF) btn.className = 'tool-btn';
+      else if (palmLevel === PALM_STRICT) btn.className = 'tool-btn active maxed';
+      else btn.className = 'tool-btn active';
     }
-    function togglePalmReject() {
-      palmReject = !palmReject;
-      applyPalmReject();
+    function cyclePalmLevel() {
+      palmLevel = palmLevel + 1;
+      if (palmLevel > PALM_STRICT) palmLevel = PALM_OFF;
+      applyPalmLevel();
       saveToStorage();
-      /* If turning OFF mid-stroke, let the current stroke finish normally.
-         If turning ON mid-stroke, the active touch keeps its lock until
-         it lifts - new touches will be subject to radius check. */
+      /* A mid-touch level change never disturbs a committed stroke;
+         touches still pending simply start following the new rules. */
     }
 
     /* ============================================================
@@ -2056,8 +2336,8 @@
       bindButton(document.getElementById('clearBtn'),  clearPage);
       bindButton(document.getElementById('exportBtn'), exportPNG);
 
-      /* Palm rejection toggle */
-      bindButton(document.getElementById('palmRejectBtn'), togglePalmReject);
+      /* Palm rejection level (tap cycles Off, Med, Max) */
+      bindButton(document.getElementById('palmRejectBtn'), cyclePalmLevel);
 
       /* Color + size buttons open popovers */
       bindButton(document.getElementById('colorBtn'), function () {
@@ -2104,7 +2384,7 @@
       setColor('#000000');
       setSize(2);
       applyDarkMode();
-      applyPalmReject();
+      applyPalmLevel();
     }
 
     function init() {
@@ -2112,6 +2392,10 @@
       initCanvasEvents();
       initGlobalEvents();
       loadFromStorage();
+      /* Re-apply appearance settings AFTER load so a saved dark
+         mode / palm level actually restores (fixes v2 restore bug). */
+      applyDarkMode();
+      applyPalmLevel();
       renderHome();
       resizeCanvas();
       renderPage();
