@@ -813,6 +813,11 @@
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span class="lbl">PNG</span>
       </button>
+      <span class="tdiv"></span>
+      <button class="tool-btn active" id="palmRejectBtn">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 00-4 0v5"/><path d="M14 10V4a2 2 0 00-4 0v6"/><path d="M10 10.5V6a2 2 0 00-4 0v8c0 4 3 7 7 7s7-3 7-7v-3a2 2 0 00-4 0v1"/></svg>
+        <span class="lbl">Palm</span>
+      </button>
     </div>
   </div>
 
@@ -960,6 +965,29 @@
     var darkMode     = false;
     var saveTimer    = null;
 
+    /* ---------- Palm rejection state ----------
+     * On a 2012 iPad 3 with a capacitive stylus, true pressure-based
+     * palm rejection is impossible (no active digitizer). But Safari 9
+     * Touch Events DO expose Touch.radiusX / radiusY — the contact
+     * area of each touch. A stylus tip is small (~5-10px radius), a
+     * finger is medium (~15-25px), a palm is large (~25-50px+).
+     *
+     * Two-layer palm rejection:
+     *   1. RADIUS CHECK: on touchstart, if the touch's radius exceeds
+     *      PALM_THRESHOLD, reject it silently (don't start a stroke).
+     *   2. IDENTIFIER LOCK: once a stroke starts with a particular
+     *      touch.identifier, ONLY that touch drives the stroke. Any
+     *      subsequent touches (palms arriving mid-stroke) are ignored
+     *      until the original touch lifts.
+     *
+     * If the hardware doesn't report radius (returns 0 or 1 — the
+     * spec default), we skip the radius check and rely only on
+     * identifier locking. This still prevents multi-touch chaos.
+     */
+    var PALM_THRESHOLD = 20;      /* CSS px — touches with radius > this are rejected */
+    var palmReject     = true;   /* toggle, persisted to storage */
+    var activeTouchId  = null;   /* identifier of the touch currently drawing, or null */
+
     /* ---------- Storage layer (graceful degradation) ---------- */
     function showWarning(msg) {
       if (!warningEl) return;
@@ -1072,6 +1100,8 @@
         var cnb = notebooks[currentNotebook];
         if (currentPage >= cnb.pages.length) currentPage = cnb.pages.length - 1;
         darkMode = !!(data.settings && data.settings.darkMode);
+        palmReject = data.settings ? (data.settings.palmReject !== false) : true;
+        if (palmReject === undefined) palmReject = true;
       } else {
         notebooks = [ newNotebook('My Notes') ];
         currentNotebook = 0;
@@ -1088,7 +1118,7 @@
           notebooks: [],
           currentNotebook: currentNotebook,
           currentPage: currentPage,
-          settings: { darkMode: darkMode }
+          settings: { darkMode: darkMode, palmReject: palmReject }
         };
         for (var i = 0; i < notebooks.length; i++) {
           var nb = notebooks[i];
@@ -1501,7 +1531,11 @@
       exportOverlay.className = 'overlay active';
     }
 
-    /* ---------- Position helper ---------- */
+    /* ---------- Position helpers ----------
+     * getPos(e) - works for mouse and old single-touch code paths.
+     * touchPos(touch) - takes a specific Touch object (for palm-reject
+     * identifier-locked drawing).
+     */
     function getPos(e) {
       var rect = canvas.getBoundingClientRect();
       var cx, cy;
@@ -1514,30 +1548,100 @@
       }
       return { x: cx - rect.left, y: cy - rect.top };
     }
+    function touchPos(touch) {
+      var rect = canvas.getBoundingClientRect();
+      return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+    }
+
+    /* ---------- Palm rejection helpers ---------- */
+    function getTouchRadius(touch) {
+      if (!touch) return 0;
+      var rx = touch.radiusX || 0;
+      var ry = touch.radiusY || 0;
+      if (rx > 0 && ry > 0) return Math.max(rx, ry);
+      return rx || ry || 0;
+    }
+    /* Returns true if this touch looks like a palm/finger (large contact
+       area) AND palm rejection is enabled. Returns false for stylus
+       touches, mouse events, or when palm rejection is off. */
+    function isPalmTouch(touch) {
+      if (!palmReject) return false;
+      var r = getTouchRadius(touch);
+      /* r === 0 or 1 means the hardware doesn't report real contact
+         area - can't reject based on radius, fall through to
+         identifier-locking only. */
+      if (r <= 1) return false;
+      return r > PALM_THRESHOLD;
+    }
+    function findTouchById(e, id) {
+      var list = e.touches || e.changedTouches || [];
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].identifier === id) return list[i];
+      }
+      return null;
+    }
 
     /* ---------- Canvas event wiring ---------- */
     function initCanvasEvents() {
       function onTouchStart(e) {
         e.preventDefault();
-        var p = getPos(e);
+        /* If a stroke is already in progress (we have an active touch),
+           this new touch is a palm or stray finger - ignore it. */
+        if (activeTouchId !== null) {
+          /* But verify the active touch is still present; if Safari
+             failed to fire touchend for it (rare), recover gracefully. */
+          var stillActive = findTouchById(e, activeTouchId);
+          if (stillActive) return;
+          activeTouchId = null;
+          endStroke();
+        }
+        /* Pick the smallest-radius non-palm touch from changedTouches.
+           If multiple touches started simultaneously (e.g. palm + stylus
+           landed together), prefer the one with the smallest radius -
+           that's the stylus. */
+        var chosen = null;
+        var chosenR = Infinity;
+        for (var i = 0; i < e.changedTouches.length; i++) {
+          var t = e.changedTouches[i];
+          var r = getTouchRadius(t);
+          if (isPalmTouch(t)) continue;          /* large-radius - palm */
+          if (r < chosenR) { chosen = t; chosenR = r; }
+        }
+        if (!chosen) return;                    /* all touches were palms */
+        activeTouchId = chosen.identifier;
+        var p = touchPos(chosen);
         isDrawing = true;
         if (currentTool === 'eraser') eraseAt(p.x, p.y);
         else startStroke(p.x, p.y);
       }
       function onTouchMove(e) {
         e.preventDefault();
-        var p = getPos(e);
+        if (activeTouchId === null) return;
+        var t = findTouchById(e, activeTouchId);
+        if (!t) return;                          /* our touch not in this event */
+        var p = touchPos(t);
         continueStroke(p.x, p.y);
       }
       function onTouchEnd(e) {
         e.preventDefault();
+        if (activeTouchId === null) return;
+        /* Check whether OUR touch is among those that ended */
+        var ours_ended = false;
+        for (var i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === activeTouchId) {
+            ours_ended = true; break;
+          }
+        }
+        if (!ours_ended) return;                /* some other touch ended - palm lifted */
         endStroke();
+        activeTouchId = null;
       }
       canvas.addEventListener('touchstart',  onTouchStart,  false);
       canvas.addEventListener('touchmove',   onTouchMove,   false);
       canvas.addEventListener('touchend',    onTouchEnd,    false);
       canvas.addEventListener('touchcancel', onTouchEnd,    false);
 
+      /* Mouse events (desktop testing - same engine, no palm rejection) */
       function onMouseDown(e) {
         var p = getPos(e);
         isDrawing = true;
@@ -1841,6 +1945,22 @@
       if (drawView.className.indexOf('active') >= 0) renderPage();
     }
 
+    /* ---------- Palm rejection toggle ---------- */
+    function applyPalmReject() {
+      var btn = document.getElementById('palmRejectBtn');
+      if (!btn) return;
+      if (palmReject) btn.className = 'tool-btn active';
+      else btn.className = 'tool-btn';
+    }
+    function togglePalmReject() {
+      palmReject = !palmReject;
+      applyPalmReject();
+      saveToStorage();
+      /* If turning OFF mid-stroke, let the current stroke finish normally.
+         If turning ON mid-stroke, the active touch keeps its lock until
+         it lifts - new touches will be subject to radius check. */
+    }
+
     /* ============================================================
        SECTION C — BOOT / EVENT WIRING
        ============================================================ */
@@ -1936,6 +2056,9 @@
       bindButton(document.getElementById('clearBtn'),  clearPage);
       bindButton(document.getElementById('exportBtn'), exportPNG);
 
+      /* Palm rejection toggle */
+      bindButton(document.getElementById('palmRejectBtn'), togglePalmReject);
+
       /* Color + size buttons open popovers */
       bindButton(document.getElementById('colorBtn'), function () {
         renderColorPicker();
@@ -1981,6 +2104,7 @@
       setColor('#000000');
       setSize(2);
       applyDarkMode();
+      applyPalmReject();
     }
 
     function init() {
