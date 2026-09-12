@@ -908,9 +908,11 @@
 
   <script>
   /* ================================================================
-     MATHNOTES v2.1 — single-file ES5 app for Safari 9 / iOS 9.3.5
-     Palm rejection v3: movement gate + multi-touch gate + levels.
-     Deployment marker: search for "palmLevel" to verify the live
+     MATHNOTES v2.2 — single-file ES5 app for Safari 9 / iOS 9.3.5
+     Palm rejection v3.1: movement gate + arbitration + anti-bounce
+     dots (replaces v3.0's multi-touch gate, which blocked strokes
+     whenever the palm stayed on screen).
+     Deployment marker: search for "PALM_ROCK_PX" to verify the live
      file is this version.
      ================================================================
      ARCHITECTURE
@@ -998,7 +1000,7 @@
     var darkMode     = false;
     var saveTimer    = null;
 
-    /* ---------- Palm rejection state (v3) ----------
+    /* ---------- Palm rejection state (v3.1) ----------
      * HARDWARE REALITY: a 2012 iPad 3 has no active digitizer, and
      * iOS 9 Safari usually reports Touch.radiusX / radiusY as the
      * spec default (1), so a radius check alone never fires on this
@@ -1007,25 +1009,31 @@
      *   Layer 1 - RADIUS: if the hardware does report a real contact
      *             area, touches wider than PALM_RADIUS_MAX are
      *             rejected. Harmless no-op on iPad 3.
-     *   Layer 2 - MOVEMENT GATE (the important one): a touch does not
-     *             ink until it has travelled PALM_MOVE_MIN from its
-     *             touchdown point. Writing moves; a resting palm
-     *             does not. The touchdown point is replayed when the
-     *             stroke commits, so nothing is lost. A no-travel
-     *             touch lifted within PALM_TAP_MS still draws a dot
-     *             (tap-to-dot for decimal points etc).
-     *   Layer 3 - MULTI-TOUCH GATE (Strict level only): while two or
-     *             more touches are on screen, new touches are
-     *             rejected and un-proven (pending) touches are
-     *             cancelled. Writing must be a solo touch.
+     *   Layer 2 - MOVEMENT GATE (the core): a touch does not ink
+     *             until it has travelled far enough from touchdown.
+     *             Writing moves; a resting palm does not. The anchor
+     *             is replayed when the stroke commits, so nothing is
+     *             lost. A quick no-travel lift queues a tap-dot that
+     *             is only inked if the palm does not bounce straight
+     *             back onto the same spot (anti-bounce dots).
+     *   Layer 3 - ARBITRATION: several touches may be "pending" at
+     *             once; the FIRST to travel far enough commits and
+     *             instantly declares every other touch a palm. This
+     *             replaces v3.0's blanket "a second touch on screen
+     *             blocks every new stroke" rule, which made strokes
+     *             fail whenever the palm stayed down. Max adds:
+     *             late arrivals travel further (PALM_JOIN_MIN),
+     *             settled touches travel further (PALM_SETTLE_MIN),
+     *             and stale pendings are purged when a fresh touch
+     *             appears (the pen just landed).
      *   Layer 4 - IDENTIFIER LOCK: once a stroke is committed, only
      *             its own touch drives it; all other touches are
      *             ignored until the screen clears.
      *
      * The "Palm" toolbar button cycles the level:
      *   Off    - v2 behaviour: ink on touchdown, identifier lock only
-     *   Medium - radius + movement gate + identifier lock (default)
-     *   Strict - Medium + multi-touch gate
+     *   Medium - radius + movement gate + arbitration (default)
+     *   Max    - Medium + join/settle penalties + stale purge
      */
     var PALM_OFF    = 0;
     var PALM_MEDIUM = 1;
@@ -1033,14 +1041,22 @@
     var palmLevel = PALM_MEDIUM;   /* persisted as settings.palmLevel */
 
     var PALM_RADIUS_MAX = 20;      /* CSS px contact radius above this = palm */
-    var PALM_MOVE_MIN   = 5;       /* CSS px of travel before a touch may ink */
+    var PALM_MOVE_MIN   = 5;       /* CSS px of travel before a fresh touch may ink */
     var PALM_TAP_MS     = 350;     /* no-travel touch lifted faster = tap dot */
+    var PALM_TAP_MIN_MS = 80;      /* lifted faster than THIS = noise: never dots */
+    var PALM_JOIN_MIN   = 12;      /* Max: a touch arriving while another is pending */
+    var PALM_STALE_MS   = 250;     /* Max: pendings older than this die on new touchdown */
+    var PALM_SETTLE_MS  = 600;     /* Max: a pending untouched this long is settled */
+    var PALM_SETTLE_MIN = 16;      /* Max: a settled touch must travel this to ink */
+    var PALM_ROCK_PX    = 18;      /* re-land within this of a queued dot = bounce */
+    var PALM_DOT_DELAY  = 200;     /* ms a tap-dot waits for a palm bounce */
 
     var activeTouchId = null;      /* identifier of the committed stroke's touch */
     var touchStates   = {};        /* per-touch record: pending or ignored */
     var pendingDotEl  = null;      /* indicator ring element */
     var pendingDotId  = null;      /* identifier the indicator follows */
     var rejectFlashTimer = null;   /* hides the red "rejected" ring */
+    var canvasRect    = null;      /* cached canvas rect (see touchPos) */
 
     var PALM_LEVEL_LBL = ['Palm: Off', 'Palm: Med', 'Palm: Max'];
 
@@ -1174,34 +1190,46 @@
       }
     }
 
-    function saveToStorage() {
+    /* Debounced, with an immediate flush for page exit. Serialising
+       the whole notebook blocks the main thread; on a 2012 iPad a
+       120 ms debounce meant the freeze landed right as the user
+       began the next stroke, which read as lag. 500 ms keeps the
+       write in natural pauses, and pagehide/beforeunload flush it
+       when the tab actually leaves. */
+    var SAVE_DEBOUNCE_MS = 500;
+    function doSaveNow() {
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
       if (!storageOk) return;
+      var toSave = {
+        version: 2,
+        notebooks: [],
+        currentNotebook: currentNotebook,
+        currentPage: currentPage,
+        settings: { darkMode: darkMode, palmLevel: palmLevel }
+      };
+      for (var i = 0; i < notebooks.length; i++) {
+        var nb = notebooks[i];
+        var nbPages = [];
+        for (var j = 0; j < nb.pages.length; j++) {
+          nbPages.push({ strokes: nb.pages[j].strokes });
+        }
+        toSave.notebooks.push({
+          id: nb.id, title: nb.title, color: nb.color, pages: nbPages
+        });
+      }
+      try {
+        localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(toSave));
+      } catch (e) {
+        storageOk = false;
+        showWarning('Cannot save notes. You may be in Private Browsing mode, or storage is full. Notes will not persist after reload.');
+      }
+    }
+    function saveToStorage() {
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(function () {
-        var toSave = {
-          version: 2,
-          notebooks: [],
-          currentNotebook: currentNotebook,
-          currentPage: currentPage,
-          settings: { darkMode: darkMode, palmLevel: palmLevel }
-        };
-        for (var i = 0; i < notebooks.length; i++) {
-          var nb = notebooks[i];
-          var nbPages = [];
-          for (var j = 0; j < nb.pages.length; j++) {
-            nbPages.push({ strokes: nb.pages[j].strokes });
-          }
-          toSave.notebooks.push({
-            id: nb.id, title: nb.title, color: nb.color, pages: nbPages
-          });
-        }
-        try {
-          localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(toSave));
-        } catch (e) {
-          storageOk = false;
-          showWarning('Cannot save notes. You may be in Private Browsing mode, or storage is full. Notes will not persist after reload.');
-        }
-      }, 120);
+        saveTimer = null;
+        doSaveNow();
+      }, SAVE_DEBOUNCE_MS);
     }
 
     /* ---------- Geometry helpers ---------- */
@@ -1308,6 +1336,7 @@
       canvas.width  = Math.floor(cssW * dpr);
       canvas.height = Math.floor(cssH * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      canvasRect = null;           /* cached rect is stale after resize */
       renderPage();
     }
 
@@ -1343,12 +1372,14 @@
         opacity: op,
         points:  [{ x: x, y: y }]
       };
-      /* Draw initial dot so single taps render */
+      /* Draw initial dot so single taps render. The style stays
+         applied for the whole stroke (endStroke resets it) -
+         re-applying it for every segment was measurable overhead
+         on 2012 hardware. */
       applyStrokeStyle(currentStroke);
       ctx.beginPath();
       ctx.arc(x, y, Math.max(0.5, w / 2), 0, Math.PI * 2);
       ctx.fill();
-      resetCtxStyle();
     }
 
     function continueStroke(x, y) {
@@ -1360,7 +1391,6 @@
         var dx = x - last.x, dy = y - last.y;
         if (dx * dx + dy * dy < 0.8) return;   /* skip sub-pixel jitter */
 
-        applyStrokeStyle(currentStroke);
         ctx.beginPath();
         if (n === 1) {
           /* First move: straight line from pts[0] to (x,y).
@@ -1378,7 +1408,6 @@
           ctx.quadraticCurveTo(last.x, last.y, mid1x, mid1y);
         }
         ctx.stroke();
-        resetCtxStyle();
         pts.push({ x: x, y: y });
         return;
       }
@@ -1389,6 +1418,7 @@
     }
 
     function endStroke() {
+      resetCtxStyle();               /* stroke style does not leak */
       if (!isDrawing) {
         currentStroke = null;
         return;
@@ -1616,7 +1646,12 @@
       return { x: cx - rect.left, y: cy - rect.top };
     }
     function touchPos(touch) {
-      var rect = canvas.getBoundingClientRect();
+      /* Canvas layout cannot change while touches are down (fixed
+         full-screen app), so the rect is cached per touchdown and
+         invalidated on resize. Without this, every touchmove for
+         every touch point forced a synchronous layout query - a
+         large part of the lag reported on 2012 hardware. */
+      var rect = canvasRect || canvas.getBoundingClientRect();
       return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
     }
 
@@ -1668,6 +1703,7 @@
       d.style.top  = (y - 13) + 'px';
     }
     function movePendingDot(x, y) {
+      /* retired - kept only so old call sites (none) stay obvious */
       if (!pendingDotEl) return;
       if (pendingDotEl.style.display === 'none') return;
       pendingDotEl.style.left = (x - 13) + 'px';
@@ -1677,6 +1713,11 @@
       if (pendingDotEl) pendingDotEl.style.display = 'none';
       pendingDotId = null;
     }
+    /* NOTE: the ring intentionally does NOT follow the touch while
+       it is pending. Repositioning a DOM element on every touchmove
+       forced a layout at 60 Hz - the other half of the reported lag.
+       Pre-commit travel is at most a few pixels, so a static ring is
+       visually identical. */
     function flashRejected(x, y) {
       var d = ensurePendingDot();
       d.className = 'rejected';
@@ -1693,7 +1734,9 @@
     /* ---------- Touch bookkeeping ----------
      * touchStates maps touch.identifier to a record:
      *   { state: 'ignored' }
-     *   { state: 'pending', sx, sy, lx, ly, t0, maxD2 }
+     *   { state: 'pending', sx, sy, lx, ly, t0, maxD2, need }
+     * "need" is the travel (CSS px) this touch must show before it
+     * may ink (raised for late arrivals and settled touches in Max).
      * Only touches currently on screen have records; pruneTouchStates
      * self-heals if Safari misses a touchend/touchcancel. */
     function pruneTouchStates(e) {
@@ -1731,6 +1774,9 @@
       if (!st || st.state !== 'pending') return;
       delete touchStates[id];
       hidePendingDot();
+      /* A real stroke is starting, so any queued tap-dot was a
+         genuine tap, not a palm bounce - ink it now. */
+      flushTapDot();
       activeTouchId = id;
       isDrawing = true;
       startStroke(st.sx, st.sy);
@@ -1741,7 +1787,99 @@
     /* Wipe all pending tracking (page / notebook switches). */
     function resetTouchTracking() {
       touchStates = {};
+      cancelTapDot();
+      lastBounce = null;
       hidePendingDot();
+    }
+
+    /* ---------- Tap-dot queue (anti palm-bounce) ----------
+     * A quick no-travel lift is ambiguous: a deliberate finger tap
+     * (a decimal point) or one bounce of a rocking palm. Palms rock
+     * in place - land, lift, land again on the same spot within a
+     * few hundred milliseconds - so a qualifying tap is NOT inked
+     * immediately. It waits PALM_DOT_DELAY:
+     *   - a new touch landing within PALM_ROCK_PX puts the dot "on
+     *     hold" (bounce suspected); if that touch commits a stroke
+     *     the dot was real and inks instantly (commitPending calls
+     *     flushTapDot), otherwise the hold outlives the timer and
+     *     the dot is dropped;
+     *   - a new touch landing elsewhere means the pen is active: the
+     *     queued dot inks immediately.
+     * lastBounce remembers a confirmed bounce so a whole rocking
+     * chain (bounce after bounce) stays suppressed. */
+    var tapDotTimer = null;
+    var tapDot      = null;      /* { x, y, hold } or null */
+    var lastBounce  = null;      /* { x, y, at } or null */
+
+    function drawTapDot(x, y) {
+      if (currentTool === 'eraser') return;
+      isDrawing = true;
+      startStroke(x, y);
+      endStroke();
+    }
+    function cancelTapDot() {
+      if (tapDotTimer) clearTimeout(tapDotTimer);
+      tapDotTimer = null;
+      tapDot = null;
+    }
+    function flushTapDot() {
+      if (!tapDot) return;
+      var d = tapDot;
+      cancelTapDot();
+      drawTapDot(d.x, d.y);
+    }
+    function queueTapDot(x, y) {
+      if (tapDot) {
+        if (tapDot.hold) cancelTapDot();   /* bounce #2: drop #1 */
+        else flushTapDot();                /* second real tap: ink #1 */
+      }
+      tapDot = { x: x, y: y, hold: false };
+      if (tapDotTimer) clearTimeout(tapDotTimer);
+      tapDotTimer = setTimeout(function () {
+        tapDotTimer = null;
+        if (!tapDot) return;
+        if (tapDot.hold) { tapDot = null; return; }   /* bounce: no dot */
+        flushTapDot();
+      }, PALM_DOT_DELAY);
+    }
+    /* A new touch landed at (x, y). Near the queued dot = suspected
+       bounce (hold it). Far away = pen activity elsewhere (ink the
+       queued dot now). */
+    function tapDotOnNewTouch(x, y) {
+      if (!tapDot) return;
+      var dx = x - tapDot.x, dy = y - tapDot.y;
+      if (dx * dx + dy * dy <= PALM_ROCK_PX * PALM_ROCK_PX) {
+        tapDot.hold = true;
+        lastBounce = { x: x, y: y, at: Date.now() };
+      } else {
+        flushTapDot();
+      }
+    }
+    function d2near(ax, ay, bx, by) {
+      var dx = ax - bx, dy = ay - by;
+      return dx * dx + dy * dy;
+    }
+
+    /* ---------- Max-level arbitration helpers ---------- */
+    /* Pendings that have sat un-proven longer than PALM_STALE_MS are
+       palms: a fresh touch just appeared, and the pen never waits
+       that long before moving. */
+    function cancelStalePendings() {
+      var now = Date.now();
+      for (var k in touchStates) {
+        if (!touchStates.hasOwnProperty(k)) continue;
+        var st = touchStates[k];
+        if (st.state === 'pending' && (now - st.t0) > PALM_STALE_MS) {
+          st.state = 'ignored';
+        }
+      }
+    }
+    function hasOtherPending() {
+      for (var k in touchStates) {
+        if (!touchStates.hasOwnProperty(k)) continue;
+        if (touchStates[k].state === 'pending') return true;
+      }
+      return false;
     }
 
     /* ---------- Canvas event wiring ---------- */
@@ -1749,6 +1887,9 @@
       function onTouchStart(e) {
         e.preventDefault();
         pruneTouchStates(e);
+        /* Cache the canvas rect once per touchdown; touchmove then
+           never queries layout (see touchPos). */
+        canvasRect = canvas.getBoundingClientRect();
 
         /* Identifier lock: a committed stroke is in progress, so any
            touch arriving now is a palm - ignore it. (Includes v2's
@@ -1765,22 +1906,25 @@
           endStroke();
         }
 
-        var multi  = (e.touches && e.touches.length >= 2);
         var strict = (palmLevel === PALM_STRICT);
+
+        /* Max: the pen just touched down - stationary touches that
+           never proved themselves are declared palms right now. */
+        if (strict) cancelStalePendings();
 
         for (var j = 0; j < e.changedTouches.length; j++) {
           var t = e.changedTouches[j];
           var id = t.identifier;
+          var p = touchPos(t);
+
+          /* Any new landing interacts with a queued tap-dot: near
+             it = suspected bounce (hold), far = ink it now. */
+          tapDotOnNewTouch(p.x, p.y);
 
           if (radiusRejected(t)) {               /* Layer 1 */
             touchStates[id] = { state: 'ignored' };
             continue;
           }
-          if (strict && multi) {                 /* Layer 3 */
-            touchStates[id] = { state: 'ignored' };
-            continue;
-          }
-          var p = touchPos(t);
 
           /* Eraser keeps v2 semantics: act on touchdown so a quick
              tap still deletes a stroke. No movement proof needed. */
@@ -1797,23 +1941,22 @@
             startStroke(p.x, p.y);
             continue;
           }
-          /* Medium/Strict: hold the touch as "pending" until it
-             proves it moves. Nothing is drawn yet. */
+          /* Medium/Max: hold the touch as "pending" until it proves
+             it moves. Several touches may be pending at once; the
+             first to travel far enough wins (arbitration). In Max a
+             touch arriving while another is pending must travel
+             further - late arrivals are usually the palm joining
+             after the pen. */
           touchStates[id] = {
             state: 'pending',
             sx: p.x, sy: p.y,      /* touchdown anchor */
             lx: p.x, ly: p.y,      /* last seen point */
             t0: Date.now(),
-            maxD2: 0               /* max squared displacement */
+            maxD2: 0,              /* max squared displacement */
+            need: (strict && hasOtherPending()) ? PALM_JOIN_MIN
+                                                : PALM_MOVE_MIN
           };
           showPendingDot(id, p.x, p.y);
-        }
-
-        /* Strict: un-proven touches that now share the screen are
-           cancelled outright (red-ring feedback). */
-        if (strict && multi) {
-          var fp = touchPos(e.changedTouches[0]);
-          cancelAllPendings(true, fp.x, fp.y);
         }
       }
 
@@ -1832,9 +1975,10 @@
           return;
         }
 
-        /* No committed stroke: advance pending touches. */
+        /* No committed stroke yet: advance every pending touch. The
+           first to travel far enough commits; that commit declares
+           all the others palms (arbitration). */
         var strict = (palmLevel === PALM_STRICT);
-        var multi  = (e.touches && e.touches.length >= 2);
 
         for (var j = 0; j < e.changedTouches.length; j++) {
           var t2 = e.changedTouches[j];
@@ -1842,23 +1986,25 @@
           var st = touchStates[id];
           if (!st || st.state !== 'pending') continue;
 
-          if (strict && multi) {                 /* Layer 3 */
-            var rp = touchPos(t2);
-            st.state = 'ignored';
-            if (pendingDotId === id) flashRejected(rp.x, rp.y);
-            continue;
-          }
-
           var p2 = touchPos(t2);
           st.lx = p2.x;
           st.ly = p2.y;
           var dx = p2.x - st.sx, dy = p2.y - st.sy;
           var d2 = dx * dx + dy * dy;
           if (d2 > st.maxD2) st.maxD2 = d2;
-          if (pendingDotId === id) movePendingDot(p2.x, p2.y);
 
-          /* Layer 2: enough travel - this is a real stroke. */
-          if (d2 >= PALM_MOVE_MIN * PALM_MOVE_MIN) {
+          /* Layer 2: travel gate. Fresh touches need st.need (5 px,
+             or 12 px in Max when sharing the screen with another
+             pending touch). A touch that has SAT still pending for
+             a long time is a settled palm: in Max it must travel
+             PALM_SETTLE_MIN before it may ink, so palm creep and
+             palm repositioning slides never draw. */
+          var need = st.need || PALM_MOVE_MIN;
+          if (strict && (Date.now() - st.t0) > PALM_SETTLE_MS &&
+              need < PALM_SETTLE_MIN) {
+            need = PALM_SETTLE_MIN;
+          }
+          if (d2 >= need * need) {
             commitPending(id);
           }
         }
@@ -1882,12 +2028,23 @@
 
           if (st.state === 'pending' && currentTool !== 'eraser') {
             var dur = Date.now() - st.t0;
-            /* Quick no-travel touch = tap: keep v2's tap-to-dot. */
-            if (dur <= PALM_TAP_MS &&
+            /* Quick no-travel touch = tap: keep v2's tap-to-dot, but
+               queue it so a palm bouncing back onto the spot can
+               still cancel it (see tap-dot queue). Lifts faster than
+               PALM_TAP_MIN_MS are micro-bounce noise: never a dot. */
+            if (dur <= PALM_TAP_MS && dur >= PALM_TAP_MIN_MS &&
                 st.maxD2 < PALM_MOVE_MIN * PALM_MOVE_MIN) {
-              isDrawing = true;
-              startStroke(st.lx, st.ly);
-              endStroke();
+              var nowL = Date.now();
+              var chain = lastBounce &&
+                (nowL - lastBounce.at) <= 800 &&
+                d2near(st.lx, st.ly, lastBounce.x, lastBounce.y) <=
+                  PALM_ROCK_PX * PALM_ROCK_PX;
+              if (chain) {
+                /* another bounce of the same rocking palm */
+                lastBounce = { x: st.lx, y: st.ly, at: nowL };
+              } else {
+                queueTapDot(st.lx, st.ly);
+              }
             }
             /* otherwise: a resting palm lifted - discard silently */
           }
@@ -1959,6 +2116,10 @@
       }
       window.addEventListener('resize',            onResize, false);
       window.addEventListener('orientationchange', onResize, false);
+      /* flush pending note saves when the tab actually leaves, so
+         the 500 ms debounce can never lose the last stroke */
+      window.addEventListener('pagehide',     doSaveNow, false);
+      window.addEventListener('beforeunload', doSaveNow, false);
     }
 
     /* ============================================================
