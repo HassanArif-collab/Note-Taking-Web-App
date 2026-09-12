@@ -1,49 +1,49 @@
-# MathNotes
+# MathNotes v4.0 "Samsung Edition"
 
-A single-file HTML5 handwriting app for university math notes — built for and tested against **Safari 9 / iOS 9.3.5** (iPad 3rd generation, 2012). No frameworks, no build step, no dependencies: one `index.html` with inline CSS (flexbox + `-webkit-` prefixes) and inline ES5 JavaScript.
+A single-file HTML5 handwriting app for university math notes — built for and tested against **Safari 9 / iOS 9.3.5** (iPad 3rd generation, 2012). No frameworks, no build step, no dependencies: one `index.html` with inline CSS and inline ES5 JavaScript.
 
 **Use it here:** https://hassanarif-collab.github.io/Note-Taking-Web-App/
 
-## Features
+## What v4 changes
 
-- **Notebooks** — multiple notebooks, create / rename / delete (long-press a cover)
-- **Pages** — unlimited pages per notebook with a thumbnail page sheet
-- **4 pens** — Pen, Marker, Highlighter (multiply blend), Pencil
-- **12 colors** and 5 stroke sizes
-- **Object eraser** — tap a stroke to delete the whole stroke
-- **Undo / Redo** — 100 levels per page
-- **Dark mode**
-- **PNG export** — long-press the exported image to save to Photos
-- **Offline storage** — everything in `localStorage`, saved automatically (500 ms debounced, flushed when you leave the page)
+v4 is a ground-up redesign to feel like **Samsung Notes on a Galaxy Tab**:
 
-## Palm rejection (v3.1)
+- **Scrolling lined paper** — a continuous vertical document of discrete pages (ruled lines every 38 px, page numbers in the gaps, blank/grid/dotted templates in the ⋮ menu).
+- **Two-finger scrolling with momentum** — pan with two coherent fingers, flick for momentum, exactly like a tablet notes app. Writing is never blocked.
+- **Samsung-style chrome** — white header, floating right-edge tool capsule (pen / eraser / undo / redo), pen palette with live stroke previews.
+- **5 real pen renderers** — Ballpoint (constant), Fountain (velocity-tapered width), Calligraphy (direction-dependent chisel width), Pencil (grainy double pass), Highlighter (wide, translucent, butt caps). 12 colors, 6-step thickness with live preview.
+- **Tile-cached rendering** — finished strokes are baked into 256 px offscreen tiles, so scrolling composites tiles instead of redrawing every stroke (big win on a 2012 iPad). Live ink draws one segment per move; nothing per-move touches the DOM.
+- **Notes home + notebooks** — Samsung-style card grid, FAB "new note", notebook drawer. Old v2 data migrates automatically (each old page becomes a note).
+- **S-Class palm rejection** — see below.
+- **Eraser with stroke and area modes**, movement-gated so a resting palm cannot erase; undo/redo (60 levels); PNG export (first 3 pages); dark paper option; autosave (700 ms debounced, flushed on pagehide).
 
-A 2012 iPad has no active digitizer, and iOS 9 Safari reports touch radius as the spec default (1) — so the old radius-only check could never fire. v3 uses behavioural heuristics:
+## S-Class palm rejection (v4)
 
-- **Movement gate** — a touch only starts inking after it travels ~5 px from its touchdown point. A resting palm stays still; writing moves. Nothing is lost: the touchdown point is replayed when the stroke commits.
-- **Arbitration** (new in v3.1) — several touches may be "pending" at once; the first one to travel far enough commits, and every other touch is instantly declared a palm. This replaces v3.0's multi-touch gate, which rejected *every new stroke* whenever the palm was still resting on the screen (strokes failed until you lifted the palm completely).
-- **Anti-bounce tap-dots** (new in v3.1) — a quick no-movement tap no longer inks instantly. It waits 200 ms: if the same spot is touched again immediately (a rocking/bouncing palm), the dot is dropped; if the pen commits a stroke meanwhile, the dot was real and inks at once. Taps shorter than 80 ms are pure noise and never dot.
-- **Identifier lock** — once a stroke starts, only its own touch drives it; every other touch is ignored.
-- **Settle rule / stale purge** (Max only) — a touch that has sat still for 600 ms must travel 16 px (not 5) to ink, so palm creep and repositioning slides never draw; stationary touches are declared palms the moment a fresh touch lands.
-- **Radius check** — kept for devices that do report contact area (harmless on iPad 3).
+The iPad 3 has no pen digitizer, reports constant touch radius, and no force — so rejection is behavioural, like every finger-mode note app. v4 observes every new touch as a **probe** and scores it continuously:
 
-The **Palm** toolbar button cycles three levels:
+1. **Commit gate (Max)** — ink requires *sustained speed* (> 0.09 px/ms smoothed), *directional coherence* (> 0.42 over an 8-sample window), *travel* (> 6 px), and a minimum age (80 ms). Fast writers commit via an express lane (12 px at > 0.16 px/ms). 40 px of travel at writing speed always commits.
+2. **Palm verdicts are permanent** — a touch that sits 400 ms with under 10 px travel is declared a palm forever; it can never wake up and steal the pen, no matter how much it drifts after your finger lifts.
+3. **Palm memory** — rejected palm positions are remembered for 3.5 s; a new touch landing near one is a "suspect" with 1.35× stricter thresholds. When a suspect proves itself as ink, nearby palm memory is cleared (learning).
+4. **Palm teams** — two contacts landing within 100 ms and 48 px of each other are a hand landing; both become suspects.
+5. **Handedness zones** (Max, settable Right/Left/Both) — a soft suspect band on the bottom 104 px and the writing-hand side 112 px (never a hard block).
+6. **Anti-bounce dots** — taps are queued 220 ms; a re-land within 18 px cancels the dot (palm bounce chains leave nothing).
+7. **Mid-stroke discard** (Max) — a committed stroke that decays into slow, straight drift (> 600 ms, < 0.022 px/ms, straightness > 0.93) is auto-removed live with a toast. Deliberate slow lines (fraction bars at ~0.12 px/ms) are far above the discard line and are safe.
+8. **Arbitration** — the first probe to earn ink verdicts every other live probe as palm; new touches arriving mid-stroke are palms.
 
 | Level | Behaviour |
 |-------|-----------|
-| **Palm: Off** | Original v2 behaviour — ink on touchdown |
-| **Palm: Med** (default) | Movement gate + arbitration + anti-bounce dots |
-| **Palm: Max** | Med + late-arrival penalty (12 px) + settle rule (16 px) + stale purge |
+| **Palm: Off** | Ink on touchdown (old behaviour) |
+| **Palm: Med** | Simple 6 px travel gate — for ultra-slow writers (trades palm safety for forgiveness) |
+| **Palm: Max** (default) | Full S-Class engine above |
 
-When the capacitive stylus arrives, **Max** is the level to write with the palm resting (Max keeps palm creep from inking between strokes); **Med** feels a touch snappier at stroke start. Remaining honest limitation: a *slow deliberate* palm drag while nothing else is on screen in **Med** can still ink a stray line (undo fixes it), and a single isolated palm bounce that never re-lands can still leave one dot.
+**Honest limitations** (physics, not software): a fast deliberate palm *slide* across the screen is indistinguishable from a finger and will ink (every finger-mode app shares this; undo, or an artist glove, fixes it). In Med, a slow palm drag can ink. True S-Pen-level rejection requires the pen digitizer hardware those tablets have.
 
-### v3.1 performance fixes (iPad 3)
+## Recommended hardware (for this iPad)
 
-- The pending-indicator ring no longer follows the touch on every `touchmove` (that forced a relayout at 60 Hz).
-- The canvas rect is cached per touchdown instead of queried per touch point per move.
-- Pen style is applied once per stroke instead of once per segment.
-- Note saving is debounced at 500 ms (was 120 ms) and force-flushed on `pagehide`/`beforeunload`, so the full-notebook serialisation no longer freezes right as you start the next stroke.
+- **Stylus**: passive capacitive disc-tip (e.g. Adonit Jot-style, or the Rs. 250-300 2-in-1 disc styluses on Daraz.pk). Active/Bluetooth styluses and Apple Pencil do NOT work on a 2012 iPad or in Safari 9.
+- **Paper feel**: any matte "paper-feel" PET protector cut for 9.7-inch iPad 2/3/4-class screens (Daraz/AliExpress, ~Rs. 1,200-2,000). The Paperlike brand has no legacy 9.7 size.
+- **Highly recommended**: a two-finger artist glove (~Rs. 250-400 on Daraz) — removes most palm contacts physically, which helps the software rejection a lot.
 
 ## Safari 9 rules (for contributors)
 
-ES5 only. Forbidden: `let`/`const`, arrow functions, template literals, classes, `for...of`, destructuring, Promises, `fetch`, Pointer Events, Service Workers, CSS Grid, CSS custom properties, `var()`, `:focus-visible`, `aspect-ratio`, flex `gap`, the `download` attribute, `Array.includes`, `Object.assign`. Touch Events + Canvas 2D + `localStorage` (in try/catch) only. After editing, validate the inline JS with `new Function(js)` and re-check every item above — a single unsupported token is a silent white screen on the iPad.
+ES5 only. Forbidden: `let`/`const`, arrow functions, template literals, classes, `for...of`, destructuring, Promises, `fetch`, Pointer Events, Service Workers, CSS Grid, CSS custom properties, `var()`, `:focus-visible`, `aspect-ratio`, flex `gap`, `clamp(`, the `download` attribute, `Array.includes`, `Object.assign`. Touch Events + Canvas 2D + `localStorage` (in try/catch) only. After editing, validate the inline JS with `new Function(js)` and re-check every item above — a single unsupported token is a silent white screen on the iPad. Behavioral test suite: `node scripts/test_v4.js` (41 assertions).
