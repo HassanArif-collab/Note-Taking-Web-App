@@ -53,9 +53,13 @@ observed as a **probe** and scores itself continuously:
 
 | Level | Behaviour |
 |-------|-----------|
-| **Palm: Off** | Ink on touchdown |
-| **Palm: Med** | Simple 6 px travel gate |
+| **Palm: Off** | Ink on touchdown (testing, and for a mouse) |
 | **Palm: Max** (default) | Full engine |
+
+There used to be a **Med** level. It was a bare "moved 6 px, so it is ink" gate
+with no suspicion, no veto and no arbitration - it read as partial protection
+while giving essentially none, which is worse than offering nothing. It is gone,
+and anything saved on it is migrated to Max.
 
 **Honest limitations**: a fast deliberate palm slide is still indistinguishable
 from a finger and will ink (undo or an artist glove fixes it). In Med, a slow
@@ -101,8 +105,8 @@ ES5 only. Forbidden: `let`/`const`, arrow functions, template literals, classes,
 
 ```
 node scripts/check_es5.js     # Safari 9 gate - run before every push
-node scripts/test_palm.js     # palm-rejection behaviour (24 assertions)
-node scripts/test_recorder.js # flight recorder (9 assertions)
+node scripts/test_palm.js     # palm-rejection behaviour (25 assertions)
+node scripts/test_recorder.js # recorder + pinch-zoom (13 assertions)
 node scripts/replay.js FILE   # replay a recorded touch trace
 ```
 

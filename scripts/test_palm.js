@@ -377,6 +377,17 @@ test('SLOW straight stroke down-AND-right still inks', function (done) {
   });
 });
 
+test('a setting saved on the old Med level is migrated to Max', function (done) {
+  var app = freshAtLevel(1);            /* PALM_MED as stored by an old build */
+  app.stroke({ id: 9, x0: PALM.x, y0: PALM.y, x1: PALM.x - 60, y1: PALM.y, speed: 0.05, hold: 150 });
+  after(300, function () {
+    app.flushFrames();
+    var n = app.strokes().length;
+    check('stored Med no longer means "6px and it inks"', n === 0, n + ' strokes');
+    done();
+  });
+});
+
 /* ---------------- run ---------------- */
 console.log('\npalm rejection behaviour\n');
 (function run(i) {

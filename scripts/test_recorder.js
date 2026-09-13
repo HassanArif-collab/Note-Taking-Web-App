@@ -51,5 +51,47 @@ check('Copy report produces valid JSON', !!parsed && parsed.samples.length > 0,
 check('report overlay opens', app4.els.traceOverlay.className.indexOf('on') >= 0);
 check('report stays pasteable', val.length < 400000, val.length + ' chars');
 
+/* ---- pinch-zoom, from the real trace ---- */
+function zoomOf(a) { return a.trace().zoom; }
+
+/* anchored pinch: one finger planted, the other sliding. The old
+   detector needed BOTH moving, so this could never zoom. */
+var p1 = fresh();
+var z1 = zoomOf(p1);
+p1.down(10, 300, 300);
+p1.down(11, 500, 300);
+for (i = 1; i <= 10; i++) { p1.tick(16); p1.moveTo(10, 300, 300); p1.moveTo(11, 500 + i * 9, 300); }
+p1.up(10); p1.up(11);
+check('anchored pinch zooms (one finger held still)', Math.abs(zoomOf(p1) - z1) > 0.02,
+      z1 + ' -> ' + zoomOf(p1));
+
+/* pinch while a stroke owns the pen - the bail-ink case that made
+   "the palm draws" and "it won't zoom" the same bug */
+var p2 = fresh();
+var z2 = zoomOf(p2);
+p2.stroke({ id: 1, x0: 200, y0: 500, x1: 320, y1: 500, speed: 0.35, keepDown: true });
+p2.down(10, 300, 200);
+p2.down(11, 500, 200);
+for (i = 1; i <= 10; i++) { p2.tick(16); p2.moveTo(10, 300 - i * 5, 200); p2.moveTo(11, 500 + i * 5, 200); }
+check('pinch works even while a stroke owns the pen', Math.abs(zoomOf(p2) - z2) > 0.02,
+      z2 + ' -> ' + zoomOf(p2));
+p2.up(1); p2.up(10); p2.up(11);
+
+/* two fingers resting still must NOT zoom */
+var p3 = fresh();
+var z3 = zoomOf(p3);
+p3.down(10, 300, 300);
+p3.down(11, 500, 300);
+for (i = 1; i <= 12; i++) { p3.tick(30); p3.moveTo(10, 300 + (i % 2), 300); p3.moveTo(11, 500, 300 + (i % 2)); }
+p3.up(10); p3.up(11);
+check('two resting fingers do not zoom', Math.abs(zoomOf(p3) - z3) < 0.001,
+      z3 + ' -> ' + zoomOf(p3));
+
+/* a single stroke must still ink normally */
+var p4 = fresh();
+p4.stroke({ id: 1, x0: 300, y0: 300, x1: 430, y1: 330, speed: 0.30, wobble: 3 });
+check('a normal stroke still inks with pinch detection in place',
+      p4.strokes().length === 1, p4.strokes().length + ' strokes');
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
