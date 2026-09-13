@@ -736,6 +736,10 @@ var STORAGE_KEY_V4 = 'mathnotes_v4';
 var STORAGE_KEY_V2 = 'mathnotes_v2';
 var STORAGE_KEY_V1 = 'mathnotes_v1';
 
+/* Med used to be a bare "moved 6px, so it is ink" gate - no suspicion,
+   no veto, no arbitration. It read as partial protection while giving
+   essentially none, which is worse than offering nothing, so it is
+   gone. Off stays for testing and for a mouse. */
 var PALM_OFF = 0, PALM_MED = 1, PALM_MAX = 2;
 var PALM_NAMES = ['Off', 'Med', 'Max'];
 
@@ -862,6 +866,10 @@ var SC = {
                               contender = the palm, not the pen */
   DOT_NEAR_PX:     250,    /* a tap dot must land near recent writing    */
   DOT_NEAR_MS:     4000,   /* and soon after it, or it is a palm tap.    */
+  PINCH_DELTA:     16,     /* separation change that means "pinch". Measured
+                              directly instead of requiring BOTH fingers to be
+                              moving, so an anchored pinch - one finger planted,
+                              the other sliding - is finally recognised. */
   PAN_DEG:         35,     /* coherence cone for two-finger pan */
   PAN_RATIO:       3,
   PAN_SPEED:       0.05,
@@ -1029,7 +1037,10 @@ function loadAll() {
     curNoteId = notebooks[curNotebook] && notebooks[curNotebook].notes[0] || null;
   }
   if (data.set) {
-    if (typeof data.set.palmLevel === 'number') settings.palmLevel = data.set.palmLevel;
+    if (typeof data.set.palmLevel === 'number') {
+      /* anyone saved on the old Med level gets the real engine */
+      settings.palmLevel = data.set.palmLevel === PALM_MED ? PALM_MAX : data.set.palmLevel;
+    }
     if (typeof data.set.hand === 'number') settings.hand = data.set.hand;
     if (data.set.spacing === 32 || data.set.spacing === 38 || data.set.spacing === 44) settings.spacing = data.set.spacing;
     if (typeof data.set.template === 'number') settings.template = data.set.template;
@@ -2004,7 +2015,15 @@ function moveTouch(touch, now) {
     requestRender();
     return;
   }
-  if (st.state === 'palm') { st.x = pt.x; st.y = pt.y; return; }
+  if (st.state === 'palm') {
+    /* client coords must keep tracking even for a rejected contact:
+       the pinch detector measures the separation between two contacts,
+       and freezing cx/cy here made that separation constant, so a
+       pinch could never be seen while anything was inking */
+    st.x = pt.x; st.y = pt.y;
+    st.cx = touch.clientX; st.cy = touch.clientY;
+    return;
+  }
   if (st.state === 'ink') { appendInk(st, pt, now); return; }
 
   /* --- probe update --- */
@@ -2031,11 +2050,7 @@ function moveTouch(touch, now) {
     st.coh = Math.sqrt(sx * sx + sy * sy) / st.dirs.length;
   }
 
-  if (settings.palmLevel === PALM_MED) {
-    if (st.net > SC.COMMIT_NET) promoteInk(st, now);
-  } else if (settings.palmLevel === PALM_MAX) {
-    tryCommit(st, now);
-  }
+  if (settings.palmLevel !== PALM_OFF) tryCommit(st, now);
 }
 
 function tryCommit(st, now) {
@@ -2113,12 +2128,16 @@ function appendInk(st, pt, now) {
   }
 }
 
-function discardActiveInk(st, now, usurped) {
+function discardActiveInk(st, now, why) {
   delete inkNow[st.id];
   st.state = 'palm';
-  traceVerdict(usurped ? 'usurped' : 'discarded', st.id, now);
+  traceVerdict(why === 'pinch' ? 'pinch-cancel' : (why ? 'usurped' : 'discarded'), st.id, now);
   palmMemAdd(st.sx, st.sy, now);
-  toast(usurped ? 'Palm stroke removed - pen took over' : 'Palm stroke discarded');
+  /* a pinch is the user asking to zoom - dropping the stroke is the
+     point, not an error worth interrupting them about */
+  if (why !== 'pinch') {
+    toast(why ? 'Palm stroke removed - pen took over' : 'Palm stroke discarded');
+  }
   requestRender();
 }
 
@@ -2312,6 +2331,47 @@ function engageGesture(ids, now, pairDist) {
   hidePendingDot();
 }
 
+/* Contacts that could join a gesture: down, not already drawing. */
+function nonInkProbes() {
+  var out = [], k, o;
+  for (k in touchStates) {
+    if (!touchStates.hasOwnProperty(k)) continue;
+    o = touchStates[k];
+    if (o.kind === 'probe' && o.state !== 'ink') out.push(o);
+  }
+  return out;
+}
+
+function discardAllActiveInk(now) {
+  var own = inkOwners(), i;
+  for (i = 0; i < own.length; i++) discardActiveInk(own[i], now, 'pinch');
+}
+
+/* Pinch by measuring the separation between two contacts rather than
+   by requiring both of them to be moving. A finger held still produces
+   no movement vector, so the old test could never see the most natural
+   pinch there is: one finger planted, the other sliding. */
+var pinchTrack = null;
+
+function tryPinch(now) {
+  var p = nonInkProbes();
+  if (p.length !== 2) { pinchTrack = null; return false; }
+  var a = p[0], b = p[1];
+  var d = dist(a.cx, a.cy, b.cx, b.cy);
+  if (d < 40) { pinchTrack = null; return false; }
+
+  var same = pinchTrack &&
+    ((pinchTrack.a === a.id && pinchTrack.b === b.id) ||
+     (pinchTrack.a === b.id && pinchTrack.b === a.id));
+  if (!same) { pinchTrack = { a: a.id, b: b.id, d0: d }; return false; }
+  if (Math.abs(d - pinchTrack.d0) < SC.PINCH_DELTA) return false;
+
+  discardAllActiveInk(now);
+  engageGesture([a.id, b.id], now, d);
+  pinchTrack = null;
+  return true;
+}
+
 function detectGesture(now) {
   if (gesture) return;
   if (tool !== 'pen') return;
@@ -2320,9 +2380,16 @@ function detectGesture(now) {
      diagnosed from these, so each reason is recorded - but only when
      at least two fingers are actually down, or the log would fill
      with ordinary single-touch writing. */
-  var live = liveTouchCount();
-  if (anyInkActive()) { if (live >= 2) traceGesture('bail-ink', live, 0, now); return; }
   if (settings.palmLevel === PALM_OFF) return;
+  var live = liveTouchCount();
+
+  /* Deliberate two-finger pinch outranks whatever is drawing. The old
+     order refused every gesture while a stroke owned the pen, so a palm
+     that falsely inked also disabled zoom - which is why "the palm
+     draws" and "it won't zoom" were the same complaint. */
+  if (tryPinch(now)) return;
+
+  if (anyInkActive()) { if (live >= 2) traceGesture('bail-ink', live, 0, now); return; }
 
   var vecs = [], k, o, rv;
   for (k in touchStates) {
@@ -3122,6 +3189,7 @@ function resetTouchTracking() {
   palmMem = [];
   lastBounce = null;
   lastInkPt = null;
+  pinchTrack = null;
   eraserTouchId = null;
   lassoId = null;
   selDrag = null;
@@ -3667,7 +3735,7 @@ function buildMoreMenu() {
         afterSettingChange();
       } },
     { lbl: 'Zoom', val: Math.round(zoom * 100) + '%', act: function () { resetZoom(); } },
-    { lbl: 'Palm rejection', val: PALM_NAMES[settings.palmLevel], act: function () { settings.palmLevel = (settings.palmLevel + 1) % 3; applyPalmUI(); afterSettingChange(); } },
+    { lbl: 'Palm rejection', val: PALM_NAMES[settings.palmLevel], act: function () { settings.palmLevel = settings.palmLevel === PALM_OFF ? PALM_MAX : PALM_OFF; applyPalmUI(); afterSettingChange(); } },
     { lbl: 'Writing hand', val: HAND_NAMES[settings.hand], act: function () { settings.hand = (settings.hand + 1) % 3; afterSettingChange(); } },
     { lbl: 'Touch guide', val: settings.guideDots ? 'On' : 'Off', act: function () { settings.guideDots = !settings.guideDots; hidePendingDot(); afterSettingChange(); } },
     { lbl: 'Copy report', val: traceCount ? traceCount + ' pts' : 'empty', act: showTrace },
@@ -3707,7 +3775,7 @@ function applyPalmUI() {
   palmBtn.className = settings.palmLevel === PALM_MAX ? 'maxed' : (settings.palmLevel === PALM_MED ? 'med' : '');
 }
 function cyclePalm() {
-  settings.palmLevel = (settings.palmLevel + 1) % 3;
+  settings.palmLevel = settings.palmLevel === PALM_OFF ? PALM_MAX : PALM_OFF;
   applyPalmUI();
   toast('Palm rejection: ' + PALM_NAMES[settings.palmLevel]);
   saveSoon();
