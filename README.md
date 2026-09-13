@@ -62,26 +62,53 @@ from a finger and will ink (undo or an artist glove fixes it). In Med, a slow
 palm drag can ink. True S-Pen-level rejection requires digitizer hardware - no
 amount of software gets all the way there on 2012 capacitive hardware.
 
-## Reporting a palm-rejection problem
+## Reporting a problem
 
-Thresholds depend on your digitizer, your stylus and your hand, so a bug report
-is far more useful as a recording than a description.
+The app records itself. Every touch sample, every palm verdict, and every
+gesture the engine refused to start goes into a rolling buffer holding roughly
+the last minute. When something goes wrong - a stray palm line, a zoom that
+didn't happen - open the kebab menu and tap **Send report**. The buffer is
+committed straight to the `diagnostics` branch of this repository. No copying,
+no pasting, no mail.
 
-1. Kebab menu -> **Touch trace** (it reads `Recording`).
-2. Reproduce the problem - rest your palm, write, let it leave a stray mark.
-3. Kebab menu -> **Touch trace** again to stop.
-4. Kebab menu -> **Show trace**, then Copy, and mail the text to yourself.
-5. Save it as `traces/<name>.json` in the repo.
+It records continuously rather than on demand because the failures are
+intermittent. You cannot start a recording for a bug you did not know was
+coming.
 
-Then replay it against the engine offline:
+### One-time setup
+
+1. On GitHub: **Settings -> Developer settings -> Personal access tokens ->
+   Fine-grained tokens -> Generate new token**.
+2. Repository access: **Only select repositories** -> this repository.
+3. Permissions: **Contents -> Read and write**. Nothing else.
+4. Copy the token, then in the app: kebab menu -> **GitHub token**, paste, Save.
+
+The token is kept in `localStorage` on that iPad and nowhere else. It is never
+written into a note, into a report, or into the repository. Revoke it on GitHub
+whenever you want; the app simply stops uploading.
+
+Before relying on any of it, tap **Test GitHub connection** once. A 2012 TLS
+stack talking to a 2025 API is not a given, and if that fails nothing else in
+the pipeline can work.
+
+### Reading the reports
 
 ```
-node scripts/replay.js traces/<name>.json
+git fetch origin diagnostics
+git show origin/diagnostics:traces/auto/<file>.json > /tmp/t.json
+node scripts/replay.js /tmp/t.json
 ```
 
-It prints every contact, what the device decided, and what the current code
-decides - so a fix can be verified against your real hand instead of a guess.
-Add `--html <other-index.html>` to compare two builds on the same input.
+Replay prints every contact, what the device decided, and what the current code
+decides - plus every gesture that was attempted and refused, with the reason.
+`--html <other-index.html>` replays the same input against another build, which
+is how a change is shown to have altered a real verdict.
+
+**Undo is a label.** The recorder can see what the engine decided but never
+whether it was right - no sensor on this hardware reports which contact was a
+palm. An undo just after a stray mark appears is you saying "that one was
+wrong", and replay points at whichever contact inked just before it. So when a
+palm mark shows up, undo it before sending the report.
 
 ## Recommended hardware (for this iPad)
 
@@ -96,7 +123,8 @@ ES5 only. Forbidden: `let`/`const`, arrow functions, template literals, classes,
 
 ```
 node scripts/check_es5.js     # Safari 9 gate - run before every push
-node scripts/test_palm.js     # palm-rejection behaviour (20 assertions)
+node scripts/test_palm.js     # palm-rejection behaviour (24 assertions)
+node scripts/test_upload.js   # recorder + GitHub upload (19 assertions)
 node scripts/replay.js FILE   # replay a recorded touch trace
 ```
 

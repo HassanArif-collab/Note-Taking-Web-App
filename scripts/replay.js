@@ -82,10 +82,9 @@ function advanceTo(t) {
   lastT = t;
 }
 
-/* Record the replay with the app's own recorder, so the verdicts the
- * current engine reaches come back in exactly the format the device
- * produced - the two are then directly comparable. */
-app.clickMenu('Touch trace');
+/* The recorder is always on, so the replay records itself: the
+ * verdicts the current engine reaches come back in exactly the format
+ * the device produced, and the two are directly comparable. */
 
 for (i = 0; i < trace.samples.length; i++) {
   r = trace.samples[i];
@@ -117,17 +116,13 @@ setTimeout(function () {
 
   /* pull the replay's own verdicts back out of the recorder */
   var nowVerdicts = {}, nowDots = 0;
-  app.clickMenu('Touch trace');
-  if (app.clickMenu('Show trace')) {
-    var mine = null;
-    try { mine = JSON.parse(app.els.traceText.value); } catch (e) { mine = null; }
-    if (mine && mine.samples) {
-      for (var q = 0; q < mine.samples.length; q++) {
-        var rr = mine.samples[q];
-        if (rr[0] !== 'v') continue;
-        if (rr[2] === 'dot') nowDots++;
-        else nowVerdicts[rr[1]] = rr[2];
-      }
+  var mine = app.trace();
+  if (mine && mine.samples) {
+    for (var q = 0; q < mine.samples.length; q++) {
+      var rr = mine.samples[q];
+      if (rr[0] !== 'v') continue;
+      if (rr[2] === 'dot') nowDots++;
+      else nowVerdicts[rr[1]] = rr[2];
     }
   }
 
@@ -158,6 +153,37 @@ setTimeout(function () {
     console.log('  ' + pad(id, 9) + pad(dur + 'ms', 11) +
                 pad(Math.round(c.path) + 'px', 9) + pad(dev, 14) + pad(now, 10) +
                 (dev === now ? '' : '  <- changed'));
+  }
+
+  var devG = [];
+  for (var gi = 0; gi < trace.samples.length; gi++) {
+    if (trace.samples[gi][0] === 'g') devG.push(trace.samples[gi]);
+  }
+  if (devG.length) {
+    console.log('
+  gesture events on the device:');
+    var bail = {};
+    for (gi = 0; gi < devG.length; gi++) {
+      var g = devG[gi];
+      console.log('    ' + pad(g[4] + 'ms', 9) + g[1] +
+                  (g[1].indexOf('bail') === 0 ? '   (' + g[2] + ' down, ' + g[3] + ' moving)' : ''));
+      if (g[1].indexOf('bail') === 0) bail[g[1]] = (bail[g[1]] || 0) + 1;
+    }
+    var bk, bl = [];
+    for (bk in bail) bl.push(bk + ' x' + bail[bk]);
+    if (bl.length) {
+      console.log('
+  gestures tried and NOT given: ' + bl.join(', '));
+      if (bail['bail-ink']) {
+        console.log('    bail-ink: a stroke owned the pen, so two-finger zoom was');
+        console.log('    disabled. If that stroke was a palm, "it does not zoom" and');
+        console.log('    "the palm draws" are the same bug.');
+      }
+      if (bail['bail-slow']) {
+        console.log('    bail-slow: fewer than two fingers were MOVING - an anchored');
+        console.log('    pinch (one finger planted) never qualifies.');
+      }
+    }
   }
 
   if (deviceUndos.length) {
