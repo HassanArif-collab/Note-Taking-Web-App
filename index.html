@@ -1449,6 +1449,12 @@ function applyOp(op, reverse) {
 function doUndo() {
   if (!undoStack.length) return;
   clearSelection();
+  /* Undo is free ground truth. The recorder can see WHAT the engine
+     decided but never whether it was RIGHT - no sensor reports which
+     contact was the palm. An undo straight after a mark appears is the
+     user saying "that one was wrong", which is exactly the label the
+     trace is otherwise missing. */
+  traceVerdict('undo', -1, Date.now());
   var op = undoStack.pop();
   applyOp(op, true);
   redoStack.push(op);

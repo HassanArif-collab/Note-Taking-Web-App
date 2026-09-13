@@ -40,11 +40,13 @@ if (!trace.samples || !trace.samples.length) {
 /* ---- what the device did, according to the trace ---- */
 var deviceVerdicts = {};
 var deviceDots = 0;
+var deviceUndos = [];   /* timestamps - each is the user saying "that was wrong" */
 var i, r;
 for (i = 0; i < trace.samples.length; i++) {
   r = trace.samples[i];
   if (r[0] === 'v') {
     if (r[2] === 'dot') deviceDots++;
+    else if (r[2] === 'undo') deviceUndos.push(r[3]);
     else deviceVerdicts[r[1]] = r[2];
   }
 }
@@ -156,6 +158,14 @@ setTimeout(function () {
     console.log('  ' + pad(id, 9) + pad(dur + 'ms', 11) +
                 pad(Math.round(c.path) + 'px', 9) + pad(dev, 14) + pad(now, 10) +
                 (dev === now ? '' : '  <- changed'));
+  }
+
+  if (deviceUndos.length) {
+    console.log('\n  ' + deviceUndos.length + ' undo(s) on the device, at ' +
+                deviceUndos.join('ms, ') + 'ms.');
+    console.log('  An undo just after a mark appears is the user labelling that');
+    console.log('  mark a false positive - look at whichever contact inked just');
+    console.log('  before each one.');
   }
 
   console.log('\n  device inked : ' + countInk(deviceVerdicts) + ' stroke(s)' +
