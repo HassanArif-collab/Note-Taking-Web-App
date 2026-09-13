@@ -295,6 +295,17 @@ input { font: inherit; }
   box-shadow: 0 4px 20px rgba(0,0,0,0.4); display: block; margin: 0 auto;
 }
 #exportHint { color: #E8E8E8; font-size: 13px; margin-top: 14px; }
+#traceHint { color: #E8E8E8; font-size: 13px; margin-bottom: 10px; }
+#traceText {
+  width: 92%; max-width: 660px; height: 46%;
+  font-family: Menlo, Monaco, monospace; font-size: 11px;
+  padding: 8px; border-radius: 8px; border: 0;
+  -webkit-user-select: text; user-select: text;
+}
+#traceCloseBtn {
+  margin-top: 14px; color: #FFFFFF; font-size: 15px; font-weight: 600;
+  background: rgba(255,255,255,0.16); border-radius: 18px; padding: 10px 26px;
+}
 #exportCloseBtn {
   margin-top: 14px; color: #FFFFFF; font-size: 15px; font-weight: 600;
   background: rgba(255,255,255,0.16); border-radius: 18px; padding: 10px 26px;
@@ -619,6 +630,13 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
   <div id="toast"></div>
   <div id="warning"></div>
 
+  <!-- touch trace overlay (palm-rejection diagnostics) -->
+  <div id="traceOverlay" class="overlay">
+    <div id="traceHint">Select all of this text, copy it, and send it to yourself (Mail or Notes).</div>
+    <textarea id="traceText" rows="12" readonly></textarea>
+    <button id="traceCloseBtn">Close</button>
+  </div>
+
   <!-- export overlay -->
   <div id="exportOverlay" class="overlay">
     <img id="exportImg" alt="Export preview">
@@ -757,13 +775,43 @@ var SC = {
   ZONE_BOTTOM:     104,    /* handedness soft zone (px) */
   ZONE_SIDE:       112,
   BIG_RADIUS:      18,     /* contact radius treated as palm (if reported) */
-  TAP_MS:          320,    /* tap window for dots */
+  TAP_MS:          220,    /* tap window for dots (a deliberate tap
+                              is quick; a palm brush lingers) */
   BOUNCE_MS:       220,    /* dot queued this long before it appears */
   BOUNCE_PX:       18,     /* re-land inside this cancels the dot */
   DISCARD_SPEED:   0.022,  /* mid-stroke discard: slower than this */
   DISCARD_MS:      600,
   DISCARD_STRAIGHT:0.93,
   DISCARD_PATH:    25,
+  DECISIVE_SPEED:  0.12,   /* decisive lane needs real writing speed too.
+                              0.05 px/ms is 50 px/s - slower than anyone
+                              writes, and it let every palm slide ink. */
+  ANAT_MS:         2500,   /* palm anatomy: how long recent ink anchors */
+  ANAT_DY:         140,    /* A contact this far BELOW recent ink, on the
+                              writing-hand side, is the heel of the hand.
+                              The heel sits several cm below the pen tip,
+                              so 140px stays clear of simply writing the
+                              next line down (spacing is 32-44px). */
+  ANAT_SLACK:      -40,
+  ANAT_MIN_DIST:   300,    /* ...and far enough from the pen to BE the heel.
+                              Without this, writing slowly down-and-right of
+                              the last stroke (long division, the next column
+                              of a matrix) looks identical to a palm slide and
+                              was being rejected. The heel sits much further
+                              from the pen tip than the next stroke does. */
+  VETO_STRAIGHT:   0.95,   /* a suspect dragging this straight is a palm */
+  VETO_SPEED:      0.18,   /* slide, not handwriting. Straightness alone
+                              cannot tell a palm slide from a straight
+                              character, so the veto only fires on drags
+                              that are BOTH straight and slower than
+                              anyone writes. */
+  VETO_PATH:       12,     /* must engage before the commit lanes do:
+                              a suspect can commit at ~18px, so a
+                              30px veto threshold never fired */
+  USURP_RATIO:     0.6,    /* incumbent this much slower than the
+                              contender = the palm, not the pen */
+  DOT_NEAR_PX:     250,    /* a tap dot must land near recent writing    */
+  DOT_NEAR_MS:     4000,   /* and soon after it, or it is a palm tap.    */
   PAN_DEG:         35,     /* coherence cone for two-finger pan */
   PAN_RATIO:       3,
   PAN_SPEED:       0.05,
@@ -786,6 +834,7 @@ var eraserPanel = byId('eraserPanel'), sizeRow = byId('sizeRow');
 var moreMenu = byId('moreMenu'), toastEl = byId('toast'), warningEl = byId('warning');
 var drawer = byId('drawer'), drawerBackdrop = byId('drawerBackdrop'), nbList = byId('nbList');
 var exportOverlay = byId('exportOverlay'), exportImg = byId('exportImg');
+var traceOverlay = byId('traceOverlay'), traceText = byId('traceText');
 var selectBtn = byId('selectBtn'), textBtn = byId('textBtn'), handBtn = byId('handBtn');
 var selBarEl = byId('selBar'), selDelBtn = byId('selDelBtn'), selCopyBtn = byId('selCopyBtn'), selDoneBtn = byId('selDoneBtn');
 var selSmallBtn = byId('selSmallBtn'), selBigBtn = byId('selBigBtn');
@@ -1400,6 +1449,12 @@ function applyOp(op, reverse) {
 function doUndo() {
   if (!undoStack.length) return;
   clearSelection();
+  /* Undo is free ground truth. The recorder can see WHAT the engine
+     decided but never whether it was RIGHT - no sensor reports which
+     contact was the palm. An undo straight after a mark appears is the
+     user saying "that one was wrong", which is exactly the label the
+     trace is otherwise missing. */
+  traceVerdict('undo', -1, Date.now());
   var op = undoStack.pop();
   applyOp(op, true);
   redoStack.push(op);
@@ -1466,6 +1521,9 @@ var pendingDotId = null;
 var rejectFlashTimer = null;
 var dotQueue = null;
 var lastBounce = null;
+/* where the pen was last seen writing - anchors the palm-anatomy
+   test and the tap-dot credibility gate */
+var lastInkPt = null;   /* {x, y, t} in document coords */
 
 var tool = 'pen';       /* 'pen' | 'select' | 'text' | 'eraser' | 'hand' */
 var eraserMode = 0;     /* 0 = stroke, 1 = area */
@@ -1568,16 +1626,89 @@ function computeSuspect(st, touch, now) {
   }
   /* bounce chain: quick tap-lift-land cycle = palm bounce */
   if (lastBounce && now - lastBounce.t < 800 && dist(lastBounce.x, lastBounce.y, st.sx, st.sy) < 26) return true;
-  /* handedness soft zone (Max only, one hand chosen) */
+  /* palm anatomy: the heel of the hand sits BELOW the pen tip and
+     on the writing-hand side of it. If we know where the pen was
+     writing a moment ago, a contact in that quadrant is a palm.
+     This is the strongest signal available without a digitizer,
+     and unlike the fixed screen bands below it actually fires
+     where a hand really rests - mid-page, not at the edge. */
+  if (settings.palmLevel === PALM_MAX && lastInkPt && now - lastInkPt.t < SC.ANAT_MS) {
+    var adx = st.sx - lastInkPt.x, ady = st.sy - lastInkPt.y;
+    if (ady > SC.ANAT_DY && dist(lastInkPt.x, lastInkPt.y, st.sx, st.sy) > SC.ANAT_MIN_DIST) {
+      if (settings.hand === HAND_R && adx > SC.ANAT_SLACK) return true;
+      if (settings.hand === HAND_L && adx < -SC.ANAT_SLACK) return true;
+      if (settings.hand === HAND_BOTH && Math.abs(adx) > 80) return true;
+    }
+  }
+  /* handedness soft zone (Max only, one hand chosen).
+     These are regions of the physical glass where the hand rests,
+     so they must be measured in SCREEN space. st.sx/st.sy are
+     document coords - subtracting scrollY only matches the screen
+     at zoom 1, and st.sx was never converted at all, so the zone
+     landed in the wrong place whenever the page was zoomed. */
   if (settings.palmLevel === PALM_MAX && settings.hand !== HAND_BOTH) {
-    var screenY = st.sy - scrollY;
-    if (screenY > viewH - SC.ZONE_BOTTOM) return true;
-    if (settings.hand === HAND_R && st.sx > viewW - SC.ZONE_SIDE) return true;
-    if (settings.hand === HAND_L && st.sx < SC.ZONE_SIDE) return true;
+    var zx = st.cx - wrapRect.left, zy = st.cy - wrapRect.top;
+    if (zy > viewH - SC.ZONE_BOTTOM) return true;
+    if (settings.hand === HAND_R && zx > viewW - SC.ZONE_SIDE) return true;
+    if (settings.hand === HAND_L && zx < SC.ZONE_SIDE) return true;
   }
   /* oversized contact area, if the hardware reports one */
   if ((touch.radiusX || 0) > SC.BIG_RADIUS) return true;
   return false;
+}
+
+/* ---------- usurpation: letting the pen take the ink back ----------
+ * In a natural writing posture the heel of the hand touches down
+ * BEFORE the pen tip. If the palm wins the race, the old engine
+ * locked every later touch out ("a stroke owns the pen") and kept
+ * that verdict until the hand lifted - which is exactly the
+ * "sometimes it doesn't register my pencil" failure.
+ *
+ * So a live stroke that behaves like a palm can be taken over by a
+ * later touch that behaves like writing. */
+function inkStraightness(st) {
+  return st.net / Math.max(st.pathLen, 1);
+}
+
+/* lenient test: is this stroke dubious enough that a newcomer
+ * deserves the chance to contend at all? */
+function inkOwnerIsDubious(st, now) {
+  if (!st || st.state !== 'ink') return false;
+  if (now - st.t0 < 120) return false;              /* too early to judge */
+  if (st.vEMA < 0.02) return true;                  /* stalled under the hand */
+  return inkStraightness(st) > SC.DISCARD_STRAIGHT && st.vEMA < SC.VETO_SPEED;
+}
+
+/* Mean speed over the whole contact. Unlike vEMA this is not still
+ * ramping up at the moment a stroke commits (the EMA ignores its
+ * first samples), so it is the honest way to compare two contacts. */
+function meanSpeed(st, now) {
+  return st.pathLen / Math.max(now - st.t0, 1);
+}
+
+/* strict test: the contender has just committed with real writing
+ * evidence - is the incumbent clearly the slower, straighter one? */
+function inkOwnerLosesTo(st, winner, now) {
+  if (!st || st === winner || st.state !== 'ink') return false;
+  if (st.vEMA < 0.02) return true;
+  return inkStraightness(st) > SC.DISCARD_STRAIGHT &&
+         meanSpeed(st, now) < meanSpeed(winner, now) * SC.USURP_RATIO;
+}
+
+function inkOwners() {
+  var out = [], k;
+  for (k in inkNow) {
+    if (!inkNow.hasOwnProperty(k)) continue;
+    if (touchStates[k]) out.push(touchStates[k]);
+  }
+  return out;
+}
+
+function allInkDubious(now) {
+  var o = inkOwners(), i;
+  if (!o.length) return false;
+  for (i = 0; i < o.length; i++) { if (!inkOwnerIsDubious(o[i], now)) return false; }
+  return true;
 }
 
 function anyInkActive() {
@@ -1703,8 +1834,15 @@ function beginTouch(touch, now) {
 
   if (gesture) st.state = 'palm';                       /* do not disturb a pan */
   else if (anyInkActive()) {                            /* a stroke owns the pen */
-    st.state = 'palm';
-    palmMemAdd(pt.x, pt.y, now);
+    if (settings.palmLevel !== PALM_OFF && allInkDubious(now)) {
+      /* every live stroke looks like a palm slide - let this touch
+         contend for the ink rather than locking it out */
+      st.contender = true;
+      st.suspect = computeSuspect(st, touch, now);
+    } else {
+      st.state = 'palm';
+      palmMemAdd(pt.x, pt.y, now);
+    }
   } else if (settings.palmLevel === PALM_OFF) {
     st.state = 'ink';
   } else {
@@ -1721,6 +1859,14 @@ function startInkRecord(st, now) {
   var s = mkStroke(settings.pen, currentPenWidth(), settings.color, st.path);
   inkNow[st.id] = { stroke: s };
   if (st.state === 'ink' && settings.palmLevel !== PALM_OFF) {
+    /* a contender that earned ink evicts the stroke it was competing
+       with, so a palm can never hold the pen hostage */
+    if (st.contender) {
+      var own = inkOwners(), oi;
+      for (oi = 0; oi < own.length; oi++) {
+        if (inkOwnerLosesTo(own[oi], st, now)) discardActiveInk(own[oi], now, true);
+      }
+    }
     /* promotion: any other live probes become palm forever */
     var k;
     for (k in touchStates) {
@@ -1742,6 +1888,7 @@ function startInkRecord(st, now) {
 function verdictPalm(st, now) {
   if (st.state === 'palm') return;
   st.state = 'palm';
+  traceVerdict('palm', st.id, now);
   palmMemAdd(st.sx, st.sy, now);
   if (pendingDotId === st.id && settings.guideDots) flashRejectedDot();
   else if (pendingDotId === st.id) hidePendingDot(st.id);
@@ -1840,10 +1987,21 @@ function tryCommit(st, now) {
   var boost = st.suspect ? SC.SUSPECT_BOOST : 1;
   var needAge = SC.PROBE_MIN_AGE * (st.suspect ? SC.SUSPECT_AGE_MULT : 1);
 
+  /* A suspect dragging in a dead-straight line is a palm sliding,
+     not handwriting - real writing curves and changes direction.
+     Only suspects are vetoed, so a deliberate straight pen stroke
+     (a fraction bar, a minus sign) is never blocked. */
+  var straight = st.net / Math.max(st.pathLen, 1);
+  if (st.suspect && st.pathLen > SC.VETO_PATH &&
+      straight > SC.VETO_STRAIGHT && st.vEMA < SC.VETO_SPEED) {
+    if (age > SC.PALM_AGE) verdictPalm(st, now);
+    return;
+  }
+
   if ((age > needAge && st.vEMA > SC.COMMIT_SPEED * boost &&
        st.coh > SC.COMMIT_COH && st.net > SC.COMMIT_NET * boost) ||
       (st.net > SC.FAST_NET * boost && st.vEMA > SC.FAST_SPEED * boost) ||
-      (st.net > SC.DECISIVE_NET && st.vEMA > 0.05)) {
+      (st.net > SC.DECISIVE_NET * boost && st.vEMA > SC.DECISIVE_SPEED * boost)) {
     promoteInk(st, now);
     return;
   }
@@ -1858,6 +2016,7 @@ function tryCommit(st, now) {
 
 function promoteInk(st, now) {
   st.state = 'ink';
+  traceVerdict('ink', st.id, now);
   startInkRecord(st, now);
 }
 
@@ -1898,11 +2057,12 @@ function appendInk(st, pt, now) {
   }
 }
 
-function discardActiveInk(st, now) {
+function discardActiveInk(st, now, usurped) {
   delete inkNow[st.id];
   st.state = 'palm';
+  traceVerdict(usurped ? 'usurped' : 'discarded', st.id, now);
   palmMemAdd(st.sx, st.sy, now);
-  toast('Palm stroke discarded');
+  toast(usurped ? 'Palm stroke removed - pen took over' : 'Palm stroke discarded');
   requestRender();
 }
 
@@ -1920,6 +2080,8 @@ function finalizeInk(st, now) {
   }
   n.strokes.push(s);
   pushUndo({ t: 'add', s: s });
+  var lp = s.pts[s.pts.length - 1];
+  lastInkPt = { x: lp[0], y: lp[1], t: now };
   var bb = strokeBBox(s);
   invalidateRange(bb.y0, bb.y1);
   recomputeDoc();
@@ -1927,8 +2089,25 @@ function finalizeInk(st, now) {
   requestRender();
 }
 
+/* A quick stationary contact is ambiguous: it is either a
+ * deliberate dot (a decimal point, an i) or a palm brushing the
+ * glass. The old guard was st.rx > 12, but an iPad 3 always
+ * reports radiusX 0, so on this hardware it was dead code and
+ * every palm tap left a dot.
+ *
+ * A deliberate dot is placed where you are already writing; a palm
+ * lands away from the pen. So a dot must be recent and near the
+ * last ink, and must not already be a suspect. */
+function dotIsCredible(st, now) {
+  if (st.suspect) return false;
+  if (st.rx > 12) return false;
+  if (!lastInkPt) return false;
+  if (now - lastInkPt.t > SC.DOT_NEAR_MS) return false;
+  return dist(lastInkPt.x, lastInkPt.y, st.sx, st.sy) < SC.DOT_NEAR_PX;
+}
+
 function queueTapDot(st, now) {
-  if (st.rx > 12) { palmMemAdd(st.sx, st.sy, now); return; }
+  if (!dotIsCredible(st, now)) { palmMemAdd(st.sx, st.sy, now); return; }
   if (dotQueue && dist(dotQueue.x, dotQueue.y, st.sx, st.sy) < SC.BOUNCE_PX) {
     /* bounce: cancel the queued dot, remember the chain */
     clearTimeout(dotQueue.timer);
@@ -1949,8 +2128,10 @@ function queueTapDot(st, now) {
 function flushDot(q) {
   var n = activeNote();
   if (!n) return;
+  traceVerdict('dot', -1, q.t);
   var s = mkStroke(settings.pen, currentPenWidth(), settings.color, [[q.x, q.y, q.t]]);
   n.strokes.push(s);
+  lastInkPt = { x: q.x, y: q.y, t: q.t };
   pushUndo({ t: 'add', s: s });
   var bb = strokeBBox(s);
   invalidateRange(bb.y0, bb.y1);
@@ -2866,6 +3047,7 @@ function resetTouchTracking() {
   momentum = null;
   palmMem = [];
   lastBounce = null;
+  lastInkPt = null;
   eraserTouchId = null;
   lassoId = null;
   selDrag = null;
@@ -2877,6 +3059,73 @@ function resetTouchTracking() {
   closeTextEditor();
 }
 
+/* ============================================================
+ * TOUCH TRACE RECORDER
+ * Palm rejection cannot be tuned from a desk: the thresholds
+ * depend on this digitizer, this stylus and this hand. When the
+ * recorder is on, every raw touch sample and every verdict the
+ * engine reaches is kept in a bounded ring buffer, so a real
+ * failure can be captured on the iPad and replayed offline with
+ * scripts/replay.js instead of being guessed at.
+ *
+ * Samples are raw client coordinates - exactly what the engine
+ * received - so a replay reproduces the same decisions.
+ * ============================================================ */
+var traceOn = false;
+var traceBuf = [];
+var traceT0 = 0;
+var TRACE_MAX = 4000;
+
+function tracePush(rec) {
+  if (!traceOn) return;
+  traceBuf.push(rec);
+  if (traceBuf.length > TRACE_MAX) traceBuf.shift();
+}
+
+/* p = phase: 0 down, 1 move, 2 up, 3 cancel */
+function traceTouch(p, touch, now) {
+  if (!traceOn) return;
+  if (!traceT0) traceT0 = now;
+  tracePush([p, touch.identifier,
+             Math.round(touch.clientX * 10) / 10,
+             Math.round(touch.clientY * 10) / 10,
+             now - traceT0,
+             touch.radiusX || 0]);
+}
+
+/* v = verdict: 'ink' | 'palm' | 'dot' | 'usurped' */
+function traceVerdict(v, id, now) {
+  if (!traceOn) return;
+  if (!traceT0) traceT0 = now;
+  tracePush(['v', id, v, now - traceT0]);
+}
+
+function traceToggle() {
+  traceOn = !traceOn;
+  if (traceOn) { traceBuf = []; traceT0 = 0; toast('Touch trace recording'); }
+  else toast('Touch trace stopped (' + traceBuf.length + ' samples)');
+  buildMoreMenu();
+}
+
+function showTrace() {
+  var meta = {
+    v: 1,
+    note: 'MathNotes touch trace',
+    viewW: viewW, viewH: viewH,
+    wrapLeft: wrapRect.left, wrapTop: wrapRect.top,
+    dpr: dpr, zoom: zoom, scrollX: Math.round(scrollX), scrollY: Math.round(scrollY),
+    palmLevel: settings.palmLevel, hand: settings.hand,
+    samples: traceBuf
+  };
+  var txt;
+  try { txt = JSON.stringify(meta); }
+  catch (e) { toast('Trace too large to show'); return; }
+  traceText.value = txt;
+  traceOverlay.className = 'overlay on';
+  /* pre-select so the iPad user only has to tap Copy */
+  try { traceText.focus(); traceText.setSelectionRange(0, txt.length); } catch (e) {}
+}
+
 /* ---------- event wiring ---------- */
 function onTouchStart(e) {
   e.preventDefault();
@@ -2884,13 +3133,13 @@ function onTouchStart(e) {
   stopMomentum();
   var now = Date.now();
   var ch = e.changedTouches;
-  for (var i = 0; i < ch.length; i++) beginTouch(ch[i], now);
+  for (var i = 0; i < ch.length; i++) { traceTouch(0, ch[i], now); beginTouch(ch[i], now); }
 }
 function onTouchMove(e) {
   e.preventDefault();
   var now = Date.now();
   var ch = e.changedTouches;
-  for (var i = 0; i < ch.length; i++) moveTouch(ch[i], now);
+  for (var i = 0; i < ch.length; i++) { traceTouch(1, ch[i], now); moveTouch(ch[i], now); }
   detectGesture(now);
   applyGesture(now);
 }
@@ -2899,7 +3148,7 @@ function onTouchEnd(e) {
   var now = Date.now();
   var cancelled = (e.type === 'touchcancel');
   var ch = e.changedTouches;
-  for (var i = 0; i < ch.length; i++) endTouch(ch[i], now, cancelled);
+  for (var i = 0; i < ch.length; i++) { traceTouch(cancelled ? 3 : 2, ch[i], now); endTouch(ch[i], now, cancelled); }
 }
 
 canvasWrap.addEventListener('touchstart', onTouchStart, false);
@@ -2915,12 +3164,15 @@ canvasWrap.addEventListener('mousedown', function (e) {
   stopMomentum();
   var now = Date.now();
   var touch = { identifier: mouseId, clientX: e.clientX, clientY: e.clientY, radiusX: 0 };
+  traceTouch(0, touch, now);
   beginTouch(touch, now);
 });
 canvasWrap.addEventListener('mousemove', function (e) {
   if (!touchStates[mouseId]) return;
   var now = Date.now();
-  moveTouch({ identifier: mouseId, clientX: e.clientX, clientY: e.clientY, radiusX: 0 }, now);
+  var mt = { identifier: mouseId, clientX: e.clientX, clientY: e.clientY, radiusX: 0 };
+  traceTouch(1, mt, now);
+  moveTouch(mt, now);
   /* mouse input must run the same gesture pipeline as touches,
      otherwise the hand tool cannot pan with a mouse */
   detectGesture(now);
@@ -2928,7 +3180,10 @@ canvasWrap.addEventListener('mousemove', function (e) {
 });
 window.addEventListener('mouseup', function (e) {
   if (!touchStates[mouseId]) return;
-  endTouch({ identifier: mouseId, clientX: e.clientX, clientY: e.clientY, radiusX: 0 }, Date.now(), false);
+  var now = Date.now();
+  var mu = { identifier: mouseId, clientX: e.clientX, clientY: e.clientY, radiusX: 0 };
+  traceTouch(2, mu, now);
+  endTouch(mu, now, false);
 });
 
 /* flush saves when the tab leaves */
@@ -3287,10 +3542,14 @@ function buildMoreMenu() {
     { lbl: 'Palm rejection', val: PALM_NAMES[settings.palmLevel], act: function () { settings.palmLevel = (settings.palmLevel + 1) % 3; applyPalmUI(); afterSettingChange(); } },
     { lbl: 'Writing hand', val: HAND_NAMES[settings.hand], act: function () { settings.hand = (settings.hand + 1) % 3; afterSettingChange(); } },
     { lbl: 'Touch guide', val: settings.guideDots ? 'On' : 'Off', act: function () { settings.guideDots = !settings.guideDots; hidePendingDot(); afterSettingChange(); } },
+    { lbl: 'Touch trace', val: traceOn ? 'Recording' : 'Off', act: traceToggle },
     { lbl: 'Clear note', val: '', warn: true, act: clearNote },
     { lbl: 'Delete note', val: '', warn: true, act: deleteCurrentNote },
     { lbl: 'About', val: '', act: function () { window.alert('MathNotes v5.1 (S-Class 5)\n\nSamsung-notes style handwriting for iPad 3.\nWorks offline. Notes are saved in this browser.\n\nHand tool: finger scrolls, pen writes.\nTwo-finger pinch zooms. Lasso tool selects ink.\nDrag the corner handle or tap - / + to resize\nthe selection. Double-tap with the hand tool\nresets zoom.'); } }
   ];
+  if (traceBuf.length) {
+    moreRowDefs.splice(9, 0, { lbl: 'Show trace', val: traceBuf.length + ' pts', act: showTrace });
+  }
   for (var i = 0; i < moreRowDefs.length; i++) {
     var d = moreRowDefs[i];
     var row = document.createElement('button');
@@ -3452,6 +3711,7 @@ searchInputEl.addEventListener('input', function () { renderHome(); });
 undoBtn.addEventListener('click', doUndo);
 redoBtn.addEventListener('click', doRedo);
 byId('exportCloseBtn').addEventListener('click', function () { exportOverlay.className = 'overlay'; });
+byId('traceCloseBtn').addEventListener('click', function () { traceOverlay.className = 'overlay'; });
 
 /* drawing on the canvas closes floating panels (closePanels is
    called from onTouchStart in the input engine) */

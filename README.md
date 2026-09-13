@@ -20,26 +20,68 @@ v5 closes the biggest gaps to **Samsung Notes**:
 - **Page jump** — tap the page pill and enter a page number.
 - Export PNG now renders the real template (ruled/grid/dotted) and paper color, 4-page cap.
 
-## S-Class palm rejection (unchanged from v4)
+## Palm rejection
 
-The iPad 3 has no pen digitizer, reports constant touch radius, and no force — so rejection is behavioural, like every finger-mode note app. Every new touch is observed as a **probe** and scores itself continuously:
+The iPad 3 has no pen digitizer, reports no touch radius and no force, so
+rejection is behavioural - like every finger-mode note app. Every new touch is
+observed as a **probe** and scores itself continuously:
 
-1. **Commit gate (Max)** — ink requires sustained speed (> 0.09 px/ms smoothed), directional coherence (> 0.42 over an 8-sample window), travel (> 6 px), and a minimum age (80 ms). Fast writers commit via an express lane (12 px at > 0.16 px/ms). 40 px of travel at writing speed always commits.
-2. **Palm verdicts are permanent** — a touch that sits 400 ms with under 10 px travel is declared a palm forever; it can never wake up and steal the pen.
-3. **Palm memory** — rejected palm positions are remembered for 3.5 s; a new touch landing near one is a "suspect" with 1.35× stricter thresholds.
-4. **Palm teams** — two contacts landing within 100 ms and 48 px of each other are a hand landing; both become suspects.
-5. **Handedness zones** (Max, Right/Left/Both) — soft suspect bands at the bottom and writing-hand side.
-6. **Anti-bounce dots** — taps queue 220 ms; a re-land within 18 px cancels the dot.
-7. **Mid-stroke discard** (Max) — a committed stroke that decays into slow straight drift is auto-removed live.
-8. **Arbitration** — the first probe to earn ink verdicts every other live probe as palm.
+1. **Commit gate (Max)** - ink requires sustained speed, directional coherence,
+   travel, and a minimum age. Fast writers commit via an express lane. A
+   decisive-travel lane covers long deliberate strokes.
+2. **Palm verdicts are permanent** - a touch that sits still is declared a palm
+   and cannot later steal the pen.
+3. **Palm memory** - rejected palm positions are remembered for 3.5 s; a new
+   touch landing near one is a "suspect" held to stricter thresholds.
+4. **Palm teams** - two contacts landing close together in time and space are a
+   hand landing; both become suspects.
+5. **Palm anatomy** - the heel of the hand sits below the pen tip and on the
+   writing-hand side of it. A contact in that quadrant relative to recent ink is
+   a palm. This is the strongest signal available without a digitizer, and
+   unlike a fixed screen band it fires where a hand actually rests.
+6. **Straight-and-slow veto** - a suspect dragging in a dead-straight line
+   slower than anyone writes is a palm sliding. Only suspects are vetoed, so a
+   deliberate straight stroke (a fraction bar, a minus sign) is never blocked.
+7. **Anti-bounce dots** - taps queue briefly; a re-land nearby cancels the dot.
+   A dot must also be credible: not a suspect, and near where the pen was just
+   writing.
+8. **Usurpation** - in a natural posture the hand lands *before* the pen tip. A
+   later touch that behaves like writing can take the ink from a live stroke
+   that behaves like a palm, so a palm can never hold the pen hostage.
+9. **Mid-stroke discard (Max)** - a committed stroke that decays into slow
+   straight drift is removed live.
 
 | Level | Behaviour |
 |-------|-----------|
 | **Palm: Off** | Ink on touchdown |
 | **Palm: Med** | Simple 6 px travel gate |
-| **Palm: Max** (default) | Full S-Class engine |
+| **Palm: Max** (default) | Full engine |
 
-**Honest limitations**: a fast deliberate palm slide is indistinguishable from a finger and will ink (undo or an artist glove fixes it). In Med, a slow palm drag can ink. True S-Pen-level rejection requires digitizer hardware.
+**Honest limitations**: a fast deliberate palm slide is still indistinguishable
+from a finger and will ink (undo or an artist glove fixes it). In Med, a slow
+palm drag can ink. True S-Pen-level rejection requires digitizer hardware - no
+amount of software gets all the way there on 2012 capacitive hardware.
+
+## Reporting a palm-rejection problem
+
+Thresholds depend on your digitizer, your stylus and your hand, so a bug report
+is far more useful as a recording than a description.
+
+1. Kebab menu -> **Touch trace** (it reads `Recording`).
+2. Reproduce the problem - rest your palm, write, let it leave a stray mark.
+3. Kebab menu -> **Touch trace** again to stop.
+4. Kebab menu -> **Show trace**, then Copy, and mail the text to yourself.
+5. Save it as `traces/<name>.json` in the repo.
+
+Then replay it against the engine offline:
+
+```
+node scripts/replay.js traces/<name>.json
+```
+
+It prints every contact, what the device decided, and what the current code
+decides - so a fix can be verified against your real hand instead of a guess.
+Add `--html <other-index.html>` to compare two builds on the same input.
 
 ## Recommended hardware (for this iPad)
 
@@ -49,4 +91,18 @@ The iPad 3 has no pen digitizer, reports constant touch radius, and no force —
 
 ## Safari 9 rules (for contributors)
 
-ES5 only. Forbidden: `let`/`const`, arrow functions, template literals, classes, `for...of`, destructuring, Promises, `fetch`, Pointer Events, Service Workers, CSS Grid, CSS custom properties, `var()`, `:focus-visible`, `aspect-ratio`, flex `gap`, `clamp(`, the `download` attribute, `Array.includes`, `Object.assign`. Touch Events + Canvas 2D + `localStorage` (in try/catch) only. After editing, validate the inline JS with `new Function(js)` and re-check every item above — a single unsupported token is a silent white screen on the iPad. Behavioral test suite: `node scripts/test_v5.js` (95 assertions).
+ES5 only. Forbidden: `let`/`const`, arrow functions, template literals, classes, `for...of`, destructuring, Promises, `fetch`, Pointer Events, Service Workers, CSS Grid, CSS custom properties, `var()`, `:focus-visible`, `aspect-ratio`, flex `gap`, `clamp(`, the `download` attribute, `Array.includes`, `Object.assign`. Touch Events + Canvas 2D + `localStorage` (in try/catch) only. After editing, validate the inline JS with `new Function(js)` and re-check every item above — a single unsupported token is a silent white screen on the iPad. 
+## Development
+
+```
+node scripts/check_es5.js     # Safari 9 gate - run before every push
+node scripts/test_palm.js     # palm-rejection behaviour (20 assertions)
+node scripts/replay.js FILE   # replay a recorded touch trace
+```
+
+`scripts/harness.js` loads the real `index.html` into Node behind a DOM stub, so
+the engine is tested as it actually runs rather than as extracted units - no
+build step and no changes to the app are needed to test it.
+
+The ES5 gate matters more than it looks: a single unsupported token is a silent
+white screen on the iPad with no visible error.
