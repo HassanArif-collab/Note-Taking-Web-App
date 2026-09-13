@@ -61,6 +61,23 @@ with no suspicion, no veto and no arbitration - it read as partial protection
 while giving essentially none, which is worse than offering nothing. It is gone,
 and anything saved on it is migrated to Max.
 
+**A resting palm is not one contact.** On this digitizer it is a storm of
+them, appearing and vanishing every 20-100ms. Any two of them look like a pinch
+pair, so gesture detection requires contacts that have survived 150ms and a
+separation change of 45px before it believes a pinch, and a gesture whose
+members change identity re-baselines rather than scaling across two different
+pairs of contacts.
+
+**Travel is measured on the glass, not on the page.** `docPoint()` divides by
+the live zoom and adds the live scroll, so measuring a probe in document space
+makes a stationary contact appear to travel whenever the view moves - and a
+palm-triggered zoom is then enough on its own to commit a resting palm as ink.
+
+**Anchored pinch (one finger planted, the other sliding) is not supported.**
+With no stylus id and no contact radius, a single sliding contact cannot be
+told apart from a pen stroke, and it commits as ink before a pinch can form.
+Guessing would mean occasionally turning a real stroke into a zoom.
+
 **Honest limitations**: a fast deliberate palm slide is still indistinguishable
 from a finger and will ink (undo or an artist glove fixes it). In Med, a slow
 palm drag can ink. True S-Pen-level rejection requires digitizer hardware - no
@@ -106,7 +123,7 @@ ES5 only. Forbidden: `let`/`const`, arrow functions, template literals, classes,
 ```
 node scripts/check_es5.js     # Safari 9 gate - run before every push
 node scripts/test_palm.js     # palm-rejection behaviour (25 assertions)
-node scripts/test_recorder.js # recorder + pinch-zoom (13 assertions)
+node scripts/test_recorder.js # recorder + pinch-zoom (15 assertions)
 node scripts/replay.js FILE   # replay a recorded touch trace
 ```
 

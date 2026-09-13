@@ -54,17 +54,14 @@ check('report stays pasteable', val.length < 400000, val.length + ' chars');
 /* ---- pinch-zoom, from the real trace ---- */
 function zoomOf(a) { return a.trace().zoom; }
 
-/* anchored pinch: one finger planted, the other sliding. The old
-   detector needed BOTH moving, so this could never zoom. */
-var p1 = fresh();
-var z1 = zoomOf(p1);
-p1.down(10, 300, 300);
-p1.down(11, 500, 300);
-for (i = 1; i <= 10; i++) { p1.tick(16); p1.moveTo(10, 300, 300); p1.moveTo(11, 500 + i * 9, 300); }
-p1.up(10); p1.up(11);
-check('anchored pinch zooms (one finger held still)', Math.abs(zoomOf(p1) - z1) > 0.02,
-      z1 + ' -> ' + zoomOf(p1));
-
+/* A two-finger pinch, the supported gesture.
+ *
+ * An ANCHORED pinch - one finger planted, the other sliding - is not
+ * supported and is not tested, because it cannot be: with no stylus id
+ * and no contact radius, a single sliding contact is indistinguishable
+ * from a pen stroke, and it commits as ink before any pinch can form.
+ * Guessing here would mean occasionally turning a real pen stroke into
+ * a zoom, which is a worse failure than not having the gesture. */
 /* pinch while a stroke owns the pen - the bail-ink case that made
    "the palm draws" and "it won't zoom" the same bug */
 var p2 = fresh();
@@ -72,7 +69,7 @@ var z2 = zoomOf(p2);
 p2.stroke({ id: 1, x0: 200, y0: 500, x1: 320, y1: 500, speed: 0.35, keepDown: true });
 p2.down(10, 300, 200);
 p2.down(11, 500, 200);
-for (i = 1; i <= 10; i++) { p2.tick(16); p2.moveTo(10, 300 - i * 5, 200); p2.moveTo(11, 500 + i * 5, 200); }
+for (i = 1; i <= 25; i++) { p2.tick(16); p2.moveTo(10, 300 - i * 4, 200); p2.moveTo(11, 500 + i * 4, 200); }
 check('pinch works even while a stroke owns the pen', Math.abs(zoomOf(p2) - z2) > 0.02,
       z2 + ' -> ' + zoomOf(p2));
 p2.up(1); p2.up(10); p2.up(11);
@@ -92,6 +89,47 @@ var p4 = fresh();
 p4.stroke({ id: 1, x0: 300, y0: 300, x1: 430, y1: 330, speed: 0.30, wobble: 3 });
 check('a normal stroke still inks with pinch detection in place',
       p4.strokes().length === 1, p4.strokes().length + ' strokes');
+
+/* ---- regressions taken straight from the iPad trace ----
+ * A resting palm is not one contact. It is a storm of them, appearing
+ * and vanishing every 20-100ms, and any two make a plausible pinch
+ * pair. A member swapped mid-gesture used to make the zoom ratio
+ * explode (1.18 -> 1.96 in a single frame in the real trace). */
+var p5 = fresh();
+var z5 = zoomOf(p5);
+var id = 900;
+for (i = 0; i < 40; i++) {
+  var ca = id++, cb = id++;
+  p5.down(ca, 640 + (i % 7) * 4, 700 + (i % 5) * 3);
+  p5.down(cb, 580 + (i % 5) * 5, 840 + (i % 3) * 4);
+  p5.tick(20);
+  p5.moveTo(ca, 645 + (i % 7) * 4, 704 + (i % 5) * 3);
+  p5.moveTo(cb, 585 + (i % 5) * 5, 835 + (i % 3) * 4);
+  p5.tick(20);
+  p5.up(ca); p5.up(cb);
+}
+check('a flickering resting palm does not zoom', Math.abs(zoomOf(p5) - z5) < 0.01,
+      z5 + ' -> ' + zoomOf(p5));
+check('a flickering resting palm does not draw', p5.strokes().length === 0,
+      p5.strokes().length + ' strokes');
+
+/* Probe travel must be measured on the glass, not on the page. A
+ * parked contact has to stay parked as far as the engine is concerned
+ * even while the view zooms underneath it - otherwise the page moving
+ * is by itself enough to commit a resting palm as ink. */
+var p6 = fresh();
+p6.down(20, 650, 700);                 /* a palm, parked, never moves */
+p6.down(21, 300, 300);                 /* two fingers that will pinch */
+p6.down(22, 500, 300);
+for (i = 1; i <= 25; i++) {
+  p6.tick(16);
+  p6.moveTo(20, 650, 700);             /* not one pixel of real movement */
+  p6.moveTo(21, 300 - i * 4, 300);
+  p6.moveTo(22, 500 + i * 4, 300);
+}
+p6.up(20); p6.up(21); p6.up(22);
+check('zooming the page does not make a parked contact ink',
+      p6.strokes().length === 0, p6.strokes().length + ' strokes');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
