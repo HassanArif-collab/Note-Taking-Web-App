@@ -866,7 +866,11 @@ var SC = {
                               contender = the palm, not the pen */
   DOT_NEAR_PX:     250,    /* a tap dot must land near recent writing    */
   DOT_NEAR_MS:     4000,   /* and soon after it, or it is a palm tap.    */
-  PINCH_DELTA:     16,     /* separation change that means "pinch". Measured
+  PINCH_MIN_AGE:   150,    /* both contacts must have survived this long. A
+                              resting palm is not one contact - it is a storm
+                              of them, appearing and vanishing every 20-100ms,
+                              and any two of them make a plausible "pinch". */
+  PINCH_DELTA:     45,     /* separation change that means "pinch". Measured
                               directly instead of requiring BOTH fingers to be
                               moving, so an anchored pinch - one finger planted,
                               the other sliding - is finally recognised. */
@@ -1892,6 +1896,7 @@ function beginTouch(touch, now) {
     state: 'probe',
     sx: pt.x, sy: pt.y, x: pt.x, y: pt.y,
     cx: touch.clientX, cy: touch.clientY,
+    csx: touch.clientX, csy: touch.clientY,
     t0: now, lastT: now,
     path: [[pt.x, pt.y, now]],
     pathLen: 0, net: 0,
@@ -2024,25 +2029,33 @@ function moveTouch(touch, now) {
     st.cx = touch.clientX; st.cy = touch.clientY;
     return;
   }
-  if (st.state === 'ink') { appendInk(st, pt, now); return; }
+  if (st.state === 'ink') { appendInk(st, pt, now, touch); return; }
 
-  /* --- probe update --- */
-  var prev = st.path[st.path.length - 1];
+  /* --- probe update ---
+     Travel and speed are measured in SCREEN space, not document
+     space. docPoint() divides by the live zoom and adds the live
+     scroll, so a document-space measurement makes a completely
+     stationary contact appear to travel whenever the page moves.
+     A palm-triggered zoom then inflates a resting palm's travel
+     until it commits as ink - the palm writes by itself without
+     ever having moved. Screen pixels are also the honest unit for
+     these thresholds: they describe physical hand movement. */
   var dt = Math.max(now - st.lastT, 1);
-  var d = dist(prev[0], prev[1], pt.x, pt.y);
+  var pcx = st.cx, pcy = st.cy;
+  var cd = dist(pcx, pcy, touch.clientX, touch.clientY);
   st.x = pt.x; st.y = pt.y; st.lastT = now;
   st.cx = touch.clientX; st.cy = touch.clientY;
   st.path.push([pt.x, pt.y, now]);
   if (st.path.length > 400) st.path.shift();
-  st.pathLen += d;
-  st.net = dist(st.sx, st.sy, pt.x, pt.y);
-  var v = d / Math.max(dt, 4);
+  st.pathLen += cd;
+  st.net = dist(st.csx, st.csy, st.cx, st.cy);
+  var v = cd / Math.max(dt, 4);
 
   if (st.skip < 3) st.skip++;
   else st.vEMA = st.vEMA * 0.65 + v * 0.35;
 
-  if (d > 0.05) {
-    var ux = (pt.x - prev[0]) / d, uy = (pt.y - prev[1]) / d;
+  if (cd > 0.05) {
+    var ux = (st.cx - pcx) / cd, uy = (st.cy - pcy) / cd;
     st.dirs.push([ux, uy]);
     if (st.dirs.length > 8) st.dirs.shift();
     var sx = 0, sy = 0, i;
@@ -2091,18 +2104,19 @@ function promoteInk(st, now) {
   startInkRecord(st, now);
 }
 
-function appendInk(st, pt, now) {
+function appendInk(st, pt, now, touch) {
   var ink = inkNow[st.id];
   if (!ink) return;
   var s = ink.stroke;
-  var prev = s.pts[s.pts.length - 1];
   var dt = Math.max(now - st.lastT, 1);
-  var d = dist(prev[0], prev[1], pt.x, pt.y);
+  var cx = touch ? touch.clientX : st.cx, cy = touch ? touch.clientY : st.cy;
+  var cd = dist(st.cx, st.cy, cx, cy);
   st.x = pt.x; st.y = pt.y; st.lastT = now;
+  st.cx = cx; st.cy = cy;
   s.pts.push([pt.x, pt.y, now]);
-  st.pathLen += d;
-  st.net = dist(st.sx, st.sy, pt.x, pt.y);
-  st.vEMA = st.vEMA * 0.65 + (d / Math.max(dt, 4)) * 0.35;
+  st.pathLen += cd;
+  st.net = dist(st.csx, st.csy, cx, cy);
+  st.vEMA = st.vEMA * 0.65 + (cd / Math.max(dt, 4)) * 0.35;
 
   /* incremental live segment (one per move, never the tail) */
   var k = s.pts.length - 1;
@@ -2318,7 +2332,7 @@ function engageGesture(ids, now, pairDist) {
   gesture = {
     lastCx: c.x, lastCy: c.y,
     lastD: pairDist || 0, lastT: now,
-    vx: 0, vy: 0, fromHand: false
+    vx: 0, vy: 0, fromHand: false, key: null
   };
   traceGesture('engage', ids.length, Math.round(pairDist || 0), now);
   for (i = 0; i < ids.length; i++) {
@@ -2328,6 +2342,7 @@ function engageGesture(ids, now, pairDist) {
       if (pendingDotId === o.id) hidePendingDot(o.id);
     }
   }
+  gesture.key = gestureMemberKey();
   hidePendingDot();
 }
 
@@ -2359,6 +2374,9 @@ function tryPinch(now) {
   var a = p[0], b = p[1];
   var d = dist(a.cx, a.cy, b.cx, b.cy);
   if (d < 40) { pinchTrack = null; return false; }
+
+  /* flickering contacts never qualify */
+  if (now - a.t0 < SC.PINCH_MIN_AGE || now - b.t0 < SC.PINCH_MIN_AGE) return false;
 
   var same = pinchTrack &&
     ((pinchTrack.a === a.id && pinchTrack.b === b.id) ||
@@ -2467,10 +2485,32 @@ function gestureCentroid(includeProbes) {
   return { x: cx / n, y: cy / n, n: n };
 }
 
+function gestureMemberKey() {
+  var ms = gestureMembers(), ids = [], i;
+  for (i = 0; i < ms.length; i++) ids.push(ms[i].id);
+  ids.sort();
+  return ids.join(',');
+}
+
 function applyGesture(now) {
   if (!gesture) return;
   var c = gestureCentroid(false);
   if (!c || c.n < 1) { gesture = null; return; }
+
+  /* If the member set changed - a finger lifted, or a flickering palm
+     contact replaced one - then lastD and lastCx describe a DIFFERENT
+     pair of contacts than d and c do. Taking a ratio across the two is
+     how the zoom used to jump 1.18 -> 1.96 in a single frame. Re-base
+     on the new members and skip this frame instead. */
+  var key = gestureMemberKey();
+  if (key !== gesture.key) {
+    var m0 = gestureMembers();
+    gesture.key = key;
+    gesture.lastCx = c.x; gesture.lastCy = c.y; gesture.lastT = now;
+    gesture.lastD = m0.length >= 2 ? dist(m0[0].cx, m0[0].cy, m0[1].cx, m0[1].cy) : 0;
+    return;
+  }
+
   var dx = c.x - gesture.lastCx;
   var dy = c.y - gesture.lastCy;
   var dt = Math.max(now - gesture.lastT, 4);
@@ -2482,7 +2522,9 @@ function applyGesture(now) {
   if (ms.length >= 2) {
     var d = dist(ms[0].cx, ms[0].cy, ms[1].cx, ms[1].cy);
     if (gesture.lastD > 30 && d > 30) {
-      var f = d / gesture.lastD;
+      /* no real pinch scales the page by more than a few percent in one
+         frame; anything larger is a bad measurement, not a gesture */
+      var f = lim(d / gesture.lastD, 0.85, 1.18);
       var nz = lim(zoom * f, Z_MIN, Z_MAX);
       var ax = (c.x - wrapRect.left) / zoom + scrollX;
       var ay = (c.y - wrapRect.top) / zoom + scrollY;
