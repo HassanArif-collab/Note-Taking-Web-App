@@ -295,6 +295,17 @@ input { font: inherit; }
   box-shadow: 0 4px 20px rgba(0,0,0,0.4); display: block; margin: 0 auto;
 }
 #exportHint { color: #E8E8E8; font-size: 13px; margin-top: 14px; }
+#traceHint { color: #E8E8E8; font-size: 13px; margin-bottom: 10px; }
+#traceText {
+  width: 92%; max-width: 660px; height: 46%;
+  font-family: Menlo, Monaco, monospace; font-size: 11px;
+  padding: 8px; border-radius: 8px; border: 0;
+  -webkit-user-select: text; user-select: text;
+}
+#traceCloseBtn {
+  margin-top: 14px; color: #FFFFFF; font-size: 15px; font-weight: 600;
+  background: rgba(255,255,255,0.16); border-radius: 18px; padding: 10px 26px;
+}
 #exportCloseBtn {
   margin-top: 14px; color: #FFFFFF; font-size: 15px; font-weight: 600;
   background: rgba(255,255,255,0.16); border-radius: 18px; padding: 10px 26px;
@@ -619,6 +630,13 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
   <div id="toast"></div>
   <div id="warning"></div>
 
+  <!-- touch trace overlay (palm-rejection diagnostics) -->
+  <div id="traceOverlay" class="overlay">
+    <div id="traceHint">Select all of this text, copy it, and send it to yourself (Mail or Notes).</div>
+    <textarea id="traceText" rows="12" readonly></textarea>
+    <button id="traceCloseBtn">Close</button>
+  </div>
+
   <!-- export overlay -->
   <div id="exportOverlay" class="overlay">
     <img id="exportImg" alt="Export preview">
@@ -810,6 +828,7 @@ var eraserPanel = byId('eraserPanel'), sizeRow = byId('sizeRow');
 var moreMenu = byId('moreMenu'), toastEl = byId('toast'), warningEl = byId('warning');
 var drawer = byId('drawer'), drawerBackdrop = byId('drawerBackdrop'), nbList = byId('nbList');
 var exportOverlay = byId('exportOverlay'), exportImg = byId('exportImg');
+var traceOverlay = byId('traceOverlay'), traceText = byId('traceText');
 var selectBtn = byId('selectBtn'), textBtn = byId('textBtn'), handBtn = byId('handBtn');
 var selBarEl = byId('selBar'), selDelBtn = byId('selDelBtn'), selCopyBtn = byId('selCopyBtn'), selDoneBtn = byId('selDoneBtn');
 var selSmallBtn = byId('selSmallBtn'), selBigBtn = byId('selBigBtn');
@@ -1857,6 +1876,7 @@ function startInkRecord(st, now) {
 function verdictPalm(st, now) {
   if (st.state === 'palm') return;
   st.state = 'palm';
+  traceVerdict('palm', st.id, now);
   palmMemAdd(st.sx, st.sy, now);
   if (pendingDotId === st.id && settings.guideDots) flashRejectedDot();
   else if (pendingDotId === st.id) hidePendingDot(st.id);
@@ -1984,6 +2004,7 @@ function tryCommit(st, now) {
 
 function promoteInk(st, now) {
   st.state = 'ink';
+  traceVerdict('ink', st.id, now);
   startInkRecord(st, now);
 }
 
@@ -2027,6 +2048,7 @@ function appendInk(st, pt, now) {
 function discardActiveInk(st, now, usurped) {
   delete inkNow[st.id];
   st.state = 'palm';
+  traceVerdict(usurped ? 'usurped' : 'discarded', st.id, now);
   palmMemAdd(st.sx, st.sy, now);
   toast(usurped ? 'Palm stroke removed - pen took over' : 'Palm stroke discarded');
   requestRender();
@@ -2094,6 +2116,7 @@ function queueTapDot(st, now) {
 function flushDot(q) {
   var n = activeNote();
   if (!n) return;
+  traceVerdict('dot', -1, q.t);
   var s = mkStroke(settings.pen, currentPenWidth(), settings.color, [[q.x, q.y, q.t]]);
   n.strokes.push(s);
   lastInkPt = { x: q.x, y: q.y, t: q.t };
@@ -3024,6 +3047,73 @@ function resetTouchTracking() {
   closeTextEditor();
 }
 
+/* ============================================================
+ * TOUCH TRACE RECORDER
+ * Palm rejection cannot be tuned from a desk: the thresholds
+ * depend on this digitizer, this stylus and this hand. When the
+ * recorder is on, every raw touch sample and every verdict the
+ * engine reaches is kept in a bounded ring buffer, so a real
+ * failure can be captured on the iPad and replayed offline with
+ * scripts/replay.js instead of being guessed at.
+ *
+ * Samples are raw client coordinates - exactly what the engine
+ * received - so a replay reproduces the same decisions.
+ * ============================================================ */
+var traceOn = false;
+var traceBuf = [];
+var traceT0 = 0;
+var TRACE_MAX = 4000;
+
+function tracePush(rec) {
+  if (!traceOn) return;
+  traceBuf.push(rec);
+  if (traceBuf.length > TRACE_MAX) traceBuf.shift();
+}
+
+/* p = phase: 0 down, 1 move, 2 up, 3 cancel */
+function traceTouch(p, touch, now) {
+  if (!traceOn) return;
+  if (!traceT0) traceT0 = now;
+  tracePush([p, touch.identifier,
+             Math.round(touch.clientX * 10) / 10,
+             Math.round(touch.clientY * 10) / 10,
+             now - traceT0,
+             touch.radiusX || 0]);
+}
+
+/* v = verdict: 'ink' | 'palm' | 'dot' | 'usurped' */
+function traceVerdict(v, id, now) {
+  if (!traceOn) return;
+  if (!traceT0) traceT0 = now;
+  tracePush(['v', id, v, now - traceT0]);
+}
+
+function traceToggle() {
+  traceOn = !traceOn;
+  if (traceOn) { traceBuf = []; traceT0 = 0; toast('Touch trace recording'); }
+  else toast('Touch trace stopped (' + traceBuf.length + ' samples)');
+  buildMoreMenu();
+}
+
+function showTrace() {
+  var meta = {
+    v: 1,
+    note: 'MathNotes touch trace',
+    viewW: viewW, viewH: viewH,
+    wrapLeft: wrapRect.left, wrapTop: wrapRect.top,
+    dpr: dpr, zoom: zoom, scrollX: Math.round(scrollX), scrollY: Math.round(scrollY),
+    palmLevel: settings.palmLevel, hand: settings.hand,
+    samples: traceBuf
+  };
+  var txt;
+  try { txt = JSON.stringify(meta); }
+  catch (e) { toast('Trace too large to show'); return; }
+  traceText.value = txt;
+  traceOverlay.className = 'overlay on';
+  /* pre-select so the iPad user only has to tap Copy */
+  try { traceText.focus(); traceText.setSelectionRange(0, txt.length); } catch (e) {}
+}
+
 /* ---------- event wiring ---------- */
 function onTouchStart(e) {
   e.preventDefault();
@@ -3031,13 +3121,13 @@ function onTouchStart(e) {
   stopMomentum();
   var now = Date.now();
   var ch = e.changedTouches;
-  for (var i = 0; i < ch.length; i++) beginTouch(ch[i], now);
+  for (var i = 0; i < ch.length; i++) { traceTouch(0, ch[i], now); beginTouch(ch[i], now); }
 }
 function onTouchMove(e) {
   e.preventDefault();
   var now = Date.now();
   var ch = e.changedTouches;
-  for (var i = 0; i < ch.length; i++) moveTouch(ch[i], now);
+  for (var i = 0; i < ch.length; i++) { traceTouch(1, ch[i], now); moveTouch(ch[i], now); }
   detectGesture(now);
   applyGesture(now);
 }
@@ -3046,7 +3136,7 @@ function onTouchEnd(e) {
   var now = Date.now();
   var cancelled = (e.type === 'touchcancel');
   var ch = e.changedTouches;
-  for (var i = 0; i < ch.length; i++) endTouch(ch[i], now, cancelled);
+  for (var i = 0; i < ch.length; i++) { traceTouch(cancelled ? 3 : 2, ch[i], now); endTouch(ch[i], now, cancelled); }
 }
 
 canvasWrap.addEventListener('touchstart', onTouchStart, false);
@@ -3062,12 +3152,15 @@ canvasWrap.addEventListener('mousedown', function (e) {
   stopMomentum();
   var now = Date.now();
   var touch = { identifier: mouseId, clientX: e.clientX, clientY: e.clientY, radiusX: 0 };
+  traceTouch(0, touch, now);
   beginTouch(touch, now);
 });
 canvasWrap.addEventListener('mousemove', function (e) {
   if (!touchStates[mouseId]) return;
   var now = Date.now();
-  moveTouch({ identifier: mouseId, clientX: e.clientX, clientY: e.clientY, radiusX: 0 }, now);
+  var mt = { identifier: mouseId, clientX: e.clientX, clientY: e.clientY, radiusX: 0 };
+  traceTouch(1, mt, now);
+  moveTouch(mt, now);
   /* mouse input must run the same gesture pipeline as touches,
      otherwise the hand tool cannot pan with a mouse */
   detectGesture(now);
@@ -3075,7 +3168,10 @@ canvasWrap.addEventListener('mousemove', function (e) {
 });
 window.addEventListener('mouseup', function (e) {
   if (!touchStates[mouseId]) return;
-  endTouch({ identifier: mouseId, clientX: e.clientX, clientY: e.clientY, radiusX: 0 }, Date.now(), false);
+  var now = Date.now();
+  var mu = { identifier: mouseId, clientX: e.clientX, clientY: e.clientY, radiusX: 0 };
+  traceTouch(2, mu, now);
+  endTouch(mu, now, false);
 });
 
 /* flush saves when the tab leaves */
@@ -3434,10 +3530,14 @@ function buildMoreMenu() {
     { lbl: 'Palm rejection', val: PALM_NAMES[settings.palmLevel], act: function () { settings.palmLevel = (settings.palmLevel + 1) % 3; applyPalmUI(); afterSettingChange(); } },
     { lbl: 'Writing hand', val: HAND_NAMES[settings.hand], act: function () { settings.hand = (settings.hand + 1) % 3; afterSettingChange(); } },
     { lbl: 'Touch guide', val: settings.guideDots ? 'On' : 'Off', act: function () { settings.guideDots = !settings.guideDots; hidePendingDot(); afterSettingChange(); } },
+    { lbl: 'Touch trace', val: traceOn ? 'Recording' : 'Off', act: traceToggle },
     { lbl: 'Clear note', val: '', warn: true, act: clearNote },
     { lbl: 'Delete note', val: '', warn: true, act: deleteCurrentNote },
     { lbl: 'About', val: '', act: function () { window.alert('MathNotes v5.1 (S-Class 5)\n\nSamsung-notes style handwriting for iPad 3.\nWorks offline. Notes are saved in this browser.\n\nHand tool: finger scrolls, pen writes.\nTwo-finger pinch zooms. Lasso tool selects ink.\nDrag the corner handle or tap - / + to resize\nthe selection. Double-tap with the hand tool\nresets zoom.'); } }
   ];
+  if (traceBuf.length) {
+    moreRowDefs.splice(9, 0, { lbl: 'Show trace', val: traceBuf.length + ' pts', act: showTrace });
+  }
   for (var i = 0; i < moreRowDefs.length; i++) {
     var d = moreRowDefs[i];
     var row = document.createElement('button');
@@ -3599,6 +3699,7 @@ searchInputEl.addEventListener('input', function () { renderHome(); });
 undoBtn.addEventListener('click', doUndo);
 redoBtn.addEventListener('click', doRedo);
 byId('exportCloseBtn').addEventListener('click', function () { exportOverlay.className = 'overlay'; });
+byId('traceCloseBtn').addEventListener('click', function () { traceOverlay.className = 'overlay'; });
 
 /* drawing on the canvas closes floating panels (closePanels is
    called from onTouchStart in the input engine) */

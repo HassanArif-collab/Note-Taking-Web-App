@@ -156,6 +156,32 @@ App.prototype.stroke = function (o) {
   return this;
 };
 
+/* Click a row in the kebab menu by its label. The menu is rebuilt
+ * from moreRowDefs each time, so this is how a test reaches settings
+ * that live inside the IIFE. */
+App.prototype.clickMenu = function (label) {
+  var menu = this.els.moreMenu;
+  if (!menu) return false;
+  for (var i = 0; i < menu.children.length; i++) {
+    if (String(menu.children[i].innerHTML).indexOf(label) >= 0) {
+      menu.children[i]._fire('click', {});
+      return true;
+    }
+  }
+  return false;
+};
+
+/* Turn the in-app trace recorder on, run fn, then read back the
+ * trace the engine produced for its own run. */
+App.prototype.recordTrace = function (fn) {
+  this.clickMenu('Touch trace');
+  fn();
+  this.clickMenu('Touch trace');
+  if (!this.clickMenu('Show trace')) return null;
+  var txt = this.els.traceText.value;
+  try { return JSON.parse(txt); } catch (e) { return null; }
+};
+
 /* flush the debounced save and read back what the engine committed */
 App.prototype.state = function () {
   var hs = (this.win._h && this.win._h.pagehide) || [];
