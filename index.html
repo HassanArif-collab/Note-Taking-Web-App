@@ -793,6 +793,12 @@ var SC = {
                               so 140px stays clear of simply writing the
                               next line down (spacing is 32-44px). */
   ANAT_SLACK:      -40,
+  ANAT_MIN_DIST:   300,    /* ...and far enough from the pen to BE the heel.
+                              Without this, writing slowly down-and-right of
+                              the last stroke (long division, the next column
+                              of a matrix) looks identical to a palm slide and
+                              was being rejected. The heel sits much further
+                              from the pen tip than the next stroke does. */
   VETO_STRAIGHT:   0.95,   /* a suspect dragging this straight is a palm */
   VETO_SPEED:      0.18,   /* slide, not handwriting. Straightness alone
                               cannot tell a palm slide from a straight
@@ -1622,7 +1628,7 @@ function computeSuspect(st, touch, now) {
      where a hand really rests - mid-page, not at the edge. */
   if (settings.palmLevel === PALM_MAX && lastInkPt && now - lastInkPt.t < SC.ANAT_MS) {
     var adx = st.sx - lastInkPt.x, ady = st.sy - lastInkPt.y;
-    if (ady > SC.ANAT_DY) {
+    if (ady > SC.ANAT_DY && dist(lastInkPt.x, lastInkPt.y, st.sx, st.sy) > SC.ANAT_MIN_DIST) {
       if (settings.hand === HAND_R && adx > SC.ANAT_SLACK) return true;
       if (settings.hand === HAND_L && adx < -SC.ANAT_SLACK) return true;
       if (settings.hand === HAND_BOTH && Math.abs(adx) > 80) return true;

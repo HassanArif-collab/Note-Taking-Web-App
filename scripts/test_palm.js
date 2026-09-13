@@ -318,6 +318,65 @@ test('left-handed palm zone mirrors correctly', function (done) {
   });
 });
 
+test('resuming lower down the page after a gap still inks', function (done) {
+  var app = fresh();
+  app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 120, y1: PEN.y, speed: 0.25, wobble: 3 });
+  app.tick(400);
+  /* skip a line or finish a tall equation: the next stroke starts well
+     below the last ink, which is where the anatomy rule looks for a palm */
+  app.stroke({ id: 2, x0: PEN.x, y0: PEN.y + 170, x1: PEN.x + 110, y1: PEN.y + 170, speed: 0.22, wobble: 3 });
+  after(300, function () {
+    app.flushFrames();
+    var n = app.strokes().length;
+    check('writing 170px lower -> 2 inked', n === 2, n + ' inked');
+    done();
+  });
+});
+
+test('slow straight stroke 170px below previous ink still inks', function (done) {
+  var app = fresh();
+  app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 120, y1: PEN.y, speed: 0.25, wobble: 3 });
+  app.tick(400);
+  /* worst case for the anatomy rule: below recent ink AND straight AND slow */
+  app.stroke({ id: 2, x0: PEN.x, y0: PEN.y + 170, x1: PEN.x + 90, y1: PEN.y + 170, speed: 0.13 });
+  after(300, function () {
+    app.flushFrames();
+    var n = app.strokes().length;
+    check('slow straight stroke below ink -> 2 inked', n === 2, n + ' inked');
+    done();
+  });
+});
+
+test('continuing down-AND-right (long division, matrix) still inks', function (done) {
+  var app = fresh();
+  app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 120, y1: PEN.y, speed: 0.25, wobble: 3 });
+  app.tick(400);
+  /* down and to the RIGHT of the last ink is exactly the quadrant the
+     anatomy rule calls "palm" - but it is also where a long division or
+     the next column of a matrix goes */
+  app.stroke({ id: 2, x0: PEN.x + 200, y0: PEN.y + 170, x1: PEN.x + 290, y1: PEN.y + 176, speed: 0.24, wobble: 3 });
+  after(300, function () {
+    app.flushFrames();
+    var n = app.strokes().length;
+    check('down-and-right stroke -> 2 inked', n === 2, n + ' inked');
+    done();
+  });
+});
+
+test('SLOW straight stroke down-AND-right still inks', function (done) {
+  var app = fresh();
+  app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 120, y1: PEN.y, speed: 0.25, wobble: 3 });
+  app.tick(400);
+  /* the genuine worst case: suspect quadrant + straight + slow */
+  app.stroke({ id: 2, x0: PEN.x + 200, y0: PEN.y + 170, x1: PEN.x + 280, y1: PEN.y + 170, speed: 0.13 });
+  after(300, function () {
+    app.flushFrames();
+    var n = app.strokes().length;
+    check('slow straight down-and-right -> 2 inked', n === 2, n + ' inked');
+    done();
+  });
+});
+
 /* ---------------- run ---------------- */
 console.log('\npalm rejection behaviour\n');
 (function run(i) {
