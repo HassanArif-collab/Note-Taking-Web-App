@@ -171,16 +171,15 @@ App.prototype.clickMenu = function (label) {
   return false;
 };
 
-/* Turn the in-app trace recorder on, run fn, then read back the
- * trace the engine produced for its own run. */
-App.prototype.recordTrace = function (fn) {
-  this.clickMenu('Touch trace');
-  fn();
-  this.clickMenu('Touch trace');
-  if (!this.clickMenu('Show trace')) return null;
-  var txt = this.els.traceText.value;
-  try { return JSON.parse(txt); } catch (e) { return null; }
+/* The recorder is always on, so this just reads the ring back.
+ * window.__mnTrace is the app's tooling hook. */
+App.prototype.trace = function () {
+  if (typeof this.win.__mnTrace !== 'function') return null;
+  return this.win.__mnTrace();
 };
+
+/* Requests the app attempted through XMLHttpRequest. */
+App.prototype.requests = function () { return this.win._xhr || []; };
 
 /* flush the debounced save and read back what the engine committed */
 App.prototype.state = function () {
@@ -245,8 +244,26 @@ function load(opts) {
   wrap._left = 0; wrap._top = 56;
   wrap._w = opts.viewW || 1024; wrap._h2 = opts.viewH || 712;
 
+  /* record what the app tries to send instead of hitting the network */
+  win._xhr = [];
+  function FakeXHR() { this.readyState = 0; }
+  FakeXHR.prototype.open = function (m, u) { this.method = m; this.url = u; this.headers = {}; };
+  FakeXHR.prototype.setRequestHeader = function (k, v) { this.headers[k] = v; };
+  FakeXHR.prototype.send = function (body) {
+    win._xhr.push({ method: this.method, url: this.url, headers: this.headers, body: body });
+    this.readyState = 4;
+    this.status = opts.xhrStatus || 201;
+    this.responseText = '{}';
+    if (this.onreadystatechange) this.onreadystatechange();
+  };
+
   var sandbox = {
     document: doc, window: win, localStorage: storage,
+    navigator: { userAgent: opts.ua ||
+      'Mozilla/5.0 (iPad; CPU OS 9_3_5 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13G36 Safari/601.1' },
+    XMLHttpRequest: FakeXHR,
+    btoa: function (b) { return Buffer.from(b, 'binary').toString('base64'); },
+    unescape: unescape, encodeURIComponent: encodeURIComponent,
     setTimeout: setTimeout, clearTimeout: clearTimeout, setInterval: setInterval,
     Date: Date, Math: Math, JSON: JSON, parseInt: parseInt, parseFloat: parseFloat,
     isNaN: isNaN, String: String, Number: Number, Array: Array, Object: Object,

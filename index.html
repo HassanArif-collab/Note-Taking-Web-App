@@ -295,17 +295,28 @@ input { font: inherit; }
   box-shadow: 0 4px 20px rgba(0,0,0,0.4); display: block; margin: 0 auto;
 }
 #exportHint { color: #E8E8E8; font-size: 13px; margin-top: 14px; }
-#traceHint { color: #E8E8E8; font-size: 13px; margin-bottom: 10px; }
-#traceText {
-  width: 92%; max-width: 660px; height: 46%;
-  font-family: Menlo, Monaco, monospace; font-size: 11px;
-  padding: 8px; border-radius: 8px; border: 0;
+#tokenBox {
+  background: #FFFFFF; border-radius: 18px; padding: 20px;
+  max-width: 460px; margin: 6% auto 0 auto; text-align: left;
+}
+#tokenBox .tk-h { font-size: 17px; font-weight: 600; margin-bottom: 10px; }
+#tokenBox .tk-p { font-size: 13px; color: #666666; margin: 8px 0; line-height: 1.45; }
+#tokenInput {
+  width: 100%; box-sizing: border-box; margin-top: 6px;
+  border: 1px solid #D8DDE3; border-radius: 10px; padding: 11px 12px;
+  font-family: Menlo, Monaco, monospace; font-size: 13px;
   -webkit-user-select: text; user-select: text;
 }
-#traceCloseBtn {
-  margin-top: 14px; color: #FFFFFF; font-size: 15px; font-weight: 600;
-  background: rgba(255,255,255,0.16); border-radius: 18px; padding: 10px 26px;
+#tokenBox .tk-row { margin-top: 16px; text-align: right; }
+#tokenBox .tk-row button {
+  font-size: 15px; font-weight: 600; padding: 10px 20px;
+  border-radius: 18px; margin-left: 8px;
 }
+#tokenCancelBtn { color: #666666; }
+#tokenSaveBtn { color: #FFFFFF; background: #0381FE; }
+body.dark #tokenBox { background: #1D1E22; }
+body.dark #tokenBox .tk-h { color: #E8E8E8; }
+body.dark #tokenInput { background: #26282D; color: #E8E8E8; border-color: #3A434C; }
 #exportCloseBtn {
   margin-top: 14px; color: #FFFFFF; font-size: 15px; font-weight: 600;
   background: rgba(255,255,255,0.16); border-radius: 18px; padding: 10px 26px;
@@ -630,11 +641,21 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
   <div id="toast"></div>
   <div id="warning"></div>
 
-  <!-- touch trace overlay (palm-rejection diagnostics) -->
-  <div id="traceOverlay" class="overlay">
-    <div id="traceHint">Select all of this text, copy it, and send it to yourself (Mail or Notes).</div>
-    <textarea id="traceText" rows="12" readonly></textarea>
-    <button id="traceCloseBtn">Close</button>
+  <!-- GitHub token panel (diagnostics upload) -->
+  <div id="tokenOverlay" class="overlay">
+    <div id="tokenBox">
+      <div class="tk-h">Send diagnostics to GitHub</div>
+      <div class="tk-p">Paste a GitHub <b>fine-grained personal access token</b> with
+        <b>Contents: Read and write</b> on this repository only.</div>
+      <input id="tokenInput" type="text" autocapitalize="off" autocorrect="off"
+             spellcheck="false" placeholder="github_pat_...">
+      <div class="tk-p">Stored only on this iPad. It is never written into a note,
+        a report, or the repository.</div>
+      <div class="tk-row">
+        <button id="tokenCancelBtn">Cancel</button>
+        <button id="tokenSaveBtn">Save</button>
+      </div>
+    </div>
   </div>
 
   <!-- export overlay -->
@@ -834,7 +855,7 @@ var eraserPanel = byId('eraserPanel'), sizeRow = byId('sizeRow');
 var moreMenu = byId('moreMenu'), toastEl = byId('toast'), warningEl = byId('warning');
 var drawer = byId('drawer'), drawerBackdrop = byId('drawerBackdrop'), nbList = byId('nbList');
 var exportOverlay = byId('exportOverlay'), exportImg = byId('exportImg');
-var traceOverlay = byId('traceOverlay'), traceText = byId('traceText');
+var tokenOverlay = byId('tokenOverlay'), tokenInput = byId('tokenInput');
 var selectBtn = byId('selectBtn'), textBtn = byId('textBtn'), handBtn = byId('handBtn');
 var selBarEl = byId('selBar'), selDelBtn = byId('selDelBtn'), selCopyBtn = byId('selCopyBtn'), selDoneBtn = byId('selDoneBtn');
 var selSmallBtn = byId('selSmallBtn'), selBigBtn = byId('selBigBtn');
@@ -1711,6 +1732,12 @@ function allInkDubious(now) {
   return true;
 }
 
+function liveTouchCount() {
+  var n = 0, k;
+  for (k in touchStates) { if (touchStates.hasOwnProperty(k)) n++; }
+  return n;
+}
+
 function anyInkActive() {
   for (var k in inkNow) {
     if (inkNow.hasOwnProperty(k)) return true;
@@ -2245,6 +2272,7 @@ function engageGesture(ids, now, pairDist) {
     lastD: pairDist || 0, lastT: now,
     vx: 0, vy: 0, fromHand: false
   };
+  traceGesture('engage', ids.length, Math.round(pairDist || 0), now);
   for (i = 0; i < ids.length; i++) {
     o = touchStates[ids[i]];
     if (o && o.kind === 'probe' && o.state !== 'ink') {
@@ -2258,7 +2286,13 @@ function engageGesture(ids, now, pairDist) {
 function detectGesture(now) {
   if (gesture) return;
   if (tool !== 'pen') return;
-  if (anyInkActive()) return;
+  /* Every bail below is a two-finger gesture the user tried to make
+     and did not get. "Sometimes it zooms, sometimes it doesn't" is
+     diagnosed from these, so each reason is recorded - but only when
+     at least two fingers are actually down, or the log would fill
+     with ordinary single-touch writing. */
+  var live = liveTouchCount();
+  if (anyInkActive()) { if (live >= 2) traceGesture('bail-ink', live, 0, now); return; }
   if (settings.palmLevel === PALM_OFF) return;
 
   var vecs = [], k, o, rv;
@@ -2269,7 +2303,13 @@ function detectGesture(now) {
     rv = recentVec(o, now);
     if (rv && rv.v > SC.PAN_SPEED) vecs.push({ id: k, rv: rv });
   }
-  if (vecs.length < 2) return;
+  if (vecs.length < 2) {
+    /* a finger held still is not a "moving vector", so an anchored
+       pinch - one finger planted, the other sliding - never reaches
+       the tests below */
+    if (live >= 2) traceGesture('bail-slow', live, vecs.length, now);
+    return;
+  }
 
   /* --- pinch candidate: exactly two probes separating / closing
          along the line that joins them (both moving fast) --- */
@@ -2302,8 +2342,11 @@ function detectGesture(now) {
     if (vecs[i].rv.v > maxV) maxV = vecs[i].rv.v;
     if (vecs[i].rv.v < minV) minV = vecs[i].rv.v;
   }
-  if (!ok) return;
-  if (maxV / Math.max(minV, 0.001) > SC.PAN_RATIO) return;
+  if (!ok) { traceGesture('bail-angle', live, vecs.length, now); return; }
+  if (maxV / Math.max(minV, 0.001) > SC.PAN_RATIO) {
+    traceGesture('bail-ratio', live, Math.round(maxV / Math.max(minV, 0.001)), now);
+    return;
+  }
 
   var ids = [];
   for (i = 0; i < vecs.length; i++) ids.push(vecs[i].id);
@@ -2362,6 +2405,7 @@ function applyGesture(now) {
   gesture.vy = gesture.vy * 0.7 + (dy / dt) * 0.3;
   gesture.lastCx = c.x; gesture.lastCy = c.y; gesture.lastT = now;
   clampScroll();
+  traceView(now);
   requestRender();
 }
 
@@ -2373,6 +2417,7 @@ function gestureMemberEnd(now) {
   if (ms.length >= need) return;
   var vx = gesture ? gesture.vx : 0;
   var vy = gesture ? gesture.vy : 0;
+  traceGesture('end', ms.length, 0, now);
   gesture = null;
   if (Math.abs(vy) > 0.06 || Math.abs(vx) > 0.06) startMomentum(vx, vy);
 }
@@ -3060,70 +3105,228 @@ function resetTouchTracking() {
 }
 
 /* ============================================================
- * TOUCH TRACE RECORDER
- * Palm rejection cannot be tuned from a desk: the thresholds
- * depend on this digitizer, this stylus and this hand. When the
- * recorder is on, every raw touch sample and every verdict the
- * engine reaches is kept in a bounded ring buffer, so a real
- * failure can be captured on the iPad and replayed offline with
- * scripts/replay.js instead of being guessed at.
+ * FLIGHT RECORDER + GITHUB UPLOAD
  *
- * Samples are raw client coordinates - exactly what the engine
- * received - so a replay reproduces the same decisions.
+ * Palm rejection and gesture detection cannot be tuned from a
+ * desk: the thresholds depend on this digitizer, this stylus and
+ * this hand. And the failures are intermittent - "sometimes it
+ * zooms and jitters", "sometimes the palm writes" - so asking the
+ * user to start a recording and then reproduce the bug does not
+ * work. You cannot predict when it will happen.
+ *
+ * So the recorder is always on, writing into a fixed-size ring
+ * that holds roughly the last minute of input. When something
+ * goes wrong the user taps Send report and the ring is committed
+ * straight to the repo over the GitHub API - no copy, no paste,
+ * no mail.
+ *
+ * The ring is a preallocated array with a write index, not a
+ * push/shift queue: shift() on a 6000-element array 60 times a
+ * second is real work on a 2012 A5X.
+ *
+ * Records (all timestamps are ms since the app started):
+ *   [0..3, id, x, y, t, rx]   touch down / move / up / cancel
+ *   ['v',  id, verdict, t]    what the palm engine decided
+ *   ['g',  what, a, b, t]     gesture engage / end / momentum
+ *   ['z',  zoom, sx, sy, t]   view changed (zoom or pan)
  * ============================================================ */
-var traceOn = false;
-var traceBuf = [];
+var GH_REPO = 'HassanArif-collab/Note-Taking-Web-App';
+var GH_TOKEN_KEY = 'mn_gh_token';
+/* Reports land on their own branch. Committing them to main would
+   rebuild the live site on every report, for data nobody browsing
+   the app needs. */
+var GH_BRANCH = 'diagnostics';
+
+var TRACE_MAX = 6000;
+var traceBuf = new Array(TRACE_MAX);
+var traceHead = 0;         /* next slot to write */
+var traceCount = 0;        /* valid entries, capped at TRACE_MAX */
 var traceT0 = 0;
-var TRACE_MAX = 4000;
+var traceOn = true;        /* always recording unless turned off */
+var traceLastZoom = -1;
+var traceSending = false;
+
+function traceNow(now) {
+  if (!traceT0) traceT0 = now;
+  return now - traceT0;
+}
 
 function tracePush(rec) {
-  if (!traceOn) return;
-  traceBuf.push(rec);
-  if (traceBuf.length > TRACE_MAX) traceBuf.shift();
+  traceBuf[traceHead] = rec;
+  traceHead = (traceHead + 1) % TRACE_MAX;
+  if (traceCount < TRACE_MAX) traceCount++;
 }
 
 /* p = phase: 0 down, 1 move, 2 up, 3 cancel */
 function traceTouch(p, touch, now) {
   if (!traceOn) return;
-  if (!traceT0) traceT0 = now;
   tracePush([p, touch.identifier,
              Math.round(touch.clientX * 10) / 10,
              Math.round(touch.clientY * 10) / 10,
-             now - traceT0,
+             traceNow(now),
              touch.radiusX || 0]);
 }
 
-/* v = verdict: 'ink' | 'palm' | 'dot' | 'usurped' */
+/* v = 'ink' | 'palm' | 'dot' | 'usurped' | 'discarded' | 'undo' */
 function traceVerdict(v, id, now) {
   if (!traceOn) return;
-  if (!traceT0) traceT0 = now;
-  tracePush(['v', id, v, now - traceT0]);
+  tracePush(['v', id, v, traceNow(now)]);
 }
 
-function traceToggle() {
-  traceOn = !traceOn;
-  if (traceOn) { traceBuf = []; traceT0 = 0; toast('Touch trace recording'); }
-  else toast('Touch trace stopped (' + traceBuf.length + ' samples)');
-  buildMoreMenu();
+/* gesture engine events - the zoom/jitter complaints live here */
+function traceGesture(what, a, b, now) {
+  if (!traceOn) return;
+  tracePush(['g', what, a, b, traceNow(now)]);
 }
 
-function showTrace() {
-  var meta = {
-    v: 1,
-    note: 'MathNotes touch trace',
+/* view changes, throttled to meaningful movement */
+function traceView(now) {
+  if (!traceOn) return;
+  if (Math.abs(zoom - traceLastZoom) < 0.01) return;
+  traceLastZoom = zoom;
+  tracePush(['z', Math.round(zoom * 1000) / 1000,
+             Math.round(scrollX), Math.round(scrollY), traceNow(now)]);
+}
+
+/* read the ring back in chronological order */
+function traceSamples() {
+  var out = [], i, idx;
+  var start = (traceHead - traceCount + TRACE_MAX) % TRACE_MAX;
+  for (i = 0; i < traceCount; i++) {
+    idx = (start + i) % TRACE_MAX;
+    if (traceBuf[idx]) out.push(traceBuf[idx]);
+  }
+  return out;
+}
+
+function buildTrace(label) {
+  return {
+    v: 2,
+    label: label || '',
+    ua: navigator.userAgent,
     viewW: viewW, viewH: viewH,
     wrapLeft: wrapRect.left, wrapTop: wrapRect.top,
-    dpr: dpr, zoom: zoom, scrollX: Math.round(scrollX), scrollY: Math.round(scrollY),
+    dpr: dpr, zoom: zoom,
+    scrollX: Math.round(scrollX), scrollY: Math.round(scrollY),
     palmLevel: settings.palmLevel, hand: settings.hand,
-    samples: traceBuf
+    tool: tool, spacing: settings.spacing,
+    at: new Date().toISOString(),
+    samples: traceSamples()
   };
-  var txt;
-  try { txt = JSON.stringify(meta); }
-  catch (e) { toast('Trace too large to show'); return; }
-  traceText.value = txt;
-  traceOverlay.className = 'overlay on';
-  /* pre-select so the iPad user only has to tap Copy */
-  try { traceText.focus(); traceText.setSelectionRange(0, txt.length); } catch (e) {}
+}
+
+/* ---------- GitHub upload ----------
+ * A fine-grained token with Contents: read+write on this one repo,
+ * kept in localStorage on the iPad and nowhere else. It is never
+ * written into a note, a trace, or the repository. */
+function ghToken() {
+  try { return localStorage.getItem(GH_TOKEN_KEY) || ''; } catch (e) { return ''; }
+}
+function ghSetToken(t) {
+  try {
+    if (t) localStorage.setItem(GH_TOKEN_KEY, t);
+    else localStorage.removeItem(GH_TOKEN_KEY);
+  } catch (e) {}
+}
+
+function b64utf8(s) {
+  /* btoa only handles bytes; this is the standard ES5 way to get
+     UTF-8 through it without TextEncoder */
+  return btoa(unescape(encodeURIComponent(s)));
+}
+
+function twoDigit(n) { return (n < 10 ? '0' : '') + n; }
+function traceStamp() {
+  var d = new Date();
+  return d.getFullYear() + twoDigit(d.getMonth() + 1) + twoDigit(d.getDate()) + '-' +
+         twoDigit(d.getHours()) + twoDigit(d.getMinutes()) + twoDigit(d.getSeconds());
+}
+
+function sendReport(label) {
+  var tok = ghToken();
+  if (!tok) { openTokenPanel(); return; }
+  if (traceSending) { toast('Still sending the last one'); return; }
+  if (!traceCount) { toast('Nothing recorded yet'); return; }
+
+  var payload = buildTrace(label);
+  var txt, body;
+  try {
+    txt = JSON.stringify(payload);
+    body = JSON.stringify({
+      message: 'trace: ' + (label || 'report') + ' (' + payload.samples.length + ' samples)',
+      content: b64utf8(txt),
+      branch: GH_BRANCH
+    });
+  } catch (e) { toast('Could not build the report'); return; }
+
+  var name = traceStamp() + (label ? '-' + label.replace(/[^a-z0-9]+/gi, '-') : '') + '.json';
+  var url = 'https://api.github.com/repos/' + GH_REPO + '/contents/traces/auto/' + name;
+
+  traceSending = true;
+  toast('Sending report...');
+
+  var xhr = new XMLHttpRequest();
+  xhr.open('PUT', url, true);
+  xhr.setRequestHeader('Authorization', 'token ' + tok);
+  xhr.setRequestHeader('Accept', 'application/vnd.github+json');
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.onreadystatechange = function () {
+    if (xhr.readyState !== 4) return;
+    traceSending = false;
+    if (xhr.status === 201) {
+      toast('Report sent: ' + name);
+      buildMoreMenu();
+    } else if (xhr.status === 401 || xhr.status === 403) {
+      toast('GitHub rejected the token (' + xhr.status + ')');
+      openTokenPanel();
+    } else if (xhr.status === 0) {
+      /* Safari 9 reports 0 for a TLS or CORS failure with no detail */
+      toast('Could not reach GitHub (TLS or network)');
+    } else {
+      toast('Upload failed: HTTP ' + xhr.status);
+    }
+  };
+  try { xhr.send(body); }
+  catch (e) { traceSending = false; toast('Upload failed to start'); }
+}
+
+/* Whether a 2012 TLS stack can still negotiate with api.github.com
+ * cannot be checked from a desk, and if it cannot, nothing else in
+ * this pipeline works. One tap settles it before anyone debugs
+ * anything else. */
+function testConnection() {
+  toast('Testing GitHub...');
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', 'https://api.github.com/repos/' + GH_REPO, true);
+  xhr.setRequestHeader('Accept', 'application/vnd.github+json');
+  xhr.onreadystatechange = function () {
+    if (xhr.readyState !== 4) return;
+    if (xhr.status === 200) toast('GitHub reachable - uploads should work');
+    else if (xhr.status === 0) toast('Cannot reach GitHub: TLS too old or no network');
+    else toast('GitHub answered HTTP ' + xhr.status);
+  };
+  try { xhr.send(); }
+  catch (e) { toast('Request could not start: ' + e.message); }
+}
+
+/* tooling hook: scripts/replay.js and the test harness read the
+   trace from here. Deliberately exposes trace data only - the token
+   is never reachable from outside. */
+window.__mnTrace = function () { return buildTrace('readback'); };
+
+/* ---------- token panel ---------- */
+function openTokenPanel() {
+  tokenInput.value = ghToken();
+  tokenOverlay.className = 'overlay on';
+}
+function closeTokenPanel() { tokenOverlay.className = 'overlay'; }
+
+function saveTokenFromPanel() {
+  var t = (tokenInput.value || '').replace(/\s+/g, '');
+  ghSetToken(t);
+  closeTokenPanel();
+  buildMoreMenu();
+  toast(t ? 'Token saved on this iPad' : 'Token cleared');
 }
 
 /* ---------- event wiring ---------- */
@@ -3542,14 +3745,14 @@ function buildMoreMenu() {
     { lbl: 'Palm rejection', val: PALM_NAMES[settings.palmLevel], act: function () { settings.palmLevel = (settings.palmLevel + 1) % 3; applyPalmUI(); afterSettingChange(); } },
     { lbl: 'Writing hand', val: HAND_NAMES[settings.hand], act: function () { settings.hand = (settings.hand + 1) % 3; afterSettingChange(); } },
     { lbl: 'Touch guide', val: settings.guideDots ? 'On' : 'Off', act: function () { settings.guideDots = !settings.guideDots; hidePendingDot(); afterSettingChange(); } },
-    { lbl: 'Touch trace', val: traceOn ? 'Recording' : 'Off', act: traceToggle },
+    { lbl: 'Send report', val: traceCount ? traceCount + ' pts' : 'empty', act: function () { sendReport(''); } },
+    { lbl: 'GitHub token', val: ghToken() ? 'Set' : 'Not set', act: openTokenPanel },
+    { lbl: 'Test GitHub connection', val: '', act: testConnection },
+    { lbl: 'Recording', val: traceOn ? 'On' : 'Off', act: function () { traceOn = !traceOn; afterSettingChange(); } },
     { lbl: 'Clear note', val: '', warn: true, act: clearNote },
     { lbl: 'Delete note', val: '', warn: true, act: deleteCurrentNote },
     { lbl: 'About', val: '', act: function () { window.alert('MathNotes v5.1 (S-Class 5)\n\nSamsung-notes style handwriting for iPad 3.\nWorks offline. Notes are saved in this browser.\n\nHand tool: finger scrolls, pen writes.\nTwo-finger pinch zooms. Lasso tool selects ink.\nDrag the corner handle or tap - / + to resize\nthe selection. Double-tap with the hand tool\nresets zoom.'); } }
   ];
-  if (traceBuf.length) {
-    moreRowDefs.splice(9, 0, { lbl: 'Show trace', val: traceBuf.length + ' pts', act: showTrace });
-  }
   for (var i = 0; i < moreRowDefs.length; i++) {
     var d = moreRowDefs[i];
     var row = document.createElement('button');
@@ -3711,7 +3914,8 @@ searchInputEl.addEventListener('input', function () { renderHome(); });
 undoBtn.addEventListener('click', doUndo);
 redoBtn.addEventListener('click', doRedo);
 byId('exportCloseBtn').addEventListener('click', function () { exportOverlay.className = 'overlay'; });
-byId('traceCloseBtn').addEventListener('click', function () { traceOverlay.className = 'overlay'; });
+byId('tokenCancelBtn').addEventListener('click', closeTokenPanel);
+byId('tokenSaveBtn').addEventListener('click', saveTokenFromPanel);
 
 /* drawing on the canvas closes floating panels (closePanels is
    called from onTouchStart in the input engine) */
