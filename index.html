@@ -902,7 +902,13 @@ var SC = {
                               really accelerates produces CONSECUTIVE fast
                               samples, never a hop-settle-hop rhythm. Two
                               isolated hops and the contact is a palm. */
-  PINCH_MIN_AGE:   150,    /* both contacts must have survived this long. A
+  PINCH_MIN_AGE:   90,     /* Must be BELOW the time it takes a contact to
+                              commit as ink (~128ms), or the pinch can never
+                              win the race: a finger sliding during a zoom
+                              looks exactly like a stroke, inks first, and
+                              the gesture is then blocked by its own ink.
+                              Recordings showed the moving finger inking at
+                              130ms while the pinch was still waiting. */    /* both contacts must have survived this long. A
                               resting palm is not one contact - it is a storm
                               of them, appearing and vanishing every 20-100ms,
                               and any two of them make a plausible "pinch". */
@@ -2461,13 +2467,17 @@ function tryPinch(now) {
   var d = dist(a.cx, a.cy, b.cx, b.cy);
   if (d < 40) { pinchTrack = null; return false; }
 
-  /* flickering contacts never qualify */
-  if (now - a.t0 < SC.PINCH_MIN_AGE || now - b.t0 < SC.PINCH_MIN_AGE) return false;
-
+  /* Baseline the separation the moment the pair appears, NOT when it
+     becomes old enough to act on. Waiting to take the baseline meant
+     most of the pinch had already happened by then, leaving a delta
+     of a couple of px - the gesture measured only its own tail. */
   var same = pinchTrack &&
     ((pinchTrack.a === a.id && pinchTrack.b === b.id) ||
      (pinchTrack.a === b.id && pinchTrack.b === a.id));
   if (!same) { pinchTrack = { a: a.id, b: b.id, d0: d }; return false; }
+
+  /* flickering contacts never qualify */
+  if (now - a.t0 < SC.PINCH_MIN_AGE || now - b.t0 < SC.PINCH_MIN_AGE) return false;
   if (Math.abs(d - pinchTrack.d0) < SC.PINCH_DELTA) return false;
 
   discardAllActiveInk(now);
