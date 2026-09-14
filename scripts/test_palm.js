@@ -592,6 +592,105 @@ test('the trace carries what the digitizer actually reports', function (done) {
   });
 });
 
+/* ---------------- Tier 1: settling vs stroking ---------------- */
+
+/* Contact 4067368407, replayed verbatim. It landed, slid 48px while the
+ * contact patch settled, inked at 128ms, then dwelled for 330ms of 1px
+ * steps and lifted at 531ms - just under the 600ms the old mid-stroke
+ * discard required, so it left a mark. */
+var SETTLE_407 = [
+  [0, 671, 615], [20, 665, 621], [16, 660, 629], [13, 654, 635], [12, 650, 637],
+  [17, 645, 639], [17, 640, 642], [16, 636, 645], [17, 634, 647], [38, 628, 651],
+  [12, 626, 653], [26, 624, 654], [7, 623, 654], [34, 622, 655], [16, 621, 655],
+  [65, 621, 656], [35, 620, 656], [17, 619, 657], [32, 618, 657], [18, 618, 658],
+  [33, 617, 659], [16, 617, 658], [19, 617, 659]
+];
+
+test('a contact that settles and dwells is a palm, not a stroke', function (done) {
+  var app = fresh();
+  replay(app, 407, SETTLE_407);
+  after(300, function () {
+    app.flushFrames();
+    check('landed, slid, then dwelled -> no ink', app.strokes().length === 0,
+          app.strokes().length + ' strokes');
+    done();
+  });
+});
+
+test('a real stroke that moves and lifts is untouched', function (done) {
+  var app = fresh();
+  /* same distance and speed as the palm above, but it LIFTS when it stops */
+  app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 150, y1: PEN.y + 40,
+               speed: 0.35, wobble: 3 });
+  after(300, function () {
+    app.flushFrames();
+    check('move then lift -> inks', app.strokes().length === 1,
+          app.strokes().length + ' strokes');
+    done();
+  });
+});
+
+test('a brief pause mid-stroke does not kill the stroke', function (done) {
+  var app = fresh();
+  app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 90, y1: PEN.y,
+               speed: 0.3, keepDown: true });
+  /* hesitate for 200ms - under the dwell threshold - then carry on */
+  var i;
+  for (i = 0; i < 7; i++) { app.tick(28); app.moveTo(1, PEN.x + 90, PEN.y); }
+  for (i = 1; i <= 20; i++) { app.tick(16); app.moveTo(1, PEN.x + 90 + i * 5, PEN.y + i); }
+  app.up(1);
+  after(300, function () {
+    app.flushFrames();
+    check('pause then continue -> still one stroke', app.strokes().length === 1,
+          app.strokes().length + ' strokes');
+    done();
+  });
+});
+
+test('three contacts translating together are one hand', function (done) {
+  var app = fresh();
+  app.downMulti([[1, 400, 300], [2, 470, 360], [3, 540, 330]]);
+  var i;
+  for (i = 1; i <= 20; i++) {
+    app.tick(16);
+    app.moveTo(1, 400 + i * 6, 300 + i * 2);
+    app.moveTo(2, 470 + i * 6, 360 + i * 2);
+    app.moveTo(3, 540 + i * 6, 330 + i * 2);
+  }
+  app.up(1); app.up(2); app.up(3);
+  after(300, function () {
+    app.flushFrames();
+    check('rigid 3-contact translation -> no ink', app.strokes().length === 0,
+          app.strokes().length + ' strokes');
+    var g = app.trace().samples.filter(function (r) { return r[0] === 'g' && r[1] === 'rigid'; });
+    check('the rigid group is recorded', g.length > 0);
+    done();
+  });
+});
+
+test('two fingers moving together are still a pan, not a hand', function (done) {
+  var app = fresh();
+  var z = app.trace().zoom;
+  app.down(1, 300, 300);
+  app.down(2, 500, 300);
+  var i;
+  for (i = 1; i <= 20; i++) {
+    app.tick(16);
+    app.moveTo(1, 300, 300 + i * 7);
+    app.moveTo(2, 500, 300 + i * 7);
+  }
+  app.up(1); app.up(2);
+  after(300, function () {
+    app.flushFrames();
+    /* the pinch math applies a factor of ~1.0 each frame, so zoom drifts
+       by ~1e-15 - compare with a tolerance, not for equality */
+    check('two-finger pan is not treated as a rigid hand',
+          app.strokes().length === 0 && Math.abs(app.trace().zoom - z) < 0.001,
+          app.strokes().length + ' strokes, zoom ' + app.trace().zoom);
+    done();
+  });
+});
+
 /* ---------------- run ---------------- */
 console.log('\npalm rejection behaviour\n');
 (function run(i) {
