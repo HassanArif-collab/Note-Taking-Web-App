@@ -61,6 +61,21 @@ with no suspicion, no veto and no arbitration - it read as partial protection
 while giving essentially none, which is worse than offering nothing. It is gone,
 and anything saved on it is migrated to Max.
 
+**A palm contact does not move - its centroid does.** The digitizer
+reports the centre of a contact patch, and as a palm patch grows or deforms
+that centre snaps between lobes: in one recording a contact that never went
+anywhere hopped 39px in 9ms, repeatedly, back and forth, and another threw its
+centroid 81px in the 31ms after landing. Three rules follow from that. A
+contact's opening 60ms is treated as the patch settling and counted as no
+travel at all. A sample that moves implausibly far and fast for a hand updates
+the position but is not counted as movement. And speed is a median over a short
+window rather than a running average, because an average lets a single hop
+commit a stroke while a median ignores it.
+
+The giveaway is the rhythm: a hand that really accelerates produces
+*consecutive* fast samples, while a deforming blob produces an isolated hop with
+stillness on both sides. Two isolated hops and the contact is judged a palm.
+
 **A resting palm is not one contact.** On this digitizer it is a storm of
 them, appearing and vanishing every 20-100ms. Any two of them look like a pinch
 pair, so gesture detection requires contacts that have survived 150ms and a
@@ -122,7 +137,7 @@ ES5 only. Forbidden: `let`/`const`, arrow functions, template literals, classes,
 
 ```
 node scripts/check_es5.js     # Safari 9 gate - run before every push
-node scripts/test_palm.js     # palm-rejection behaviour (25 assertions)
+node scripts/test_palm.js     # palm-rejection behaviour (27 assertions)
 node scripts/test_recorder.js # recorder + pinch-zoom (15 assertions)
 node scripts/replay.js FILE   # replay a recorded touch trace
 ```

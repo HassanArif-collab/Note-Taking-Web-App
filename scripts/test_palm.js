@@ -388,6 +388,69 @@ test('a setting saved on the old Med level is migrated to Max', function (done) 
   });
 });
 
+/* ---------------- replayed from a real iPad recording ----------------
+ * These are the literal coordinate streams of two contacts that inked
+ * when they should not have. Both were long-lived resting contacts
+ * whose centroid snapped between lobes of the palm blob - they never
+ * actually travelled anywhere. */
+
+/* portrait, matching the geometry the recording was captured in */
+function freshPortrait() {
+  var app = H.load({ quiet: true, dpr: 2, viewW: 768, viewH: 872 });
+  app.flushFrames();
+  return app;
+}
+
+/* [dt from previous sample, clientX, clientY] */
+function replay(app, id, samples) {
+  app.down(id, samples[0][1], samples[0][2]);
+  for (var i = 1; i < samples.length; i++) {
+    app.tick(samples[i][0]);
+    app.moveTo(id, samples[i][1], samples[i][2]);
+  }
+  app.up(id);
+}
+
+/* contact 4067367197: alive 2.4s, oscillating ~39px between two lobes */
+var OSC_197 = [
+  [0, 667, 482], [19, 652, 453], [14, 653, 452], [9, 672, 486], [16, 673, 491],
+  [17, 672, 491], [32, 671, 490], [17, 670, 489], [24, 650, 456], [15, 650, 452],
+  [11, 669, 486], [18, 670, 489], [37, 651, 455], [13, 650, 452], [21, 651, 452],
+  [13, 651, 452], [18, 652, 452], [17, 651, 453], [16, 651, 454], [14, 652, 455],
+  [19, 650, 455], [16, 649, 455], [17, 648, 454], [19, 647, 455], [18, 648, 455]
+];
+
+/* contact 4067367206: 81px jump 31ms after landing, then flip-flops */
+var OSC_206 = [
+  [0, 635, 540], [31, 669, 614], [13, 670, 625], [1, 669, 628], [15, 669, 631],
+  [18, 668, 631], [18, 668, 632], [32, 666, 632], [33, 665, 632], [42, 682, 599],
+  [16, 684, 594], [9, 664, 633], [17, 662, 638], [33, 684, 600], [36, 664, 635],
+  [2, 683, 598], [24, 686, 592], [8, 687, 592], [15, 687, 591], [36, 687, 589],
+  [20, 688, 586], [15, 689, 584], [25, 689, 581], [22, 690, 579], [4, 675, 603]
+];
+
+test('a resting contact whose centroid oscillates does not ink (real data)', function (done) {
+  var app = freshPortrait();
+  replay(app, 197, OSC_197);
+  after(300, function () {
+    app.flushFrames();
+    var n = app.strokes().length;
+    check('oscillating palm contact 197 -> 0 strokes', n === 0, n + ' strokes');
+    done();
+  });
+});
+
+test('a palm that jumps 81px on landing does not ink (real data)', function (done) {
+  var app = freshPortrait();
+  replay(app, 206, OSC_206);
+  after(300, function () {
+    app.flushFrames();
+    var n = app.strokes().length;
+    check('jumping palm contact 206 -> 0 strokes', n === 0, n + ' strokes');
+    done();
+  });
+});
+
 /* ---------------- run ---------------- */
 console.log('\npalm rejection behaviour\n');
 (function run(i) {

@@ -859,13 +859,49 @@ var SC = {
                               character, so the veto only fires on drags
                               that are BOTH straight and slower than
                               anyone writes. */
-  VETO_PATH:       12,     /* must engage before the commit lanes do:
-                              a suspect can commit at ~18px, so a
-                              30px veto threshold never fired */
+  VETO_PATH:       8,      /* must engage BEFORE the commit lanes do. The
+                              windowed median reports a contact's true
+                              speed immediately instead of ramping up to
+                              it, so suspects now commit sooner and a
+                              12px threshold was again too late. The
+                              window already guarantees several samples,
+                              which is what this guard was really for. */
   USURP_RATIO:     0.6,    /* incumbent this much slower than the
                               contender = the palm, not the pen */
   DOT_NEAR_PX:     250,    /* a tap dot must land near recent writing    */
   DOT_NEAR_MS:     4000,   /* and soon after it, or it is a palm tap.    */
+  SETTLE_MS:       60,     /* A contact's first samples are its patch
+                              growing, not the hand moving: a palm landing
+                              threw its reported centroid 81px in 31ms.
+                              There is no speed history yet to judge that
+                              against, so the opening window is re-anchored
+                              and counted as nothing. */
+  JUMP_PX:         28,     /* A stylus tip cannot teleport. A sample that
+                              moves this far, this much faster than the
+                              contact has been moving, is the digitizer
+                              re-centroiding a deforming blob - a resting
+                              palm in the recordings hopped 39px in 9ms,
+                              repeatedly, back and forth, without going
+                              anywhere. Such a sample still updates the
+                              position, but must not feed the speed window
+                              or the travelled distance. */
+  JUMP_SPEED:      0.5,
+  JUMP_ABS:        1.2,    /* Before there is any speed history to compare
+                              against, fall back to plain physics: a >28px
+                              hop at over 1200 px/s is not a hand. Without
+                              this the first hop slipped into the window
+                              and raised the bar enough to hide the next. */
+  JUMP_RATIO:      6,      /* ...and relative to this contact's own speed, so
+                              a genuinely fast stroke is never mistaken for
+                              a jump. */
+  JUMP_RUN:        2,      /* after this many in a row, believe it: real
+                              acceleration must not be suppressed forever. */
+  JUMP_PALM:       2,      /* ISOLATED hops - a lone jump with stillness on
+                              both sides - are the signature of a blob
+                              re-centroiding between lobes. A pen that
+                              really accelerates produces CONSECUTIVE fast
+                              samples, never a hop-settle-hop rhythm. Two
+                              isolated hops and the contact is a palm. */
   PINCH_MIN_AGE:   150,    /* both contacts must have survived this long. A
                               resting palm is not one contact - it is a storm
                               of them, appearing and vanishing every 20-100ms,
@@ -1731,6 +1767,34 @@ function computeSuspect(st, touch, now) {
  *
  * So a live stroke that behaves like a palm can be taken over by a
  * later touch that behaves like writing. */
+/* A palm blob's centroid snaps between lobes as the contact area
+ * deforms: most samples are near-still and a few are huge jumps - in
+ * one recording a resting contact oscillated 39px back and forth
+ * while never actually moving. An exponential average weights each
+ * new sample at 0.35, so a single jump was enough to commit it as
+ * ink. A median over a short window ignores an isolated spike, and
+ * real writing moves on most of its samples, so its median stays
+ * high. */
+var SPEED_WIN = 5;
+
+/* True when a sample is a sensor discontinuity rather than movement.
+ * The test is relative to how fast this contact has actually been
+ * going, so a fast stroke - or a slow one during a dropped frame - is
+ * never caught, while a still contact that hops 39px is. */
+function isJump(st, cd, v) {
+  if (st.jumps >= SC.JUMP_RUN) return false;
+  if (cd <= SC.JUMP_PX) return false;
+  if (st.sp.length < SPEED_WIN) return v > SC.JUMP_ABS;
+  return v > Math.max(SC.JUMP_SPEED, st.vel * SC.JUMP_RATIO);
+}
+
+function pushSpeed(st, v) {
+  st.sp.push(v);
+  if (st.sp.length > SPEED_WIN) st.sp.shift();
+  var b = st.sp.slice().sort(function (x, y) { return x - y; });
+  st.vel = b[b.length >> 1];
+}
+
 function inkStraightness(st) {
   return st.net / Math.max(st.pathLen, 1);
 }
@@ -1740,11 +1804,12 @@ function inkStraightness(st) {
 function inkOwnerIsDubious(st, now) {
   if (!st || st.state !== 'ink') return false;
   if (now - st.t0 < 120) return false;              /* too early to judge */
-  if (st.vEMA < 0.02) return true;                  /* stalled under the hand */
-  return inkStraightness(st) > SC.DISCARD_STRAIGHT && st.vEMA < SC.VETO_SPEED;
+  if (st.vel < 0.02) return true;                  /* stalled under the hand */
+  return inkStraightness(st) > SC.DISCARD_STRAIGHT && st.vel < SC.VETO_SPEED;
 }
 
-/* Mean speed over the whole contact. Unlike vEMA this is not still
+/* Mean speed over the whole contact. Unlike the windowed median it
+ * is not still
  * ramping up at the moment a stroke commits (the EMA ignores its
  * first samples), so it is the honest way to compare two contacts. */
 function meanSpeed(st, now) {
@@ -1755,7 +1820,7 @@ function meanSpeed(st, now) {
  * evidence - is the incumbent clearly the slower, straighter one? */
 function inkOwnerLosesTo(st, winner, now) {
   if (!st || st === winner || st.state !== 'ink') return false;
-  if (st.vEMA < 0.02) return true;
+  if (st.vel < 0.02) return true;
   return inkStraightness(st) > SC.DISCARD_STRAIGHT &&
          meanSpeed(st, now) < meanSpeed(winner, now) * SC.USURP_RATIO;
 }
@@ -1900,7 +1965,7 @@ function beginTouch(touch, now) {
     t0: now, lastT: now,
     path: [[pt.x, pt.y, now]],
     pathLen: 0, net: 0,
-    vEMA: 0, skip: 0, coh: 1, dirs: [],
+    vel: 0, sp: [], jumps: 0, isoJumps: 0, coh: 1, dirs: [],
     suspect: false, rx: touch.radiusX || 0
   };
 
@@ -2047,12 +2112,29 @@ function moveTouch(touch, now) {
   st.cx = touch.clientX; st.cy = touch.clientY;
   st.path.push([pt.x, pt.y, now]);
   if (st.path.length > 400) st.path.shift();
-  st.pathLen += cd;
+  if (now - st.t0 < SC.SETTLE_MS) {
+    /* still settling: keep the anchor under the contact so none of the
+       landing excursion is mistaken for travel */
+    st.csx = st.cx; st.csy = st.cy;
+    st.net = 0;
+    return;
+  }
+
   st.net = dist(st.csx, st.csy, st.cx, st.cy);
   var v = cd / Math.max(dt, 4);
 
-  if (st.skip < 3) st.skip++;
-  else st.vEMA = st.vEMA * 0.65 + v * 0.35;
+  /* a centroid hop is not travel */
+  if (isJump(st, cd, v)) {
+    st.jumps++;
+  } else {
+    /* a run of exactly one hop, with normal samples either side, is a
+       blob snapping between lobes rather than a hand accelerating */
+    if (st.jumps === 1) st.isoJumps++;
+    st.jumps = 0;
+    st.pathLen += cd;
+    pushSpeed(st, v);
+  }
+  if (st.isoJumps >= SC.JUMP_PALM) { verdictPalm(st, now); return; }
 
   if (cd > 0.05) {
     var ux = (st.cx - pcx) / cd, uy = (st.cy - pcy) / cd;
@@ -2067,6 +2149,10 @@ function moveTouch(touch, now) {
 }
 
 function tryCommit(st, now) {
+  /* Until the window is full the median is not yet meaningful, and
+     FAST and DECISIVE had no age gate at all - so one centroid jump
+     could commit a contact that had barely existed. */
+  if (st.sp.length < SPEED_WIN) return;
   var age = now - st.t0;
   var boost = st.suspect ? SC.SUSPECT_BOOST : 1;
   var needAge = SC.PROBE_MIN_AGE * (st.suspect ? SC.SUSPECT_AGE_MULT : 1);
@@ -2077,21 +2163,21 @@ function tryCommit(st, now) {
      (a fraction bar, a minus sign) is never blocked. */
   var straight = st.net / Math.max(st.pathLen, 1);
   if (st.suspect && st.pathLen > SC.VETO_PATH &&
-      straight > SC.VETO_STRAIGHT && st.vEMA < SC.VETO_SPEED) {
+      straight > SC.VETO_STRAIGHT && st.vel < SC.VETO_SPEED) {
     if (age > SC.PALM_AGE) verdictPalm(st, now);
     return;
   }
 
-  if ((age > needAge && st.vEMA > SC.COMMIT_SPEED * boost &&
+  if ((age > needAge && st.vel > SC.COMMIT_SPEED * boost &&
        st.coh > SC.COMMIT_COH && st.net > SC.COMMIT_NET * boost) ||
-      (st.net > SC.FAST_NET * boost && st.vEMA > SC.FAST_SPEED * boost) ||
-      (st.net > SC.DECISIVE_NET * boost && st.vEMA > SC.DECISIVE_SPEED * boost)) {
+      (st.net > SC.FAST_NET * boost && st.vel > SC.FAST_SPEED * boost) ||
+      (st.net > SC.DECISIVE_NET * boost && st.vel > SC.DECISIVE_SPEED * boost)) {
     promoteInk(st, now);
     return;
   }
 
   /* palm verdict: old, slow, and barely travelled */
-  if (age > SC.PALM_AGE && st.net < 10 && (st.vEMA < SC.PALM_IDLE || age > SC.PALM_SIT_AGE)) {
+  if (age > SC.PALM_AGE && st.net < 10 && (st.vel < SC.PALM_IDLE || age > SC.PALM_SIT_AGE)) {
     verdictPalm(st, now);
   } else if (age > SC.PALM_SIT_AGE && st.net < SC.PALM_SIT_NET) {
     verdictPalm(st, now);
@@ -2116,7 +2202,7 @@ function appendInk(st, pt, now, touch) {
   s.pts.push([pt.x, pt.y, now]);
   st.pathLen += cd;
   st.net = dist(st.csx, st.csy, cx, cy);
-  st.vEMA = st.vEMA * 0.65 + (cd / Math.max(dt, 4)) * 0.35;
+  pushSpeed(st, cd / Math.max(dt, 4));
 
   /* incremental live segment (one per move, never the tail) */
   var k = s.pts.length - 1;
@@ -2136,7 +2222,7 @@ function appendInk(st, pt, now, touch) {
     var age = now - st.t0;
     var straight = st.net / Math.max(st.pathLen, 1);
     if (age > SC.DISCARD_MS && st.pathLen > SC.DISCARD_PATH &&
-        st.vEMA < SC.DISCARD_SPEED && straight > SC.DISCARD_STRAIGHT) {
+        st.vel < SC.DISCARD_SPEED && straight > SC.DISCARD_STRAIGHT) {
       discardActiveInk(st, now);
     }
   }
