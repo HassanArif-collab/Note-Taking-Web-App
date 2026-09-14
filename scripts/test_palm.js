@@ -451,6 +451,77 @@ test('a palm that jumps 81px on landing does not ink (real data)', function (don
   });
 });
 
+/* ---------------- Palm: Strict ----------------
+ * Contact 4067368028, replayed from a real recording. It drifted 22px
+ * in 140ms at about 0.16 px/ms in one coherent direction - which is
+ * arithmetically indistinguishable from slow careful writing, and
+ * slower than the "careful symbol" stroke this suite requires to ink.
+ * Max cannot reject it without also rejecting that. Strict can, and
+ * gives up slow strokes to do it. */
+var DRIFT_028 = [
+  [0, 524, 518], [38, 527, 525], [1, 527, 527], [17, 528, 529], [24, 529, 531],
+  [26, 530, 532], [12, 531, 534], [4, 532, 535], [18, 534, 538], [19, 536, 540],
+  [14, 538, 542], [18, 543, 547], [15, 545, 551], [17, 550, 555], [17, 552, 558],
+  [17, 555, 561], [15, 556, 564], [18, 557, 566], [16, 558, 567], [18, 559, 568],
+  [15, 560, 568], [19, 560, 569], [32, 561, 569], [15, 562, 569]
+];
+
+test('a steady slow palm drift inks at Max but not at Strict', function (done) {
+  var max = freshAtLevel(2);
+  max.stroke({ id: 9, x0: 524, y0: 518, x1: 560, y1: 546, speed: 0.16 });
+  after(300, function () {
+    max.flushFrames();
+    check('0.16 px/ms drift inks at Max', max.strokes().length === 1,
+          max.strokes().length + ' strokes');
+    var strict = freshAtLevel(3);
+    strict.stroke({ id: 9, x0: 524, y0: 518, x1: 560, y1: 546, speed: 0.16 });
+    after(300, function () {
+      strict.flushFrames();
+      check('...and is refused at Strict', strict.strokes().length === 0,
+            strict.strokes().length + ' strokes');
+      done();
+    });
+  });
+});
+
+/* The documented ceiling, not a wish. Contact 4067368028 starts as a slow
+ * drift and ACCELERATES to 0.38 px/ms - as fast as ordinary handwriting.
+ * No speed threshold can refuse it without refusing writing too, so it
+ * inks at every level that inks at all. This test exists to record that
+ * fact, so nobody later mistakes it for a regression. */
+test('a palm dragged at writing speed defeats every level (known ceiling)', function (done) {
+  var app = freshAtLevel(3);
+  replay(app, 28, DRIFT_028);
+  after(300, function () {
+    app.flushFrames();
+    check('palm dragged at writing speed still inks, even at Strict',
+          app.strokes().length === 1, app.strokes().length + ' strokes');
+    done();
+  });
+});
+
+test('Strict still inks normal writing', function (done) {
+  var app = freshAtLevel(3);
+  app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 160, y1: PEN.y + 40, speed: 0.30, wobble: 3 });
+  after(300, function () {
+    app.flushFrames();
+    check('normal writing inks at Strict', app.strokes().length === 1,
+          app.strokes().length + ' strokes');
+    done();
+  });
+});
+
+test('Strict gives up slow careful strokes - the trade, stated', function (done) {
+  var app = freshAtLevel(3);
+  app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 32, y1: PEN.y + 32, speed: 0.10 });
+  after(300, function () {
+    app.flushFrames();
+    check('slow careful stroke is refused at Strict (expected)',
+          app.strokes().length === 0, app.strokes().length + ' strokes');
+    done();
+  });
+});
+
 /* ---------------- run ---------------- */
 console.log('\npalm rejection behaviour\n');
 (function run(i) {
