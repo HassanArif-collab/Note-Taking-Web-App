@@ -85,6 +85,24 @@ The giveaway is the rhythm: a hand that really accelerates produces
 *consecutive* fast samples, while a deforming blob produces an isolated hop with
 stillness on both sides. Two isolated hops and the contact is judged a palm.
 
+**Check what the digitizer actually reports.** Kebab menu -> **Touch
+capabilities**, after drawing once. Every threshold in this engine exists
+because we believed the hardware reports no contact size and no pressure - and
+that belief came from reading `touch.radiusX` alone. The app now observes every
+vendor-prefixed twin as well (`webkitRadiusX`, `webkitForce`, and the rest) and
+keeps the maximum seen, distinguishing *absent* from *always zero*. If any of
+them ever reports a real value, palm rejection stops being behavioural guesswork:
+a palm is a big contact and a disc stylus is a small one.
+
+**A cancelled contact is free palm evidence.** iOS fires `touchcancel` when it
+decides a touch was spurious - a hand landing, too many contacts, a system
+gesture taking over. That is the digitizer telling us the contact was not
+deliberate, and the engine used to commit the stroke anyway.
+
+**Contacts that arrive together are a hand.** Several contacts in one
+`touchstart`, or one landing while three others are already down, is a hand
+meeting the glass. The pairwise team rule only ever saw two at a time.
+
 **A resting palm is not one contact.** On this digitizer it is a storm of
 them, appearing and vanishing every 20-100ms. Any two of them look like a pinch
 pair, so gesture detection requires contacts that have survived 150ms and a
@@ -146,7 +164,7 @@ ES5 only. Forbidden: `let`/`const`, arrow functions, template literals, classes,
 
 ```
 node scripts/check_es5.js     # Safari 9 gate - run before every push
-node scripts/test_palm.js     # palm-rejection behaviour (32 assertions)
+node scripts/test_palm.js     # palm-rejection behaviour (39 assertions)
 node scripts/test_recorder.js # recorder + pinch-zoom (15 assertions)
 node scripts/replay.js FILE   # replay a recorded touch trace
 ```

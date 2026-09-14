@@ -522,6 +522,76 @@ test('Strict gives up slow careful strokes - the trade, stated', function (done)
   });
 });
 
+/* ---------------- Tier 0: signals the hardware gives us free ---------------- */
+
+test('a cancelled contact must not leave ink', function (done) {
+  var app = fresh();
+  /* the same brisk stroke, committed normally */
+  app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 180, y1: PEN.y + 30, speed: 0.32 });
+  after(250, function () {
+    app.flushFrames();
+    check('uncancelled stroke inks', app.strokes().length === 1, app.strokes().length + ' strokes');
+
+    /* now the same stroke, but iOS cancels the contact at the end */
+    var app2 = fresh();
+    app2.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 180, y1: PEN.y + 30,
+                  speed: 0.32, keepDown: true });
+    app2.up(1, true);                       /* touchcancel */
+    after(250, function () {
+      app2.flushFrames();
+      check('cancelled stroke leaves nothing', app2.strokes().length === 0,
+            app2.strokes().length + ' strokes');
+      done();
+    });
+  });
+});
+
+test('contacts arriving together are treated as a hand', function (done) {
+  /* marginal speed: inks on its own, must not ink as part of a burst */
+  var solo = fresh();
+  solo.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 70, y1: PEN.y + 20, speed: 0.11 });
+  after(250, function () {
+    solo.flushFrames();
+    check('marginal stroke inks on its own', solo.strokes().length === 1,
+          solo.strokes().length + ' strokes');
+
+    var burst = fresh();
+    burst.downMulti([[1, PEN.x, PEN.y], [2, PEN.x + 60, PEN.y + 70], [3, PEN.x + 120, PEN.y + 40]]);
+    var i;
+    for (i = 1; i <= 40; i++) {
+      burst.tick(16);
+      burst.moveTo(1, PEN.x + i * 1.76, PEN.y + i * 0.5);
+      burst.moveTo(2, PEN.x + 60, PEN.y + 70);
+      burst.moveTo(3, PEN.x + 120, PEN.y + 40);
+    }
+    burst.up(1); burst.up(2); burst.up(3);
+    after(250, function () {
+      burst.flushFrames();
+      check('the same stroke in a 3-contact burst does not ink',
+            burst.strokes().length === 0, burst.strokes().length + ' strokes');
+      var g = burst.trace().samples.filter(function (r) { return r[0] === 'g' && r[1] === 'burst'; });
+      check('the burst itself is recorded', g.length > 0);
+      done();
+    });
+  });
+});
+
+test('the trace carries what the digitizer actually reports', function (done) {
+  var app = fresh();
+  app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 80, y1: PEN.y, speed: 0.3 });
+  after(200, function () {
+    var caps = app.trace().caps;
+    check('caps are probed and reported', !!caps && typeof caps === 'object',
+          JSON.stringify(caps));
+    /* the harness fakes only radiusX/radiusY, so the prefixed twins must
+       come back "absent" rather than silently reading as zero */
+    check('absent properties are distinguishable from zero',
+          caps.webkitRadiusX === null && caps.radiusX === 0,
+          'webkitRadiusX=' + caps.webkitRadiusX + ' radiusX=' + caps.radiusX);
+    done();
+  });
+});
+
 /* ---------------- run ---------------- */
 console.log('\npalm rejection behaviour\n');
 (function run(i) {
