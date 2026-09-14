@@ -55,6 +55,15 @@ observed as a **probe** and scores itself continuously:
 |-------|-----------|
 | **Palm: Off** | Ink on touchdown (testing, and for a mouse) |
 | **Palm: Max** (default) | Full engine |
+| **Palm: Strict** | Full engine, every speed threshold x2.6 |
+
+**Strict is a trade, not an upgrade.** A palm drifting steadily at ~0.16 px/ms
+is arithmetically identical to slow careful writing - same speed, same
+direction coherence, same travel. Nothing in the touch stream separates them.
+Strict refuses the drift by demanding more speed, which also refuses genuinely
+slow strokes. Use it when your hand marks the page more than your slow strokes
+matter; leave it off otherwise. The choice is yours to make per session, not
+one to bake in.
 
 There used to be a **Med** level. It was a bare "moved 6 px, so it is ink" gate
 with no suspicion, no veto and no arbitration - it read as partial protection
@@ -137,7 +146,7 @@ ES5 only. Forbidden: `let`/`const`, arrow functions, template literals, classes,
 
 ```
 node scripts/check_es5.js     # Safari 9 gate - run before every push
-node scripts/test_palm.js     # palm-rejection behaviour (27 assertions)
+node scripts/test_palm.js     # palm-rejection behaviour (32 assertions)
 node scripts/test_recorder.js # recorder + pinch-zoom (15 assertions)
 node scripts/replay.js FILE   # replay a recorded touch trace
 ```
