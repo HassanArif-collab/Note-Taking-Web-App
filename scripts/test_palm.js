@@ -691,6 +691,57 @@ test('two fingers moving together are still a pan, not a hand', function (done) 
   });
 });
 
+/* Contact 4067368813, replayed verbatim - the single mark that survived
+ * a 48 second recording. It crept, committed, and then began snapping
+ * between two contact lobes: 33px, 31px back, 38px, 40px. The hopping
+ * reads as motion, so the dwell test never fires and the stroke keeps
+ * the ink. The jump detector existed but only ran before a contact
+ * committed; appendInk watched nothing. */
+var LOBES_813 = [
+  [0, 547, 421], [56, 544, 426], [17, 544, 427], [17, 544, 428], [17, 544, 430],
+  [16, 544, 431], [16, 544, 433], [17, 544, 435], [17, 544, 436], [16, 544, 437],
+  [17, 544, 438], [19, 543, 438], [14, 543, 439], [33, 543, 440], [17, 542, 440],
+  [49, 542, 441], [34, 542, 442], [50, 542, 443], [50, 542, 444], [51, 542, 445],
+  [99, 542, 446], [116, 542, 447], [51, 541, 447], [33, 540, 447], [17, 539, 447],
+  [16, 538, 447], [17, 536, 447], [17, 534, 447], [17, 531, 447], [16, 527, 447],
+  [16, 524, 448], [30, 522, 448], [8, 520, 448], [20, 519, 448], [32, 517, 448],
+  [12, 515, 448], [21, 514, 448], [14, 513, 448], [19, 513, 447], [13, 513, 445],
+  [21, 513, 443], [13, 512, 441],
+  [36, 542, 427], [18, 511, 430], [1, 506, 427], [27, 543, 420], [21, 547, 416],
+  [35, 508, 410], [18, 542, 409], [31, 547, 406], [3, 548, 405], [10, 548, 403],
+  [20, 549, 401], [14, 549, 398], [20, 553, 397], [13, 555, 395], [22, 556, 393]
+];
+
+test('a committed stroke that starts hopping between lobes is dropped', function (done) {
+  var app = fresh();
+  replay(app, 813, LOBES_813);
+  after(300, function () {
+    app.flushFrames();
+    check('oscillating centroid -> no surviving mark', app.strokes().length === 0,
+          app.strokes().length + ' strokes');
+    done();
+  });
+});
+
+test('a long stroke with genuine direction changes survives', function (done) {
+  var app = fresh();
+  /* writing reverses direction constantly, but never teleports */
+  app.down(1, PEN.x, PEN.y);
+  var i, a;
+  for (i = 1; i <= 60; i++) {
+    app.tick(16);
+    a = i * 0.35;
+    app.moveTo(1, PEN.x + i * 3 + Math.sin(a) * 18, PEN.y + Math.cos(a) * 22);
+  }
+  app.up(1);
+  after(300, function () {
+    app.flushFrames();
+    check('curvy writing -> still one stroke', app.strokes().length === 1,
+          app.strokes().length + ' strokes');
+    done();
+  });
+});
+
 /* ---------------- run ---------------- */
 console.log('\npalm rejection behaviour\n');
 (function run(i) {

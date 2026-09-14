@@ -85,6 +85,12 @@ The giveaway is the rhythm: a hand that really accelerates produces
 *consecutive* fast samples, while a deforming blob produces an isolated hop with
 stillness on both sides. Two isolated hops and the contact is judged a palm.
 
+**Committing does not make a contact trustworthy.** The jump detector runs on
+committed strokes too, not only on probes. A palm blob whose centroid snaps
+between two lobes hops 30-40px a sample, which reads as motion, defeats the
+dwell test, and holds the ink - so the stroke is dropped when the hopping
+pattern appears, at any point in its life.
+
 **A pen moves and then lifts; a palm settles and stays.** A committed stroke
 that stops going anywhere - staying inside a 14px circle for 300ms - while the
 contact is still down is a hand settling, not a stroke being drawn, and it is
@@ -185,7 +191,7 @@ ES5 only. Forbidden: `let`/`const`, arrow functions, template literals, classes,
 
 ```
 node scripts/check_es5.js     # Safari 9 gate - run before every push
-node scripts/test_palm.js     # palm-rejection behaviour (45 assertions)
+node scripts/test_palm.js     # palm-rejection behaviour (47 assertions)
 node scripts/test_recorder.js # recorder + pinch-zoom (15 assertions)
 node scripts/replay.js FILE   # replay a recorded touch trace
 ```

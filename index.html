@@ -2274,12 +2274,29 @@ function appendInk(st, pt, now, touch) {
   var dt = Math.max(now - st.lastT, 1);
   var cx = touch ? touch.clientX : st.cx, cy = touch ? touch.clientY : st.cy;
   var cd = dist(st.cx, st.cy, cx, cy);
+  var v = cd / Math.max(dt, 4);
+
+  /* Committing does not make a contact trustworthy. The jump detector
+     only ever ran in the probe branch, so once a contact became ink
+     nothing watched it any more - and a palm blob whose centroid snaps
+     between two lobes keeps hopping 30-40px a sample, which looks like
+     motion, defeats the dwell test, and holds the ink. Recorded contact
+     4067368813 did exactly that and was the only mark to survive a
+     48 second session. */
+  if (isJump(st, cd, v)) {
+    st.jumps++;
+    if (st.jumps === 1) st.isoJumps++;
+    if (st.isoJumps >= SC.JUMP_PALM) { discardActiveInk(st, now, 'jumping'); return; }
+  } else {
+    st.jumps = 0;
+    st.pathLen += cd;
+    pushSpeed(st, v);
+  }
+
   st.x = pt.x; st.y = pt.y; st.lastT = now;
   st.cx = cx; st.cy = cy;
   s.pts.push([pt.x, pt.y, now]);
-  st.pathLen += cd;
   st.net = dist(st.csx, st.csy, cx, cy);
-  pushSpeed(st, cd / Math.max(dt, 4));
 
   /* incremental live segment (one per move, never the tail) */
   var k = s.pts.length - 1;
