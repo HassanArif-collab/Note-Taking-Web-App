@@ -200,6 +200,17 @@ App.prototype.trace = function () {
   return this.win.__mnTrace();
 };
 
+/* window.prompt is how pages and folders ask their question; queue the
+ * answers a test wants to give. */
+App.prototype.answer = function (v) {
+  this.win.prompt = function () { return v; };
+  return this;
+};
+App.prototype.confirmAll = function (yes) {
+  this.win.confirm = function () { return yes !== false; };
+  return this;
+};
+
 /* Pretend the user picked a photo out of the camera roll. `url` may
  * carry a #WxH marker, which the Image stub reads as its dimensions. */
 App.prototype.pickPhoto = function (url) {

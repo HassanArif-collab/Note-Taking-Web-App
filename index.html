@@ -139,6 +139,8 @@ input { font: inherit; }
   height: 52px; padding: 0 18px;
 }
 .nb-row:active { background: #F4F6F8; }
+.nb-row.on { background: rgba(3,129,254,0.10); }
+.nb-row.on .nm { color: #0381FE; font-weight: 600; }
 .nb-row .dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 14px; }
 .nb-row .nm { -webkit-flex: 1; flex: 1; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nb-row .ct { font-size: 13px; color: #A8A8A8; }
@@ -561,6 +563,12 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
       </svg>
     </button>
     <div class="lbl">Notebooks</div>
+    <button id="nbMoveBtn" class="ibtn" style="width:36px;height:36px" aria-label="Move notebook into a folder">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6.5 h6 l1.8 2.2 H21 V19 a1.4 1.4 0 0 1 -1.4 1.4 H4.4 A1.4 1.4 0 0 1 3 19 z"/>
+        <path d="M12 12.5 v5"/><path d="M9.6 14.9 L12 12.5 l2.4 2.4"/>
+      </svg>
+    </button>
     <button id="nbRenameBtn" class="ibtn" style="width:36px;height:36px">
       <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
         <path d="M4 20 l1-4.5 L16.5 4 a2 2 0 0 1 3.5 3.5 L8.5 19 z"/>
@@ -1752,6 +1760,102 @@ function resizeView() {
   requestRender();
 }
 
+/* ============================================================
+ * PAGE MANAGEMENT
+ *
+ * Pages are not objects here - the note is one tall roll and a
+ * page is just a band of it, PAGE_H tall with a GAP_H gutter. So
+ * inserting a page means sliding everything below the seam down
+ * by one page height, and deleting one means dropping what is
+ * inside that band and sliding the rest up. Both are ordinary
+ * stroke edits, which means undo gets them for free.
+ * ============================================================ */
+var PAGE_SPAN = PAGE_H + GAP_H;
+
+function pageCount() {
+  return Math.max(1, Math.ceil(docH / PAGE_SPAN));
+}
+
+function currentPage() {
+  return Math.floor((scrollY + viewH / zoom / 2) / PAGE_SPAN) + 1;
+}
+
+function goToPage(p) {
+  p = lim(p, 1, pageCount());
+  scrollY = (p - 1) * PAGE_SPAN;
+  clampScroll();
+  requestRender();
+  updateScrollPill();
+}
+
+function shiftStrokesBelow(n, fromY, dy) {
+  var moved = [], i, j, s;
+  for (i = 0; i < n.strokes.length; i++) {
+    s = n.strokes[i];
+    var bb = strokeBBox(s);
+    if (bb.y0 < fromY) continue;
+    for (j = 0; j < s.pts.length; j++) s.pts[j][1] += dy;
+    s.bb = null;
+    moved.push(s);
+  }
+  return moved;
+}
+
+function insertPageAt(p) {
+  var n = activeNote();
+  if (!n) return;
+  var seam = (p - 1) * PAGE_SPAN;
+  var moved = shiftStrokesBelow(n, seam, PAGE_SPAN);
+  pushUndo({ t: 'shift', list: moved, dy: PAGE_SPAN });
+  invalidateAll();
+  recomputeDoc();
+  saveSoon();
+  goToPage(p);
+  toast('Blank page inserted');
+}
+
+function deletePageAt(p) {
+  var n = activeNote();
+  if (!n) return;
+  var top = (p - 1) * PAGE_SPAN, bot = top + PAGE_SPAN;
+  var killed = [], keep = [], i, s;
+  for (i = 0; i < n.strokes.length; i++) {
+    s = n.strokes[i];
+    var bb = strokeBBox(s);
+    var mid = (bb.y0 + bb.y1) / 2;
+    if (mid >= top && mid < bot) killed.push(s); else keep.push(s);
+  }
+  if (killed.length && !window.confirm('Delete page ' + p + ' and the ' +
+      killed.length + ' mark(s) on it?')) return;
+  n.strokes = keep;
+  var moved = shiftStrokesBelow(n, bot, -PAGE_SPAN);
+  /* one undo step puts the marks back AND slides the rest down again */
+  pushUndo({ t: 'page-del', list: killed, moved: moved, dy: -PAGE_SPAN });
+  invalidateAll();
+  recomputeDoc();
+  saveSoon();
+  goToPage(Math.min(p, pageCount()));
+  toast('Page deleted');
+}
+
+function openPageMenu() {
+  closePanels();
+  var total = pageCount(), cur = currentPage();
+  var NL = String.fromCharCode(10);
+  var ans = window.prompt(
+    'Page ' + cur + ' of ' + total + NL + NL +
+    'Type a page number to go there,' + NL +
+    '+ to insert a blank page here,' + NL +
+    '- to delete this page.',
+    String(cur));
+  if (ans === null) return;
+  ans = ans.replace(/\s/g, '');
+  if (ans === '+') { insertPageAt(cur); return; }
+  if (ans === '-') { deletePageAt(cur); return; }
+  var v = parseInt(ans, 10);
+  if (!isNaN(v)) goToPage(v);
+}
+
 /* ---------- history ---------- */
 function updateUndoButtons() {
   undoBtn.className = 'tb-btn' + (undoStack.length ? '' : ' dis');
@@ -1806,6 +1910,22 @@ function applyOp(op, reverse) {
       var bbs1 = strokeBBox(op.list[i]);
       invalidateRange(bbs1.y0, bbs1.y1);
     }
+    requestRender();
+  } else if (op.t === 'shift') {
+    /* inserting a blank page: slide the same strokes back */
+    var sdy = reverse ? -op.dy : op.dy;
+    for (i = 0; i < op.list.length; i++) shiftStroke(op.list[i], 0, sdy);
+    invalidateAll();
+    recomputeDoc();
+    requestRender();
+  } else if (op.t === 'page-del') {
+    /* deleting a page did two things at once, so undo does both */
+    var pdy = reverse ? -op.dy : op.dy;
+    for (i = 0; i < op.moved.length; i++) shiftStroke(op.moved[i], 0, pdy);
+    if (reverse) { for (i = 0; i < op.list.length; i++) addStroke(n, op.list[i]); }
+    else { for (i = 0; i < op.list.length; i++) removeStroke(n, op.list[i]); }
+    invalidateAll();
+    recomputeDoc();
     requestRender();
   } else if (op.t === 'textedit') {
     var bb2 = strokeBBox(op.s);
@@ -4262,26 +4382,96 @@ function clearNote() {
 }
 
 /* ---------- drawer ---------- */
+/* A notebook may name another as its parent, which is all a subfolder
+ * is here. Keeping it as one flat list with a parent field means every
+ * existing notebook stays valid and nothing else in the app has to
+ * learn about trees. */
+function notebookIndexById(id) {
+  for (var i = 0; i < notebooks.length; i++) {
+    if (notebooks[i].id === id) return i;
+  }
+  return -1;
+}
+
+/* guard against a notebook being made its own ancestor */
+function isDescendantOf(childIdx, ancestorId) {
+  var seen = 0, nb = notebooks[childIdx];
+  while (nb && nb.parent && seen++ < 32) {
+    if (nb.parent === ancestorId) return true;
+    var pi = notebookIndexById(nb.parent);
+    nb = pi >= 0 ? notebooks[pi] : null;
+  }
+  return false;
+}
+
+function drawerRow(i, depth) {
+  var nb = notebooks[i];
+  var row = document.createElement('button');
+  row.className = 'nb-row' + (i === curNotebook ? ' on' : '');
+  row.style.paddingLeft = (18 + depth * 20) + 'px';
+  row.innerHTML =
+    '<span class="dot" style="background:' + nb.color + '"></span>' +
+    '<span class="nm">' + escapeHtml(nb.title) + '</span>' +
+    '<span class="ct">' + nb.notes.length + '</span>';
+  (function (idx) {
+    row.addEventListener('click', function () {
+      curNotebook = idx;
+      closeDrawer();
+      renderHome();
+      saveSoon();
+    });
+  })(i);
+  nbList.appendChild(row);
+}
+
+function renderDrawerLevel(parentId, depth) {
+  if (depth > 4) return;               /* stop a cycle dead */
+  for (var i = 0; i < notebooks.length; i++) {
+    var pid = notebooks[i].parent || null;
+    if (pid !== parentId) continue;
+    drawerRow(i, depth);
+    renderDrawerLevel(notebooks[i].id, depth + 1);
+  }
+}
+
 function renderDrawer() {
   nbList.innerHTML = '';
+  renderDrawerLevel(null, 0);
+  /* anything whose parent has been deleted still has to be reachable */
   for (var i = 0; i < notebooks.length; i++) {
-    var nb = notebooks[i];
-    var row = document.createElement('button');
-    row.className = 'nb-row';
-    row.innerHTML =
-      '<span class="dot" style="background:' + nb.color + '"></span>' +
-      '<span class="nm">' + escapeHtml(nb.title) + '</span>' +
-      '<span class="ct">' + nb.notes.length + '</span>';
-    (function (idx) {
-      row.addEventListener('click', function () {
-        curNotebook = idx;
-        closeDrawer();
-        renderHome();
-        saveSoon();
-      });
-    })(i);
-    nbList.appendChild(row);
+    var pid = notebooks[i].parent || null;
+    if (pid && notebookIndexById(pid) < 0) drawerRow(i, 0);
   }
+}
+
+/* move the current notebook under another one, or back to the top */
+function moveNotebook() {
+  var nb = notebooks[curNotebook];
+  if (!nb) return;
+  var list = [], i;
+  for (i = 0; i < notebooks.length; i++) {
+    if (i === curNotebook) continue;
+    if (isDescendantOf(i, nb.id)) continue;     /* no loops */
+    list.push((i + 1) + ' = ' + notebooks[i].title);
+  }
+  var NL = String.fromCharCode(10);
+  var ans = window.prompt(
+    'Put "' + nb.title + '" inside which folder?' + NL + NL +
+    list.join(NL) + NL + NL + '0 = top level',
+    '0');
+  if (ans === null) return;
+  var v = parseInt(ans, 10);
+  if (isNaN(v)) return;
+  if (v === 0) { nb.parent = null; }
+  else {
+    var t = v - 1;
+    if (t < 0 || t >= notebooks.length || t === curNotebook) return;
+    if (isDescendantOf(t, nb.id)) { toast('That would make a loop'); return; }
+    nb.parent = notebooks[t].id;
+  }
+  renderDrawer();
+  saveSoon();
+  toast(v === 0 ? 'Moved to top level' : 'Moved into ' + notebooks[v - 1].title);
 }
 function openDrawer() { renderDrawer(); drawer.className = 'open'; drawerBackdrop.style.display = 'block'; }
 function closeDrawer() { drawer.className = ''; drawerBackdrop.style.display = 'none'; }
@@ -4428,6 +4618,7 @@ var moreRowDefs = null;
 function buildMoreMenu() {
   moreMenu.innerHTML = '';
   moreRowDefs = [
+    { lbl: 'Pages', val: currentPage() + ' / ' + pageCount(), act: openPageMenu },
     { lbl: 'Insert photo', val: '', act: function () {
         try { photoInput.value = ''; photoInput.click(); }
         catch (e) { toast('Photos are not supported on this device'); }
@@ -4519,6 +4710,7 @@ byId('newNbBtn').addEventListener('click', function () {
     saveSoon();
   }
 });
+byId('nbMoveBtn').addEventListener('click', moveNotebook);
 byId('nbRenameBtn').addEventListener('click', function () {
   var nb = notebooks[curNotebook];
   if (!nb) return;
@@ -4591,17 +4783,7 @@ textCancelBtn.addEventListener('click', closeTextEditor);
 /* page jump: tap the scroll/zoom pill */
 scrollPill.addEventListener('click', function () {
   if (homeView.className.indexOf('on') >= 0) return;
-  var totalPages = Math.max(1, Math.ceil(docH / (PAGE_H + GAP_H)));
-  var cur = Math.floor((scrollY + viewH / zoom / 2) / (PAGE_H + GAP_H)) + 1;
-  var ans = window.prompt('Go to page (1-' + totalPages + ')', String(cur));
-  if (ans === null || ans === '') return;
-  var p = parseInt(ans, 10);
-  if (isNaN(p)) return;
-  p = lim(p, 1, totalPages);
-  scrollY = (p - 1) * (PAGE_H + GAP_H);
-  clampScroll();
-  requestRender();
-  updateScrollPill();
+  openPageMenu();
 });
 
 /* search */
