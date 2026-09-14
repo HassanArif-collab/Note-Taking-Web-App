@@ -131,5 +131,28 @@ p6.up(20); p6.up(21); p6.up(22);
 check('zooming the page does not make a parked contact ink',
       p6.strokes().length === 0, p6.strokes().length + ' strokes');
 
+/* Replayed from a real zoom on the iPad. The moving finger travelled
+ * 75px in 130ms and inked, because the pinch detector was waiting for
+ * both contacts to reach 150ms - it could never win that race. */
+var p7 = fresh();
+var z7 = zoomOf(p7);
+p7.down(310, 609, 632);                /* the anchored finger */
+var MOVER = [[30, 501, 684], [13, 489, 685], [1, 471, 686], [15, 455, 689],
+             [17, 444, 693], [17, 437, 695], [17, 431, 698], [16, 428, 700],
+             [17, 426, 701], [17, 426, 702], [50, 426, 703], [98, 426, 702],
+             [38, 426, 701], [33, 425, 700], [47, 424, 700]];
+p7.tick(MOVER[0][0]);
+p7.down(311, MOVER[0][1], MOVER[0][2]);
+for (i = 1; i < MOVER.length; i++) {
+  p7.tick(MOVER[i][0]);
+  p7.moveTo(310, 609 + (i % 3), 632 + (i % 2));   /* anchor micro-drift */
+  p7.moveTo(311, MOVER[i][1], MOVER[i][2]);
+}
+p7.up(310); p7.up(311);
+check('a finger sliding during a pinch does not ink (real data)',
+      p7.strokes().length === 0, p7.strokes().length + ' strokes');
+check('...and that pinch actually zooms', Math.abs(zoomOf(p7) - z7) > 0.02,
+      z7 + ' -> ' + zoomOf(p7));
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
