@@ -47,6 +47,12 @@ function mkEl(id) {
     setAttribute: function (k, v) { this['attr_' + k] = v; },
     getAttribute: function (k) { return this['attr_' + k]; },
     getContext: function () { this._ctx = this._ctx || mockCtx(); return this._ctx; },
+    /* on the element, not the context - the photo path re-encodes
+       through canvas.toDataURL and silently failed without this */
+    toDataURL: function (type) {
+      return 'data:' + (type || 'image/png') + ';base64,SCALED#' +
+             (this.width || 0) + 'x' + (this.height || 0);
+    },
     getBoundingClientRect: function () {
       return { left: this._left || 0, top: this._top || 0, width: this._w || 1024, height: this._h2 || 712 };
     },
@@ -194,6 +200,31 @@ App.prototype.trace = function () {
   return this.win.__mnTrace();
 };
 
+/* Pretend the user picked a photo out of the camera roll. `url` may
+ * carry a #WxH marker, which the Image stub reads as its dimensions. */
+App.prototype.pickPhoto = function (url) {
+  this.clickMenu('Insert photo');
+  var input = this.els.photoInput;
+  input.files = [{ name: 'photo.jpg', _url: url }];
+  input._fire('change', {});
+  this.flushFrames();
+  return this;
+};
+
+/* a two-finger tap: both down, both up, no movement */
+App.prototype.twoFingerTap = function (ax, ay, bx, by, driftPx) {
+  this.down(901, ax, ay);
+  this.down(902, bx, by);
+  this.tick(60);
+  if (driftPx) {
+    this.moveTo(901, ax - driftPx, ay);
+    this.moveTo(902, bx + driftPx, by);
+    this.tick(60);
+  }
+  this.up(901); this.up(902);
+  return this;
+};
+
 /* every stroke in the collection, not just the open note */
 App.prototype.allStrokes = function () {
   var st = this.state(), out = [], i, n;
@@ -314,6 +345,29 @@ function load(opts) {
     navigator: { userAgent: opts.ua ||
       'Mozilla/5.0 (iPad; CPU OS 9_3_5 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13G36 Safari/601.1' },
     XMLHttpRequest: FakeXHR,
+    /* Image decodes synchronously here; the size comes from the fake
+       data URL so a test can pretend to hand over a 3000px photo. */
+    Image: function () {
+      var self = this;
+      this.width = 0; this.height = 0;
+      Object.defineProperty(this, 'src', {
+        set: function (v) {
+          this._src = v;
+          var m = /#(\d+)x(\d+)/.exec(v || '');
+          self.width = m ? +m[1] : 1600;
+          self.height = m ? +m[2] : 1200;
+          if (self.onload) self.onload();
+        },
+        get: function () { return this._src; }
+      });
+    },
+    FileReader: function () {
+      var self = this;
+      this.readAsDataURL = function (f) {
+        self.result = f && f._url ? f._url : 'data:image/jpeg;base64,AAAA#1600x1200';
+        if (self.onload) self.onload();
+      };
+    },
     btoa: function (b) { return Buffer.from(b, 'binary').toString('base64'); },
     unescape: unescape, encodeURIComponent: encodeURIComponent,
     setTimeout: setTimeout, clearTimeout: clearTimeout, setInterval: setInterval,

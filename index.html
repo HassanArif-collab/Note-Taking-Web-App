@@ -699,6 +699,9 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
   <div id="toast"></div>
   <div id="warning"></div>
 
+  <input id="photoInput" type="file" accept="image/*"
+         style="position:absolute;left:-9999px;width:1px;height:1px;">
+
   <!-- backup and restore -->
   <div id="backupOverlay" class="overlay">
     <div id="backupHint">Backup and restore</div>
@@ -817,6 +820,13 @@ var NB_COLORS = ['#0381FE', '#E2231A', '#36C0A1', '#8E50E6', '#F58300', '#1428A0
 
 /* pen kind ids */
 var PEN_BALL = 0, PEN_FOUNTAIN = 1, PEN_CALLI = 2, PEN_PENCIL = 3, PEN_HIGH = 4, PEN_TEXT = 5;
+var PEN_IMG = 6;           /* a photo, placed and annotated like ink */
+var IMG_MAX_PX = 1100;     /* A camera photo as a data URL is 2-4MB and
+                              would eat the whole 5MB origin quota in one
+                              go. Downscale and re-encode as JPEG before
+                              anything touches storage. */
+var IMG_QUALITY = 0.72;
+var IMG_PLACE_W = 460;     /* how wide it lands on the page */
 var PENS = [
   { name: 'Ballpoint',  wMin: 1.2, wMax: 8,  alpha: 1,    kind: PEN_BALL },
   { name: 'Fountain',   wMin: 1.5, wMax: 12, alpha: 1,    kind: PEN_FOUNTAIN },
@@ -1005,6 +1015,7 @@ var drawer = byId('drawer'), drawerBackdrop = byId('drawerBackdrop'), nbList = b
 var exportOverlay = byId('exportOverlay'), exportImg = byId('exportImg');
 var traceOverlay = byId('traceOverlay'), traceText = byId('traceText');
 var backupOverlay = byId('backupOverlay'), backupText = byId('backupText');
+var photoInput = byId('photoInput');
 var backupInfo = byId('backupInfo');
 var selectBtn = byId('selectBtn'), textBtn = byId('textBtn'), handBtn = byId('handBtn');
 var selBarEl = byId('selBar'), selDelBtn = byId('selDelBtn'), selCopyBtn = byId('selCopyBtn'), selDoneBtn = byId('selDoneBtn');
@@ -1247,6 +1258,7 @@ function serializeNote(n) {
       rec.tw = s.tw || 100;
       rec.th = s.th || s.sz || 24;
     }
+    if (s.pen === PEN_IMG) { rec.src = s.src; rec.iw = s.iw; rec.ih = s.ih; }
     out.push(rec);
   }
   return out;
@@ -1381,6 +1393,88 @@ function renderTextStroke(c, s) {
   }
 }
 
+/* ---------- photos ----------
+ * Stored as a stroke so everything that already understands strokes -
+ * undo, erase, lasso, move, resize, save - works on a photo for free. */
+var imgCache = {};        /* stroke id -> decoded Image */
+
+function mkImgStroke(x, y, dataURL, w, h) {
+  return { id: genId(), pen: PEN_IMG, w: 1, color: '#000000', a: 1,
+           pts: [[x, y, 0]], src: dataURL, iw: w, ih: h, ord: strokeSeq++ };
+}
+
+function imageFor(s) {
+  var im = imgCache[s.id];
+  if (im) return im;
+  if (!s.src) return null;
+  im = new Image();
+  im.onload = function () { invalidateAll(); requestRender(); };
+  im.src = s.src;
+  imgCache[s.id] = im;
+  return im;
+}
+
+function renderImgStroke(c, s) {
+  var im = imageFor(s);
+  var p = s.pts[0];
+  if (!im || !im.width) {
+    /* not decoded yet: hold the space so the page does not jump */
+    c.strokeStyle = '#C8CDD3';
+    c.lineWidth = 1;
+    c.strokeRect(p[0], p[1], s.iw, s.ih);
+    return;
+  }
+  try { c.drawImage(im, p[0], p[1], s.iw, s.ih); } catch (e) {}
+}
+
+/* Shrink to something a 5MB quota can live with before storing. */
+function downscaleImage(im, cb) {
+  var w = im.width, h = im.height;
+  var k = Math.min(1, IMG_MAX_PX / Math.max(w, h));
+  var cw = Math.max(1, Math.round(w * k)), chh = Math.max(1, Math.round(h * k));
+  var cv = document.createElement('canvas');
+  cv.width = cw; cv.height = chh;
+  var cc = cv.getContext('2d');
+  if (!cc) { cb(null); return; }
+  cc.drawImage(im, 0, 0, cw, chh);
+  var url;
+  try { url = cv.toDataURL('image/jpeg', IMG_QUALITY); }
+  catch (e) { cb(null); return; }
+  cb(url, cw, chh);
+}
+
+function insertPhotoFile(file) {
+  if (!file) return;
+  var fr;
+  try { fr = new FileReader(); } catch (e) { toast('Photos are not supported here'); return; }
+  toast('Adding photo...');
+  fr.onload = function () {
+    var probe = new Image();
+    probe.onload = function () {
+      downscaleImage(probe, function (url, w, h) {
+        if (!url) { toast('Could not read that photo'); return; }
+        var n = activeNote();
+        if (!n) return;
+        var pw = IMG_PLACE_W, ph = Math.round(pw * h / w);
+        var x = Math.round(scrollX + (viewW / zoom - pw) / 2);
+        var y = Math.round(scrollY + 40);
+        var s = mkImgStroke(x, y, url, pw, ph);
+        n.strokes.push(s);
+        pushUndo({ t: 'add', s: s });
+        invalidateAll();
+        recomputeDoc();
+        saveSoon();
+        requestRender();
+        toast('Photo added - lasso it to move or resize');
+      });
+    };
+    probe.onerror = function () { toast('Could not read that photo'); };
+    probe.src = fr.result;
+  };
+  fr.onerror = function () { toast('Could not read that photo'); };
+  try { fr.readAsDataURL(file); } catch (e) { toast('Could not read that photo'); }
+}
+
 function penCap(pen) { return pen === PEN_HIGH ? 'butt' : 'round'; }
 
 function pointSpeedAt(s, i) {
@@ -1460,6 +1554,7 @@ function renderStrokeFull(c, s) {
   c.strokeStyle = s.color;
   c.fillStyle = s.color;
   if (s.pen === PEN_TEXT) { renderTextStroke(c, s); c.restore(); return; }
+  if (s.pen === PEN_IMG) { renderImgStroke(c, s); c.restore(); return; }
   c.lineCap = penCap(s.pen);
   c.lineJoin = 'round';
   if (n === 1) { drawDot(c, s); c.restore(); return; }
@@ -1473,6 +1568,11 @@ function strokeBBox(s) {
   if (s.pen === PEN_TEXT) {
     var p0 = s.pts[0];
     s.bb = { x0: p0[0] - 6, y0: p0[1] - 4, x1: p0[0] + (s.tw || 100) + 6, y1: p0[1] + (s.th || s.sz * 1.32) + 4 };
+    return s.bb;
+  }
+  if (s.pen === PEN_IMG) {
+    var pi = s.pts[0];
+    s.bb = { x0: pi[0] - 2, y0: pi[1] - 2, x1: pi[0] + s.iw + 2, y1: pi[1] + s.ih + 2 };
     return s.bb;
   }
   var p = s.pts, x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, i;
@@ -1822,6 +1922,13 @@ var textFocusTimer = null;
 
 /* ---------- hand tool double-tap memory ---------- */
 var lastHandTap = null;   /* { t, x, y } */
+
+/* two-finger tap = undo, the way every premium note app does it. The
+   remaining stray palm marks are rare but not zero, and reaching for
+   the toolbar to remove one breaks your train of thought. */
+var twoTap = null;        /* { t, moved } while a candidate is alive */
+var TWOTAP_MS = 320;
+var TWOTAP_PX = 26;
 
 function currentPenWidth() {
   var pdef = PENS[settings.pen];
@@ -2523,6 +2630,9 @@ function finalizeInk(st, now) {
  * lands away from the pen. So a dot must be recent and near the
  * last ink, and must not already be a suspect. */
 function dotIsCredible(st, now) {
+  /* a two-finger tap is a gesture, not two decimal points - without
+     this it fires the undo AND leaves a dot, which cancels out */
+  if (twoTap) return false;
   if (st.suspect) return false;
   if (st.rx > 12) return false;
   if (!lastInkPt) return false;
@@ -2953,8 +3063,8 @@ function eraseAt(x, y) {
     if (x < bb.x0 - r || x > bb.x1 + r || y < bb.y0 - r || y > bb.y1 + r) continue;
     var hit = false;
     var p = s.pts;
-    if (s.pen === PEN_TEXT) {
-      /* text: erase when the cursor rectangle covers the text box */
+    if (s.pen === PEN_TEXT || s.pen === PEN_IMG) {
+      /* text and photos: erase when the cursor rectangle covers the box */
       hit = (x + r > bb.x0 && x - r < bb.x1 && y + r > bb.y0 && y - r < bb.y1);
     } else if (p.length === 1) {
       hit = dist(x, y, p[0][0], p[0][1]) <= r + s.w;
@@ -3001,7 +3111,7 @@ function ptInPoly(x, y, poly) {
 }
 
 function strokeInLasso(s, poly) {
-  if (s.pen === PEN_TEXT) {
+  if (s.pen === PEN_TEXT || s.pen === PEN_IMG) {
     var bb = strokeBBox(s);
     return ptInPoly((bb.x0 + bb.x1) / 2, (bb.y0 + bb.y1) / 2, poly);
   }
@@ -3093,7 +3203,10 @@ function scaleStroke(s, ax, ay, k) {
     p[i][0] = ax + (p[i][0] - ax) * k;
     p[i][1] = ay + (p[i][1] - ay) * k;
   }
-  if (s.pen === PEN_TEXT) {
+  if (s.pen === PEN_IMG) {
+    s.iw = Math.max(24, s.iw * k);
+    s.ih = Math.max(24, s.ih * k);
+  } else if (s.pen === PEN_TEXT) {
     var tw = s.tw || 100, th = s.th || s.sz * 1.32;
     s.sz = Math.max(6, s.sz * k);
     s.tw = tw * k;
@@ -3892,6 +4005,10 @@ function onTouchStart(e) {
   closePanels();
   stopMomentum();
   var now = Date.now();
+  var down = e.touches ? e.touches.length : 1;
+  /* exactly two fingers arriving starts a candidate; a third cancels it */
+  if (down === 2) twoTap = { t: now, moved: 0 };
+  else if (down > 2) twoTap = null;
   var ch = e.changedTouches;
   var burst = ch.length >= 2 || (e.touches && e.touches.length >= 3);
   if (burst) traceGesture('burst', ch.length, e.touches ? e.touches.length : 0, now);
@@ -3901,7 +4018,15 @@ function onTouchMove(e) {
   e.preventDefault();
   var now = Date.now();
   var ch = e.changedTouches;
-  for (var i = 0; i < ch.length; i++) { traceTouch(1, ch[i], now); moveTouch(ch[i], now); }
+  for (var i = 0; i < ch.length; i++) {
+    traceTouch(1, ch[i], now);
+    if (twoTap) {
+      var pst = touchStates[ch[i].identifier];
+      if (pst) twoTap.moved += dist(pst.cx, pst.cy, ch[i].clientX, ch[i].clientY);
+      if (twoTap.moved > TWOTAP_PX) twoTap = null;   /* a pinch or a pan */
+    }
+    moveTouch(ch[i], now);
+  }
   rigidGroupCheck(now);
   detectGesture(now);
   applyGesture(now);
@@ -3912,6 +4037,18 @@ function onTouchEnd(e) {
   var cancelled = (e.type === 'touchcancel');
   var ch = e.changedTouches;
   for (var i = 0; i < ch.length; i++) { traceTouch(cancelled ? 3 : 2, ch[i], now); endTouch(ch[i], now, cancelled); }
+
+  var left = e.touches ? e.touches.length : 0;
+  if (twoTap && left === 0) {
+    if (!cancelled && now - twoTap.t < TWOTAP_MS && twoTap.moved <= TWOTAP_PX &&
+        undoStack.length) {
+      traceVerdict('two-finger-undo', -1, now);
+      doUndo();
+    }
+    twoTap = null;
+  } else if (left === 0) {
+    twoTap = null;
+  }
 }
 
 canvasWrap.addEventListener('touchstart', onTouchStart, false);
@@ -4291,6 +4428,10 @@ var moreRowDefs = null;
 function buildMoreMenu() {
   moreMenu.innerHTML = '';
   moreRowDefs = [
+    { lbl: 'Insert photo', val: '', act: function () {
+        try { photoInput.value = ''; photoInput.click(); }
+        catch (e) { toast('Photos are not supported on this device'); }
+      } },
     { lbl: 'Backup and restore', val: countNotes() + ' notes', act: openBackup },
     { lbl: 'Export PNG', val: '', act: exportPNG },
     { lbl: 'Template', val: TPL_NAMES[settings.template], act: function () { settings.template = (settings.template + 1) % 4; afterSettingChange(); } },
@@ -4483,6 +4624,10 @@ redoBtn.addEventListener('click', doRedo);
 byId('exportCloseBtn').addEventListener('click', function () { exportOverlay.className = 'overlay'; });
 byId('traceCloseBtn').addEventListener('click', function () { traceOverlay.className = 'overlay'; });
 byId('backupCloseBtn').addEventListener('click', function () { backupOverlay.className = 'overlay'; });
+photoInput.addEventListener('change', function () {
+  var f = this.files && this.files[0];
+  if (f) insertPhotoFile(f);
+});
 byId('backupExportBtn').addEventListener('click', doExport);
 byId('backupImportBtn').addEventListener('click', doImport);
 
