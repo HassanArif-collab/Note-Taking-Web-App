@@ -295,6 +295,21 @@ input { font: inherit; }
   box-shadow: 0 4px 20px rgba(0,0,0,0.4); display: block; margin: 0 auto;
 }
 #exportHint { color: #E8E8E8; font-size: 13px; margin-top: 14px; }
+#backupHint { color: #FFFFFF; font-size: 17px; font-weight: 600; margin-bottom: 4px; }
+#backupInfo { color: #D8DCE2; font-size: 13px; margin-bottom: 10px; min-height: 17px; }
+#backupText {
+  width: 92%; max-width: 660px; height: 44%;
+  font-family: Menlo, Monaco, monospace; font-size: 11px;
+  padding: 8px; border-radius: 8px; border: 0;
+  -webkit-user-select: text; user-select: text;
+}
+#backupRow { margin-top: 14px; }
+#backupRow button {
+  font-size: 15px; font-weight: 600; padding: 10px 20px;
+  border-radius: 18px; margin: 0 5px; color: #FFFFFF;
+  background: rgba(255,255,255,0.16);
+}
+#backupExportBtn { background: #0381FE; }
 #traceHint { color: #E8E8E8; font-size: 13px; margin-bottom: 10px; }
 #traceText {
   width: 92%; max-width: 660px; height: 52%;
@@ -680,6 +695,19 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
   <div id="toast"></div>
   <div id="warning"></div>
 
+  <!-- backup and restore -->
+  <div id="backupOverlay" class="overlay">
+    <div id="backupHint">Backup and restore</div>
+    <div id="backupInfo"></div>
+    <textarea id="backupText" autocapitalize="off" autocorrect="off" spellcheck="false"
+              placeholder="Tap Copy my notes to make a backup, or paste a backup here and tap Restore."></textarea>
+    <div id="backupRow">
+      <button id="backupCloseBtn">Close</button>
+      <button id="backupImportBtn">Restore</button>
+      <button id="backupExportBtn">Copy my notes</button>
+    </div>
+  </div>
+
   <!-- diagnostics report (copy out) -->
   <div id="traceOverlay" class="overlay">
     <div id="traceHint">Select all, copy, and paste it into the chat.</div>
@@ -732,6 +760,13 @@ try { localStorage.setItem('mn_probe', '1'); localStorage.removeItem('mn_probe')
 catch (e) { storageOk = false; }
 
 /* ---------- constants ---------- */
+/* v5 splits the collection: one small index, plus one key per note.
+   v4 kept everything in a single blob, so every stroke rewrote every
+   note, one bad write lost the lot, and the 5MB ceiling arrived sooner
+   than it needed to. */
+var STORAGE_KEY_V5 = 'mathnotes_v5';
+var NOTE_KEY = 'mathnotes_v5_n_';
+var QUOTA_BYTES = 5000000;     /* iOS 9 gives about 5MB per origin */
 var STORAGE_KEY_V4 = 'mathnotes_v4';
 var STORAGE_KEY_V2 = 'mathnotes_v2';
 var STORAGE_KEY_V1 = 'mathnotes_v1';
@@ -965,6 +1000,8 @@ var moreMenu = byId('moreMenu'), toastEl = byId('toast'), warningEl = byId('warn
 var drawer = byId('drawer'), drawerBackdrop = byId('drawerBackdrop'), nbList = byId('nbList');
 var exportOverlay = byId('exportOverlay'), exportImg = byId('exportImg');
 var traceOverlay = byId('traceOverlay'), traceText = byId('traceText');
+var backupOverlay = byId('backupOverlay'), backupText = byId('backupText');
+var backupInfo = byId('backupInfo');
 var selectBtn = byId('selectBtn'), textBtn = byId('textBtn'), handBtn = byId('handBtn');
 var selBarEl = byId('selBar'), selDelBtn = byId('selDelBtn'), selCopyBtn = byId('selCopyBtn'), selDoneBtn = byId('selDoneBtn');
 var selSmallBtn = byId('selSmallBtn'), selBigBtn = byId('selBigBtn');
@@ -1084,14 +1121,48 @@ function migrateFromV2orV1() {
   return { notebooks: nbs, notes: noteMap, cur: { nb: 0, note: nbs[0].notes[0] } };
 }
 
-function loadAll() {
-  var data = null;
-  if (storageOk) {
+/* Read the v5 index plus one key per note. A note whose key is missing
+   or corrupt is skipped rather than taking the whole collection down
+   with it - which is the entire point of splitting the keys. */
+function loadV5() {
+  var idx = null, i, lost = 0;
+  try {
+    var raw = localStorage.getItem(STORAGE_KEY_V5);
+    if (raw) idx = JSON.parse(raw);
+  } catch (e) { idx = null; }
+  if (!idx || !idx.noteIds) return null;
+
+  var out = { notebooks: idx.notebooks || [], notes: {}, cur: idx.cur, set: idx.set };
+  for (i = 0; i < idx.noteIds.length; i++) {
+    var id = idx.noteIds[i], rec = null;
     try {
-      var raw = localStorage.getItem(STORAGE_KEY_V4);
-      if (raw) data = JSON.parse(raw);
-    } catch (e) { data = null; }
+      var r = localStorage.getItem(NOTE_KEY + id);
+      if (r) rec = JSON.parse(r);
+    } catch (e) { rec = null; }
+    if (rec && rec.id) out.notes[id] = deserializeNote(rec);
+    else lost++;
   }
+  if (lost) showWarning(lost + ' note(s) could not be read and were skipped.');
+  return out;
+}
+
+/* one-time lift from the single v4 blob into per-note keys */
+function migrateFromV4() {
+  var data = null;
+  try {
+    var raw = localStorage.getItem(STORAGE_KEY_V4);
+    if (raw) data = JSON.parse(raw);
+  } catch (e) { return null; }
+  if (!data || !data.notes) return null;
+  /* v4 stored absolute timestamps, so they are already cumulative */
+  var k;
+  for (k in data.notes) { if (data.notes.hasOwnProperty(k)) markDirty(k); }
+  return data;
+}
+
+function loadAll() {
+  var data = loadV5();
+  if (!data) data = migrateFromV4();
   if (!data) data = migrateFromV2orV1();
   if (!data) {
     var nid = genId();
@@ -1108,6 +1179,11 @@ function loadAll() {
   if (!curNoteId || !notes[curNoteId]) {
     curNoteId = notebooks[curNotebook] && notebooks[curNotebook].notes[0] || null;
   }
+  applyStoredSettings(data.set);
+}
+
+function applyStoredSettings(set) {
+  var data = { set: set };
   if (data.set) {
     if (typeof data.set.palmLevel === 'number') {
       /* anyone saved on the old Med level gets the real engine */
@@ -1150,8 +1226,15 @@ function serializeNote(n) {
     var s = st[i];
     var pts = [];
     var p = s.pts;
+    /* Timestamps are stored as a delta from the previous point. Only
+       the gaps are ever read (speed, taper), and an absolute epoch
+       stamp costs 13 characters per point against 1-3 for a delta -
+       close to half the stored size of a note, for no loss at all. */
+    var t0 = p.length ? p[0][2] : 0, prevT = t0;
     for (var j = 0; j < p.length; j++) {
-      pts.push([Math.round(p[j][0] * 10) / 10, Math.round(p[j][1] * 10) / 10, Math.round(p[j][2])]);
+      var dt = j === 0 ? 0 : Math.round(p[j][2] - prevT);
+      prevT = p[j][2];
+      pts.push([Math.round(p[j][0] * 10) / 10, Math.round(p[j][1] * 10) / 10, dt]);
     }
     var rec = { id: s.id, pen: s.pen, w: s.w, color: s.color, a: s.a, ord: s.ord, pts: pts };
     if (s.pen === PEN_TEXT) {
@@ -1165,31 +1248,89 @@ function serializeNote(n) {
   return out;
 }
 
+/* rebuild cumulative timestamps from the stored deltas */
+function deserializeNote(rec) {
+  var st = rec.strokes || [], i, j;
+  for (i = 0; i < st.length; i++) {
+    var p = st[i].pts || [], t = 0;
+    for (j = 0; j < p.length; j++) {
+      t += (p[j][2] || 0);
+      p[j][2] = t;
+    }
+  }
+  return rec;
+}
+
+function noteRecord(n) {
+  return { id: n.id, title: n.title, cr: n.cr, mod: n.mod,
+           scroll: Math.round(n.scroll), fav: n.fav ? 1 : 0,
+           strokes: serializeNote(n) };
+}
+
+/* notes whose key needs rewriting */
+var dirtyNotes = {};
+function markDirty(id) { if (id) dirtyNotes[id] = 1; }
+
+var quotaWarned = 0;
+function storageBytes() {
+  var total = 0, k;
+  try {
+    for (k in localStorage) {
+      if (!localStorage.hasOwnProperty(k)) continue;
+      if (k.indexOf('mathnotes') !== 0) continue;
+      total += (localStorage.getItem(k) || '').length + k.length;
+    }
+  } catch (e) { return 0; }
+  return total;
+}
+
+function checkQuota() {
+  var used = storageBytes();
+  var pct = used / QUOTA_BYTES;
+  if (pct > 0.8 && quotaWarned < 2) {
+    quotaWarned = 2;
+    showWarning('Storage is ' + Math.round(pct * 100) + '% full. Back up now: menu -> Backup and restore.');
+  } else if (pct > 0.6 && quotaWarned < 1) {
+    quotaWarned = 1;
+    showWarning('Storage is over 60% full. Worth making a backup soon.');
+  }
+}
+
 function doSaveNow() {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   if (!storageOk) return;
-  var payload = { v: 4, notebooks: notebooks, notes: {}, cur: { nb: curNotebook, note: curNoteId }, set: settings };
-  var total = 0;
-  for (var i = 0; i < notebooks.length; i++) {
-    var ids = notebooks[i].notes;
-    for (var j = 0; j < ids.length; j++) {
-      var n = notes[ids[j]];
-      if (!n) continue;
-      payload.notes[ids[j]] = { id: n.id, title: n.title, cr: n.cr, mod: n.mod, scroll: Math.round(n.scroll), fav: n.fav ? 1 : 0, strokes: serializeNote(n) };
-      total++;
-    }
+  var ids = [], i, j, k;
+  for (i = 0; i < notebooks.length; i++) {
+    for (j = 0; j < notebooks[i].notes.length; j++) ids.push(notebooks[i].notes[j]);
   }
   try {
-    var txt = JSON.stringify(payload);
-    if (txt.length > 4200000) showWarning('This note collection is very large. Save may fail - consider exporting a PNG backup.');
-    localStorage.setItem(STORAGE_KEY_V4, txt);
+    /* each dirty note first, so a failure part-way leaves the index
+       pointing at notes that are still whole */
+    for (k in dirtyNotes) {
+      if (!dirtyNotes.hasOwnProperty(k)) continue;
+      var n = notes[k];
+      if (n) localStorage.setItem(NOTE_KEY + k, JSON.stringify(noteRecord(n)));
+    }
+    dirtyNotes = {};
+    localStorage.setItem(STORAGE_KEY_V5, JSON.stringify({
+      v: 5, notebooks: notebooks, noteIds: ids,
+      cur: { nb: curNotebook, note: curNoteId }, set: settings
+    }));
   } catch (e) {
     storageOk = false;
-    showWarning('Cannot save (storage full or Private Browsing). Notes will not persist after reload.');
+    showWarning('Cannot save - storage is full. Open menu -> Backup and restore and copy your notes out NOW.');
+    return;
   }
+  checkQuota();
+}
+
+function dropNoteKey(id) {
+  try { localStorage.removeItem(NOTE_KEY + id); } catch (e) {}
+  delete dirtyNotes[id];
 }
 function saveSoon() {
   if (!storageOk) return;
+  markDirty(curNoteId);
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(doSaveNow, 700);
 }
@@ -3612,6 +3753,118 @@ function buildTrace(label) {
   };
 }
 
+/* ============================================================
+ * BACKUP AND RESTORE
+ *
+ * iOS can clear a web app's storage without asking, and there is
+ * no way to stop it. The only defence that always works is a copy
+ * held somewhere the browser does not control, so the whole
+ * collection goes in and out as one block of text: paste it into
+ * a mail to yourself, into Notes, into Drive - anywhere.
+ *
+ * The block carries a checksum. A paste that got truncated on the
+ * way through a mail client is the likeliest way a restore goes
+ * wrong, and it must be caught rather than half-applied.
+ * ============================================================ */
+function backupSum(txt) {
+  /* small, fast, ES5: enough to catch truncation and corruption */
+  var h = 5381, i;
+  for (i = 0; i < txt.length; i++) h = ((h * 33) ^ txt.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+function buildBackup() {
+  var out = { notebooks: notebooks, notes: {}, set: settings }, i, j;
+  for (i = 0; i < notebooks.length; i++) {
+    for (j = 0; j < notebooks[i].notes.length; j++) {
+      var n = notes[notebooks[i].notes[j]];
+      if (n) out.notes[n.id] = noteRecord(n);
+    }
+  }
+  var body = JSON.stringify(out);
+  return JSON.stringify({
+    mathnotes: 1, at: new Date().toISOString(),
+    sum: backupSum(body), body: body
+  });
+}
+
+function countNotes() {
+  var c = 0, k;
+  for (k in notes) { if (notes.hasOwnProperty(k)) c++; }
+  return c;
+}
+
+function restoreBackup(txt) {
+  var pack, body;
+  try { pack = JSON.parse(txt); }
+  catch (e) { return 'That does not look like a backup. Paste the whole block, including the first { and last }.'; }
+  if (!pack || pack.mathnotes !== 1 || typeof pack.body !== 'string') {
+    return 'That is not a MathNotes backup.';
+  }
+  if (backupSum(pack.body) !== pack.sum) {
+    return 'The backup is incomplete - some of it was lost on the way. Copy and paste it again, all of it.';
+  }
+  try { body = JSON.parse(pack.body); }
+  catch (e) { return 'The backup is damaged and cannot be read.'; }
+  if (!body.notes || !body.notebooks) return 'The backup is missing its notes.';
+
+  /* merge by id: a note in the backup replaces the one here, and
+     anything only on this device is left alone. That makes a restore
+     safe to run twice, and makes moving between devices additive. */
+  var added = 0, replaced = 0, k, i;
+  for (k in body.notes) {
+    if (!body.notes.hasOwnProperty(k)) continue;
+    if (notes[k]) replaced++; else added++;
+    notes[k] = deserializeNote(body.notes[k]);
+    markDirty(k);
+  }
+  for (i = 0; i < body.notebooks.length; i++) {
+    var nb = body.notebooks[i], mine = null, m;
+    for (m = 0; m < notebooks.length; m++) {
+      if (notebooks[m].id === nb.id) { mine = notebooks[m]; break; }
+    }
+    if (!mine) { notebooks.push(nb); continue; }
+    for (m = 0; m < nb.notes.length; m++) {
+      if (mine.notes.indexOf(nb.notes[m]) < 0) mine.notes.push(nb.notes[m]);
+    }
+  }
+  if (body.set) applyStoredSettings(body.set);
+  doSaveNow();
+  return { added: added, replaced: replaced };
+}
+
+/* ---------- backup panel ---------- */
+function openBackup() {
+  closePanels();
+  backupText.value = '';
+  backupInfo.textContent = countNotes() + ' note(s) on this device.';
+  backupOverlay.className = 'overlay on';
+}
+
+function doExport() {
+  var txt;
+  try { txt = buildBackup(); }
+  catch (e) { toast('Could not build the backup'); return; }
+  backupText.value = txt;
+  backupInfo.textContent = countNotes() + ' note(s), ' +
+    Math.round(txt.length / 1024) + ' KB. Select all, copy, and paste it somewhere safe.';
+  try { backupText.focus(); backupText.setSelectionRange(0, txt.length); } catch (e) {}
+}
+
+function doImport() {
+  var txt = (backupText.value || '');
+  if (!txt) { backupInfo.textContent = 'Paste a backup into the box first.'; return; }
+  var r = restoreBackup(txt);
+  if (typeof r === 'string') { backupInfo.textContent = r; return; }
+  backupOverlay.className = 'overlay';
+  /* the restored notes are not the one currently open, so go to the
+     list - otherwise a successful restore looks like a blank page */
+  showView('home');
+  renderHome();
+  renderDrawer();
+  toast('Restored: ' + r.added + ' added, ' + r.replaced + ' updated');
+}
+
 /* ---------- copy the report out ----------
  * Uploading straight to GitHub did not work from a 2012 TLS stack,
  * so the report is shown as text to select and paste. */
@@ -3844,6 +4097,7 @@ function deleteCurrentNote() {
   var idx = nb ? nb.notes.indexOf(n.id) : -1;
   if (idx >= 0) nb.notes.splice(idx, 1);
   delete notes[n.id];
+  dropNoteKey(n.id);
   doSaveNow();
   showView('home');
   renderHome();
@@ -4033,6 +4287,7 @@ var moreRowDefs = null;
 function buildMoreMenu() {
   moreMenu.innerHTML = '';
   moreRowDefs = [
+    { lbl: 'Backup and restore', val: countNotes() + ' notes', act: openBackup },
     { lbl: 'Export PNG', val: '', act: exportPNG },
     { lbl: 'Template', val: TPL_NAMES[settings.template], act: function () { settings.template = (settings.template + 1) % 4; afterSettingChange(); } },
     { lbl: 'Line spacing', val: settings.spacing + ' px', act: function () { settings.spacing = settings.spacing === 32 ? 38 : (settings.spacing === 38 ? 44 : 32); afterSettingChange(); } },
@@ -4223,6 +4478,9 @@ undoBtn.addEventListener('click', doUndo);
 redoBtn.addEventListener('click', doRedo);
 byId('exportCloseBtn').addEventListener('click', function () { exportOverlay.className = 'overlay'; });
 byId('traceCloseBtn').addEventListener('click', function () { traceOverlay.className = 'overlay'; });
+byId('backupCloseBtn').addEventListener('click', function () { backupOverlay.className = 'overlay'; });
+byId('backupExportBtn').addEventListener('click', doExport);
+byId('backupImportBtn').addEventListener('click', doImport);
 
 /* drawing on the canvas closes floating panels (closePanels is
    called from onTouchStart in the input engine) */
