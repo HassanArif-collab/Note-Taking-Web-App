@@ -84,5 +84,67 @@ check('...with its pixels intact', !!got && got.src === srcImg.src);
 check('...and its size intact',
       !!got && got.iw === srcImg.iw && got.ih === srcImg.ih);
 
+/* ---------- pages ----------
+ * A page is a band of one tall roll, so inserting one slides everything
+ * below the seam down and deleting one drops what is inside and slides
+ * the rest up. Both must collapse to a single undo step. */
+function strokeTop(st) {
+  var lo = 1e9, k;
+  for (k = 0; k < st.pts.length; k++) { if (st.pts[k][1] < lo) lo = st.pts[k][1]; }
+  return lo;
+}
+
+var pg = fresh();
+write(pg, 1);
+var y0 = strokeTop(pg.strokes()[0]);
+pg.answer('+').clickMenu('Pages');
+var y1 = strokeTop(pg.strokes()[0]);
+check('inserting a page pushes the marks down', y1 > y0 + 900, y0 + ' -> ' + y1);
+check('...without losing any', pg.strokes().length === 1);
+pg.els.undoBtn._fire('click', {});
+check('one undo puts them back', Math.abs(strokeTop(pg.strokes()[0]) - y0) < 1,
+      String(strokeTop(pg.strokes()[0])));
+
+var pd = fresh();
+write(pd, 1);
+pd.confirmAll(true).answer('-').clickMenu('Pages');
+check('deleting a page removes the marks on it', pd.strokes().length === 0,
+      pd.strokes().length + ' strokes');
+pd.els.undoBtn._fire('click', {});
+check('one undo brings the page back', pd.strokes().length === 1,
+      pd.strokes().length + ' strokes');
+
+/* ---------- folders ---------- */
+var fd = fresh();
+var nbBtn = fd.els.newNbBtn;
+fd.answer('Physics'); nbBtn._fire('click', {});
+fd.answer('Term 1');  nbBtn._fire('click', {});
+var nbs0 = fd.state().notebooks;
+check('new notebooks are created', nbs0.length >= 3, nbs0.length + ' notebooks');
+
+fd.answer('1');
+fd.els.nbMoveBtn._fire('click', {});
+var nbs = fd.state().notebooks;
+var nested = 0, q;
+for (q = 0; q < nbs.length; q++) { if (nbs[q].parent) nested++; }
+check('a notebook can be nested inside another', nested === 1, nested + ' nested');
+
+/* a folder must never become its own ancestor */
+var childIdx = -1;
+for (q = 0; q < nbs.length; q++) { if (nbs[q].parent) childIdx = q; }
+fd.answer(String(childIdx + 1));
+fd.els.nbMoveBtn._fire('click', {});
+var after = fd.state().notebooks, loops = 0;
+for (q = 0; q < after.length; q++) {
+  var seen = 0, cur2 = after[q], r;
+  while (cur2 && cur2.parent && seen++ < 10) {
+    var pi = -1;
+    for (r = 0; r < after.length; r++) { if (after[r].id === cur2.parent) pi = r; }
+    cur2 = pi >= 0 ? after[pi] : null;
+  }
+  if (seen >= 10) loops++;
+}
+check('a folder cannot be put inside its own child', loops === 0, loops + ' loops');
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
