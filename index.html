@@ -146,7 +146,7 @@ input { font: inherit; }
 
 /* ---------- editor canvas ---------- */
 #drawView { background: #F1F2F4; }
-#canvasWrap { position: absolute; top: 56px; left: 0; right: 0; bottom: 0; overflow: hidden; }
+#canvasWrap { position: absolute; top: 102px; left: 0; right: 0; bottom: 0; overflow: hidden; }
 #noteCanvas { position: absolute; top: 0; left: 0; }
 
 /* pending-touch guide ring (frozen at touch-down, never moved) */
@@ -158,17 +158,21 @@ input { font: inherit; }
 }
 #pendingDot.rejected { border-color: rgba(226,35,26,0.75); }
 
-/* ---------- floating tool capsule (Samsung Tab style) ---------- */
+/* ---------- tool bar, docked under the header ----------
+   It used to float as a vertical capsule at mid-screen on the right,
+   which is exactly where a right hand and the notes both want to be.
+   Samsung Notes docks its tools along the top edge; so does this. */
 #toolbar {
-  position: absolute; right: 10px; top: 50%; margin-top: -198px;
-  width: 54px; border-radius: 27px;
-  background: rgba(255,255,255,0.97);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.14);
-  border: 1px solid rgba(0,0,0,0.05);
-  padding: 8px 0; z-index: 20;
+  position: absolute; top: 56px; left: 0; right: 0;
+  height: 46px; z-index: 20;
+  background: #FFFFFF;
+  border-bottom: 1px solid #E5E5E5;
+  display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center;
+  -webkit-justify-content: center; justify-content: center;
 }
 .tb-btn {
-  width: 54px; height: 46px; position: relative;
+  width: 48px; height: 44px; position: relative;
   display: -webkit-flex; display: flex;
   -webkit-align-items: center; align-items: center;
   -webkit-justify-content: center; justify-content: center;
@@ -177,16 +181,16 @@ input { font: inherit; }
 .tb-btn:active { background: #EFF0F2; }
 .tb-btn.on { background: rgba(3,129,254,0.12); color: #0381FE; }
 .tb-btn.dis { color: #C8C8C8; }
-.tb-sep { height: 1px; margin: 5px 13px; background: #E5E5E5; }
+.tb-sep { width: 1px; height: 24px; margin: 0 7px; background: #E5E5E5; }
 #penBadge {
-  position: absolute; right: 10px; bottom: 9px;
+  position: absolute; right: 7px; bottom: 7px;
   width: 7px; height: 7px; border-radius: 50%;
   border: 1px solid rgba(255,255,255,0.9);
 }
 
 /* ---------- pen palette ---------- */
 #penPalette {
-  position: absolute; right: 74px; top: 50%; margin-top: -224px;
+  position: absolute; top: 108px; left: 50%; margin-left: -150px;
   width: 300px; background: #FFFFFF; border-radius: 24px;
   box-shadow: 0 8px 28px rgba(0,0,0,0.18);
   padding: 16px 16px 10px 16px; display: none; z-index: 22;
@@ -228,7 +232,7 @@ input { font: inherit; }
 
 /* ---------- eraser panel ---------- */
 #eraserPanel {
-  position: absolute; right: 74px; top: 50%; margin-top: -120px;
+  position: absolute; top: 108px; left: 50%; margin-left: -104px;
   width: 208px; background: #FFFFFF; border-radius: 20px;
   box-shadow: 0 8px 28px rgba(0,0,0,0.18);
   padding: 14px 16px; display: none; z-index: 22;
@@ -593,7 +597,7 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
        by the canvas touch handlers (tap = jump to page) -->
   <div id="scrollPill"></div>
 
-  <!-- floating tool capsule -->
+  <!-- tool bar (docked under the header) -->
   <div id="toolbar">
     <button id="penBtn" class="tb-btn on" aria-label="Pen settings">
       <span id="penBadge" style="background:#000000"></span>
