@@ -837,6 +837,26 @@ var SC = {
   DISCARD_MS:      600,
   DISCARD_STRAIGHT:0.93,
   DISCARD_PATH:    25,
+  DWELL_MS:        300,    /* A pen moves and then LIFTS. A palm lands, slides
+                              while the contact patch settles, and then sits
+                              there. A committed stroke that goes near-still
+                              for this long without lifting is a hand settling,
+                              not a stroke being drawn. Recorded contact
+                              4067368407 slid 48px, inked, then dwelled 330ms
+                              and lifted at 531ms - just under the 600ms the
+                              old mid-stroke discard required. */
+  DWELL_RADIUS:    14,     /* Measured as "stayed inside this circle", not as
+                              "instantaneous speed below X". A settling palm
+                              creeps back and forth at 0.03-0.09 px/ms, which
+                              no speed threshold separates from careful writing
+                              - but its NET displacement is nearly zero, while
+                              a slow stroke keeps going somewhere. */
+  DWELL_MIN_PATH:  20,     /* ...and a deliberate dot never travelled at all */
+  RIGID_MIN:       3,      /* 3+ contacts translating as one object are one
+                              hand. Two is left alone: that is a pan. */
+  RIGID_ANGLE:     0.45,   /* radians of agreement between displacements */
+  RIGID_RATIO:     1.8,    /* fastest / slowest magnitude */
+  RIGID_MIN_MOVE:  6,
   DECISIVE_SPEED:  0.12,   /* decisive lane needs real writing speed too.
                               0.05 px/ms is 50 px/s - slower than anyone
                               writes, and it let every palm slide ink. */
@@ -1853,6 +1873,46 @@ function allInkDubious(now) {
   return true;
 }
 
+/* A hand is one rigid object: its contacts translate together. A pen
+ * moves independently of everything else on the glass. Two contacts
+ * moving together are deliberately left alone - that is a pan, and the
+ * gesture engine owns it. Three or more is a hand. */
+function rigidGroupCheck(now) {
+  var members = [], k, o, rv;
+  for (k in touchStates) {
+    if (!touchStates.hasOwnProperty(k)) continue;
+    o = touchStates[k];
+    /* gesture members count toward the group: two of a hand's contacts
+       are routinely grabbed as a pan before the third has moved, and the
+       third is then left alone to ink */
+    if (o.kind !== 'probe' && o.kind !== 'gesture') continue;
+    if (o.state === 'palm') continue;
+    rv = recentVec(o, now);
+    if (!rv) continue;
+    var mag = Math.sqrt(rv.dx * rv.dx + rv.dy * rv.dy);
+    if (mag < SC.RIGID_MIN_MOVE) continue;
+    members.push({ st: o, ang: Math.atan2(rv.dy, rv.dx), mag: mag });
+  }
+  if (members.length < SC.RIGID_MIN) return;
+
+  var i, maxM = 0, minM = 1e9;
+  for (i = 0; i < members.length; i++) {
+    if (Math.abs(angDiff(members[i].ang, members[0].ang)) > SC.RIGID_ANGLE) return;
+    if (members[i].mag > maxM) maxM = members[i].mag;
+    if (members[i].mag < minM) minM = members[i].mag;
+  }
+  if (maxM / Math.max(minM, 0.01) > SC.RIGID_RATIO) return;
+
+  traceGesture('rigid', members.length, Math.round(maxM), now);
+  for (i = 0; i < members.length; i++) {
+    /* leave gesture members panning - that is harmless. Only the
+       contacts that could still become ink need the verdict. */
+    if (members[i].st.kind === 'gesture') continue;
+    if (members[i].st.state === 'ink') discardActiveInk(members[i].st, now, 'rigid');
+    else verdictPalm(members[i].st, now);
+  }
+}
+
 function liveTouchCount() {
   var n = 0, k;
   for (k in touchStates) { if (touchStates.hasOwnProperty(k)) n++; }
@@ -2017,7 +2077,7 @@ function startInkRecord(st, now) {
     if (st.contender) {
       var own = inkOwners(), oi;
       for (oi = 0; oi < own.length; oi++) {
-        if (inkOwnerLosesTo(own[oi], st, now)) discardActiveInk(own[oi], now, true);
+        if (inkOwnerLosesTo(own[oi], st, now)) discardActiveInk(own[oi], now, 'usurped');
       }
     }
     /* promotion: any other live probes become palm forever */
@@ -2241,6 +2301,16 @@ function appendInk(st, pt, now, touch) {
     if (age > SC.DISCARD_MS && st.pathLen > SC.DISCARD_PATH &&
         st.vel < SC.DISCARD_SPEED && straight > SC.DISCARD_STRAIGHT) {
       discardActiveInk(st, now);
+      return;
+    }
+
+    /* dwell: the stroke stopped going anywhere but the finger never
+       lifted. Anchor on the last position that mattered; any real
+       progress moves out of the circle and re-anchors. */
+    if (!st.dwellAt || dist(st.dwellAt.x, st.dwellAt.y, cx, cy) > SC.DWELL_RADIUS) {
+      st.dwellAt = { x: cx, y: cy, t: now };
+    } else if (now - st.dwellAt.t > SC.DWELL_MS && st.pathLen > SC.DWELL_MIN_PATH) {
+      discardActiveInk(st, now, 'dwell');
     }
   }
 }
@@ -2248,13 +2318,13 @@ function appendInk(st, pt, now, touch) {
 function discardActiveInk(st, now, why) {
   delete inkNow[st.id];
   st.state = 'palm';
-  traceVerdict(why === 'pinch' ? 'pinch-cancel' : (why ? 'usurped' : 'discarded'), st.id, now);
+  traceVerdict(why === 'pinch' ? 'pinch-cancel' : (why || 'discarded'), st.id, now);
   palmMemAdd(st.sx, st.sy, now);
   /* a pinch is the user asking to zoom - dropping the stroke is the
      point, not an error worth interrupting them about */
-  if (why !== 'pinch') {
-    toast(why ? 'Palm stroke removed - pen took over' : 'Palm stroke discarded');
-  }
+  if (why === 'pinch') { requestRender(); return; }
+  toast(why === 'usurped' ? 'Palm stroke removed - pen took over'
+                          : 'Palm stroke discarded');
   requestRender();
 }
 
@@ -3558,6 +3628,7 @@ function onTouchMove(e) {
   var now = Date.now();
   var ch = e.changedTouches;
   for (var i = 0; i < ch.length; i++) { traceTouch(1, ch[i], now); moveTouch(ch[i], now); }
+  rigidGroupCheck(now);
   detectGesture(now);
   applyGesture(now);
 }

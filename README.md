@@ -85,14 +85,35 @@ The giveaway is the rhythm: a hand that really accelerates produces
 *consecutive* fast samples, while a deforming blob produces an isolated hop with
 stillness on both sides. Two isolated hops and the contact is judged a palm.
 
+**A pen moves and then lifts; a palm settles and stays.** A committed stroke
+that stops going anywhere - staying inside a 14px circle for 300ms - while the
+contact is still down is a hand settling, not a stroke being drawn, and it is
+removed. Measured as displacement rather than speed on purpose: a settling palm
+creeps at 0.03-0.09 px/ms, which no speed threshold separates from careful
+writing, but its net displacement is nearly zero while a slow stroke keeps
+going somewhere.
+
+**A hand is one rigid object.** Three or more contacts translating together
+are one hand, and the ones that could still become ink are refused. Two are
+deliberately left alone - that is a pan, and the gesture engine owns it.
+
+**Measured, and abandoned: contact jitter as a size proxy.** The idea was that
+a large soft contact would have a noisier centroid than a small rigid disc,
+giving an inferred contact size. Real recordings refuse it - palm contacts on
+this digitizer creep in smooth 1px steps and are positionally *stable*. The
+hypothesis did not survive the data.
+
 **Check what the digitizer actually reports.** Kebab menu -> **Touch
 capabilities**, after drawing once. Every threshold in this engine exists
 because we believed the hardware reports no contact size and no pressure - and
 that belief came from reading `touch.radiusX` alone. The app now observes every
 vendor-prefixed twin as well (`webkitRadiusX`, `webkitForce`, and the rest) and
-keeps the maximum seen, distinguishing *absent* from *always zero*. If any of
-them ever reports a real value, palm rejection stops being behavioural guesswork:
-a palm is a big contact and a disc stylus is a small one.
+keeps the maximum seen, distinguishing *absent* from *always zero*.
+
+On an iPad 3 / iOS 9.3.5 the answer is **nothing**: `radiusX` is not merely zero,
+the property does not exist; `force` exists and is permanently 0; every other
+channel is absent. The `radiusX` guards still in the engine are therefore dead
+code on this device, kept only because another device might answer differently.
 
 **A cancelled contact is free palm evidence.** iOS fires `touchcancel` when it
 decides a touch was spurious - a hand landing, too many contacts, a system
@@ -164,7 +185,7 @@ ES5 only. Forbidden: `let`/`const`, arrow functions, template literals, classes,
 
 ```
 node scripts/check_es5.js     # Safari 9 gate - run before every push
-node scripts/test_palm.js     # palm-rejection behaviour (39 assertions)
+node scripts/test_palm.js     # palm-rejection behaviour (45 assertions)
 node scripts/test_recorder.js # recorder + pinch-zoom (15 assertions)
 node scripts/replay.js FILE   # replay a recorded touch trace
 ```
