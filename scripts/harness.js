@@ -98,8 +98,11 @@ App.prototype._touchList = function () {
   return out;
 };
 
-App.prototype._ev = function (changed) {
+/* the app reads e.type to tell touchend from touchcancel, so the stub
+   has to carry it - without it the cancel path was untestable */
+App.prototype._ev = function (changed, type) {
   return {
+    type: type || 'touchmove',
     touches: this._touchList(),
     targetTouches: this._touchList(),
     changedTouches: changed,
@@ -114,14 +117,27 @@ App.prototype.tick = function (ms) { this._t += ms; setClock(this._t); return th
 App.prototype.down = function (id, x, y, radiusX) {
   var t = { identifier: id, clientX: x, clientY: y, radiusX: radiusX || 0, radiusY: radiusX || 0 };
   this._live[id] = t;
-  this.wrap._fire('touchstart', this._ev([t]));
+  this.wrap._fire('touchstart', this._ev([t], 'touchstart'));
+  return this;
+};
+
+/* A hand landing delivers several contacts in ONE touchstart. down()
+ * fires them one at a time, which never exercises the burst path. */
+App.prototype.downMulti = function (list) {
+  var changed = [], i, t;
+  for (i = 0; i < list.length; i++) {
+    t = { identifier: list[i][0], clientX: list[i][1], clientY: list[i][2], radiusX: 0, radiusY: 0 };
+    this._live[list[i][0]] = t;
+    changed.push(t);
+  }
+  this.wrap._fire('touchstart', this._ev(changed, 'touchstart'));
   return this;
 };
 
 App.prototype.moveTo = function (id, x, y) {
   var t = { identifier: id, clientX: x, clientY: y, radiusX: 0, radiusY: 0 };
   this._live[id] = t;
-  this.wrap._fire('touchmove', this._ev([t]));
+  this.wrap._fire('touchmove', this._ev([t], 'touchmove'));
   return this;
 };
 
@@ -129,8 +145,8 @@ App.prototype.up = function (id, cancel) {
   var t = this._live[id];
   if (!t) return this;
   delete this._live[id];
-  var ev = this._ev([t]);
-  this.wrap._fire(cancel ? 'touchcancel' : 'touchend', ev);
+  var kind = cancel ? 'touchcancel' : 'touchend';
+  this.wrap._fire(kind, this._ev([t], kind));
   return this;
 };
 

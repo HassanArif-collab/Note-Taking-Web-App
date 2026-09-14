@@ -1867,7 +1867,7 @@ function anyInkActive() {
 }
 
 /* ---------- touch lifecycle ---------- */
-function beginTouch(touch, now) {
+function beginTouch(touch, now, burst) {
   var pt = docPoint(touch);
   var id = touch.identifier;
 
@@ -1997,6 +1997,10 @@ function beginTouch(touch, now) {
   } else {
     st.suspect = computeSuspect(st, touch, now);
   }
+  /* Contacts that arrive together, or land while several others are
+     already down, are a hand meeting the glass - not a pen tip. The
+     pairwise team rule only sees two at a time; this sees the burst. */
+  if (burst) st.suspect = true;
 
   touchStates[id] = st;
 
@@ -2381,15 +2385,27 @@ function endTouch(touch, now, cancelled) {
     return;
   }
   if (st.state === 'ink') {
+    /* iOS cancels a contact when it decides the touch was spurious -
+       a hand landing, too many contacts, a system gesture taking over.
+       That is the digitizer telling us this was not a deliberate
+       stroke, and the old code committed it anyway. Cancel is the one
+       piece of palm evidence the hardware hands us for free. */
+    if (cancelled) {
+      delete inkNow[st.id];
+      traceVerdict('cancelled', st.id, now);
+      palmMemAdd(st.sx, st.sy, now);
+      requestRender();
+      return;
+    }
     finalizeInk(st, now);
     return;
   }
 
   /* probe that never earned ink */
   var age = now - st.t0;
-  if (st.state === 'palm') {
+  if (st.state === 'palm' || cancelled) {
     palmMemAdd(st.sx, st.sy, now);
-  } else if (!cancelled && age < SC.TAP_MS && st.pathLen < 5) {
+  } else if (age < SC.TAP_MS && st.pathLen < 5) {
     queueTapDot(st, now);
   } else {
     palmMemAdd(st.sx, st.sy, now);
@@ -3372,6 +3388,63 @@ function resetTouchTracking() {
  *   ['z',  zoom, sx, sy, t]   view changed (zoom or pan)
  * ============================================================ */
 
+/* ---------- 0.1 what does this digitizer ACTUALLY report? ----------
+ * Every threshold in this engine exists because we believed the
+ * hardware reports no contact size and no pressure. That belief came
+ * from reading touch.radiusX alone. Safari has historically exposed
+ * vendor-prefixed twins of those fields, and they were never checked.
+ * If any of them carries a real value on this device, palm rejection
+ * stops being behavioural guesswork: a palm is a big contact and a
+ * disc stylus is a small one.
+ *
+ * So observe every candidate on every real touch and keep the maximum.
+ *   null  -> the property does not exist on this device
+ *   0     -> it exists but has only ever been zero (useless)
+ *   > 0   -> a real signal, and everything below it can be rebuilt */
+var CAP_KEYS = [
+  'radiusX', 'radiusY', 'webkitRadiusX', 'webkitRadiusY',
+  'force', 'webkitForce', 'rotationAngle', 'webkitRotationAngle',
+  'altitudeAngle', 'azimuthAngle', 'touchType', 'size', 'pressure'
+];
+var capMax = null;
+
+function capObserve(touch) {
+  /* real touches only - the desktop mouse path fakes a Touch and would
+     poison the result with absent properties */
+  if (typeof touch.identifier !== 'number') return;
+  var i, k, v;
+  if (!capMax) {
+    capMax = {};
+    for (i = 0; i < CAP_KEYS.length; i++) {
+      k = CAP_KEYS[i];
+      capMax[k] = (typeof touch[k] === 'undefined') ? null : 0;
+    }
+  }
+  for (i = 0; i < CAP_KEYS.length; i++) {
+    k = CAP_KEYS[i];
+    if (capMax[k] === null) continue;
+    v = touch[k];
+    if (typeof v === 'number' && v > capMax[k]) capMax[k] = v;
+  }
+}
+
+function capsReport() {
+  if (!capMax) return 'No touches seen yet - draw something first.';
+  var lines = [], k, v, live = 0;
+  for (k in capMax) {
+    if (!capMax.hasOwnProperty(k)) continue;
+    v = capMax[k];
+    if (v === null) lines.push(k + ': absent');
+    else if (v === 0) lines.push(k + ': always 0');
+    else { lines.push(k + ': UP TO ' + v + '  <-- REAL SIGNAL'); live++; }
+  }
+  var NL = String.fromCharCode(10);
+  return (live
+    ? live + ' usable signal(s) found. This changes everything - send a report.'
+    : 'No contact size or pressure on this device. Behaviour is all we have.')
+    + NL + NL + lines.join(NL);
+}
+
 var TRACE_MAX = 2000;   /* ~20-30s; a copy/paste report must stay pasteable */
 var traceBuf = new Array(TRACE_MAX);
 var traceHead = 0;         /* next slot to write */
@@ -3394,6 +3467,7 @@ function tracePush(rec) {
 
 /* p = phase: 0 down, 1 move, 2 up, 3 cancel */
 function traceTouch(p, touch, now) {
+  capObserve(touch);
   if (!traceOn) return;
   tracePush([p, touch.identifier,
              Math.round(touch.clientX * 10) / 10,
@@ -3444,6 +3518,7 @@ function buildTrace(label) {
     dpr: dpr, zoom: zoom,
     scrollX: Math.round(scrollX), scrollY: Math.round(scrollY),
     palmLevel: settings.palmLevel, hand: settings.hand,
+    caps: capMax,
     tool: tool, spacing: settings.spacing,
     at: new Date().toISOString(),
     samples: traceSamples()
@@ -3474,7 +3549,9 @@ function onTouchStart(e) {
   stopMomentum();
   var now = Date.now();
   var ch = e.changedTouches;
-  for (var i = 0; i < ch.length; i++) { traceTouch(0, ch[i], now); beginTouch(ch[i], now); }
+  var burst = ch.length >= 2 || (e.touches && e.touches.length >= 3);
+  if (burst) traceGesture('burst', ch.length, e.touches ? e.touches.length : 0, now);
+  for (var i = 0; i < ch.length; i++) { traceTouch(0, ch[i], now); beginTouch(ch[i], now, burst); }
 }
 function onTouchMove(e) {
   e.preventDefault();
@@ -3884,6 +3961,7 @@ function buildMoreMenu() {
     { lbl: 'Writing hand', val: HAND_NAMES[settings.hand], act: function () { settings.hand = (settings.hand + 1) % 3; afterSettingChange(); } },
     { lbl: 'Touch guide', val: settings.guideDots ? 'On' : 'Off', act: function () { settings.guideDots = !settings.guideDots; hidePendingDot(); afterSettingChange(); } },
     { lbl: 'Copy report', val: traceCount ? traceCount + ' pts' : 'empty', act: showTrace },
+    { lbl: 'Touch capabilities', val: '', act: function () { window.alert(capsReport()); } },
     { lbl: 'Recording', val: traceOn ? 'On' : 'Off', act: function () { traceOn = !traceOn; afterSettingChange(); } },
     { lbl: 'Clear note', val: '', warn: true, act: clearNote },
     { lbl: 'Delete note', val: '', warn: true, act: deleteCurrentNote },
