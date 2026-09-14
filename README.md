@@ -32,8 +32,42 @@ thickness, with 24 colours to choose from.
 ### Gestures
 
 - **Two fingers** — pinch to zoom (60%–260%), drag to scroll.
+- **Two-finger tap** — undo. The fastest way to remove a stray palm mark.
 - **Double-tap with the hand tool** — back to 100%.
-- **Tap the page pill** (bottom left) — jump to a page number.
+
+### Pages
+
+Tap the **page pill** (bottom left), or **Pages** in the menu:
+
+- a **number** jumps to that page
+- **+** inserts a blank page here and pushes everything below it down
+- **-** deletes this page (it asks first, and says how many marks are on it)
+
+Both are a single undo.
+
+### Notebooks and folders
+
+The **menu button** (top left) opens the notebook drawer. The **folder button**
+in its header puts the current notebook inside another, or back at the top
+level. A folder cannot be put inside its own child.
+
+### Photos
+
+**Menu → Insert photo** puts a picture from the camera roll on the page — handy
+for a textbook problem you want to work on. It behaves like ink: lasso it to
+move or resize, erase it, undo it. It is shrunk before saving, because a full
+camera photo would fill the whole storage allowance on its own.
+
+### Backing up — do this
+
+**Menu → Backup and restore → Copy my notes**, then paste the block into an email
+to yourself, or Apple Notes, or Drive. Anywhere outside this browser.
+
+iOS can clear a web app's storage without warning and the app cannot stop it. A
+backup makes that a non-event. To restore — on this iPad or any other device —
+open the same panel, paste the block in, and tap **Restore**. It merges by note,
+so running it twice is safe.
+
 
 ### Settings (the ⋮ menu)
 
@@ -110,14 +144,15 @@ implemented.
 
 ### Features
 
-- Backup: export and import all notes to a file. **There is no backup today** —
-  everything lives in this browser's storage.
-- Insert a photo from the camera roll.
-- Page management: insert, delete, reorder.
-- Better export: multi-page PDF instead of the 4-page PNG cap.
+- **Zoom window** — write large in a strip at the bottom and have it land small
+  on the page. The most useful thing left: a disc stylus cannot write small, and
+  maths needs small.
+- Reorder pages, and a page thumbnail view.
+- Better export: multi-page PDF instead of the 4-page PNG cap, which may fail
+  outright on this iPad because it builds one enormous canvas.
 - Copy and paste between notes.
 - A ruler / straight-edge.
-- Toolbar that docks to the top edge instead of floating mid-screen.
+- Drag notebooks in the drawer instead of typing a number.
 
 ---
 
