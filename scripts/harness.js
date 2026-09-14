@@ -194,21 +194,57 @@ App.prototype.trace = function () {
   return this.win.__mnTrace();
 };
 
+/* every stroke in the collection, not just the open note */
+App.prototype.allStrokes = function () {
+  var st = this.state(), out = [], i, n;
+  if (!st || !st.noteIds) return out;
+  for (i = 0; i < st.noteIds.length; i++) {
+    n = this.note(st.noteIds[i]);
+    if (n && n.strokes) out = out.concat(n.strokes);
+  }
+  return out;
+};
+
+/* Drive the real backup panel rather than reaching into the IIFE, so
+ * the tests exercise the same path the user's fingers do. */
+App.prototype.exportBackup = function () {
+  this.clickMenu('Backup and restore');
+  this.els.backupExportBtn._fire('click', {});
+  return this.els.backupText.value;
+};
+
+/* returns {ok:true} when the restore was applied, or the message the
+ * panel showed the user when it was refused */
+App.prototype.importBackup = function (txt) {
+  this.clickMenu('Backup and restore');
+  this.els.backupText.value = txt;
+  this.els.backupImportBtn._fire('click', {});
+  if (String(this.els.backupOverlay.className).indexOf('on') < 0) return { ok: true };
+  return this.els.backupInfo.textContent;
+};
+
 /* Requests the app attempted through XMLHttpRequest. */
 App.prototype.requests = function () { return this.win._xhr || []; };
 
 /* flush the debounced save and read back what the engine committed */
+/* v5 keeps a small index plus one key per note, so reading back means
+ * following the index - the same thing the app does on load. */
 App.prototype.state = function () {
   var hs = (this.win._h && this.win._h.pagehide) || [];
   for (var i = 0; i < hs.length; i++) hs[i]();
-  var raw = this.storage.getItem('mathnotes_v4');
+  var raw = this.storage.getItem('mathnotes_v5');
+  return raw ? JSON.parse(raw) : null;
+};
+
+App.prototype.note = function (id) {
+  var raw = this.storage.getItem('mathnotes_v5_n_' + id);
   return raw ? JSON.parse(raw) : null;
 };
 
 App.prototype.strokes = function () {
   var s = this.state();
   if (!s || !s.cur || !s.cur.note) return [];
-  var n = s.notes[s.cur.note];
+  var n = this.note(s.cur.note);
   return n && n.strokes ? n.strokes : [];
 };
 
