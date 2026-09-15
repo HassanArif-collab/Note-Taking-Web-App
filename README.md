@@ -128,7 +128,9 @@ implemented.
 - **Decide late, draw early.** Show ink the instant you move, but only *commit*
   it ~200ms later using hindsight — did the contact stop? did another start
   writing? Retract what loses. Biggest remaining win, and it would also remove
-  the ~130ms delay before ink appears.
+  the ~130ms delay before ink appears. (Two narrow cases already work this way:
+  a small mark and a stroke that dies at the lift are both judged after the
+  fact. Doing it for everything is the unbuilt part.)
 - **Winner-take-all.** At any moment only one contact can be the pen. Rank all
   live contacts and let only the clear winner draw, instead of judging each one
   alone against fixed thresholds.
@@ -163,8 +165,8 @@ dependencies.
 
 ```
 node scripts/check_es5.js     # Safari 9 gate - run before every push
-node scripts/test_palm.js     # palm-rejection behaviour (47 assertions)
-node scripts/test_recorder.js # recorder and pinch-zoom (17 assertions)
+node scripts/test_palm.js     # palm-rejection behaviour (51 assertions)
+node scripts/test_recorder.js # recorder and pinch-zoom (21 assertions)
 node scripts/replay.js FILE   # replay a recorded touch trace
 ```
 
@@ -196,8 +198,15 @@ device:
 - **Travel is measured on the glass, not on the page.** Zoom and scroll change
   page coordinates, so a stationary contact appeared to move whenever the view
   moved — enough on its own to make a resting palm draw.
-- **A pen moves and then lifts; a palm settles and stays.** A stroke that stops
-  going anywhere while the contact is still down is removed.
+- **A pen moves and then lifts; a palm settles and stays.** A stroke that goes
+  still and never recovers is removed. The call is made at the lift, because
+  while both are still down a pen hesitating mid-word and a palm settling are
+  arithmetically identical - the difference is only whether the contact carries
+  on afterwards.
+- **A small mark is judged after it has lifted.** A comma or a minus sign is too
+  short and too slow to prove itself while it is being drawn, so it is allowed
+  retroactively: a palm does not land, travel deliberately and leave again
+  inside a fifth of a second.
 - **Committing does not make a contact trustworthy.** A palm blob whose centroid
   snaps between two lobes hops 30–40px a sample; that reads as motion, so the
   check runs on committed strokes too.

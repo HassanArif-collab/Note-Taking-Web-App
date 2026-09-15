@@ -189,6 +189,25 @@ rp.up(10); rp.up(11);
 check('a deliberate pinch still zooms', Math.abs(zoomOf(rp) - zr) > 0.02,
       zr + ' -> ' + zoomOf(rp));
 
+/* The convergence test was not enough. Contacts 144376336 and 144376337
+ * in a reported stylus session - a hand resting bottom-left and the pen
+ * working top-right, 540px apart - genuinely closed to 378px as the user
+ * wrote, which IS convergence, and took the page from 1.16 down to 0.72
+ * and back while they were writing. No thumb and finger span most of a
+ * 9.7-inch screen: a pinch is two fingers of one hand. */
+var wide = fresh();
+var zw = zoomOf(wide);
+wide.down(336, 250, 500);            /* the heel of the hand */
+wide.down(337, 790, 420);            /* the pen, 546px away */
+for (k = 1; k <= 30; k++) {
+  wide.tick(16);
+  wide.moveTo(336, 250 + k * 4, 500 + k * 2);
+  wide.moveTo(337, 790 + k * 5, 420 + k * 2);   /* separation creeps */
+}
+wide.up(336); wide.up(337);
+check('a pair a screen apart never zooms, however it moves',
+      Math.abs(zoomOf(wide) - zw) < 0.02, zw + ' -> ' + zoomOf(wide));
+
 /* a dot beside a resting palm - the commonest thing a stylus does */
 var dt = fresh();
 dt.down(99, 700, 620);

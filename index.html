@@ -895,7 +895,7 @@ var SC = {
   DISCARD_MS:      600,
   DISCARD_STRAIGHT:0.93,
   DISCARD_PATH:    25,
-  DWELL_MS:        300,    /* A pen moves and then LIFTS. A palm lands, slides
+  DWELL_MS:        1200,    /* A pen moves and then LIFTS. A palm lands, slides
                               while the contact patch settles, and then sits
                               there. A committed stroke that goes near-still
                               for this long without lifting is a hand settling,
@@ -910,6 +910,32 @@ var SC = {
                               - but its NET displacement is nearly zero, while
                               a slow stroke keeps going somewhere. */
   DWELL_MIN_PATH:  20,     /* ...and a deliberate dot never travelled at all */
+  DWELL_END_MS:    320,    /* The real test is at the LIFT. A hesitating pen and
+                              a settling palm are arithmetically identical while
+                              they are both still down - recorded contact 407
+                              crawled at 0.061 px/ms and so did a pen writing the
+                              flat of a letter. The difference is only what
+                              happens next: the pen carries on, the palm never
+                              does. Waiting for the lift is what makes that
+                              knowable, so a stroke whose last moments went still
+                              is dropped then, and the patient rule above only
+                              has to catch a hand that parks for over a second. */
+  DWELL_END_PATH:  22,
+  DWELL_END_FRAC:  0.5,    /* ...and the stillness has to be most of what this
+                              contact ever did. Contact 407 slid 48px and then
+                              spent two thirds of its life going nowhere; a pen
+                              that writes a word and rests a moment before
+                              lifting spends a quarter of it at most. Without
+                              this the rule erases long strokes for a lazy lift. */
+  DWELL_PATH:      26,     /* ...and it has to have actually STOPPED. Staying
+                              inside the circle is not enough: writing a small
+                              letter - an o, an e, the loop of an a - keeps the
+                              nib inside 14px for well over 300ms while covering
+                              30-40px of real path. Four strokes in one recorded
+                              session were erased mid-word by exactly that, with
+                              no palm anywhere on the glass. A parked palm creeps
+                              10-15px in the same window. So the window now asks
+                              for distance travelled, not distance from home. */
   RIGID_MIN:       3,      /* 3+ contacts translating as one object are one
                               hand. Two is left alone: that is a pan. */
   RIGID_ANGLE:     0.45,   /* radians of agreement between displacements */
@@ -1004,6 +1030,31 @@ var SC = {
                               the other sliding - is finally recognised. */
   TWOTAP_TOGETHER: 260,    /* both fingers must land within this of each
                               other to count as a two-finger tap */
+  SHORT_MS:        700,    /* Small marks - a comma, a minus sign, the tick on
+                              a 7 - are too slow and too short to pass the live
+                              commit gate, so they simply never appeared. They
+                              do not have to: a mark that LIFTS is a mark, and
+                              the lift is evidence the live gate never gets. A
+                              palm does not land, travel deliberately, and leave
+                              again inside this long. */
+  SHORT_NET:       9,      /* ...far enough to be a line, not a dot */
+  SHORT_MAX_NET:   70,     /* ...and short. Anything longer had every chance to
+                              commit normally; if it did not, it was not a pen. */
+  SHORT_COH:       0.55,   /* ...going somewhere, not milling about */
+  SHORT_STRAIGHT:  0.5,    /* ...and most of its travel was progress */
+  PINCH_MAX_SPAN:  430,    /* A pinch is two fingers of ONE hand. A stylus in
+                              the top right and a palm in the bottom left, 540px
+                              apart, closed to 378px while writing and zoomed the
+                              page out to 0.72 - genuine convergence, so the
+                              convergence test could not catch it. No thumb and
+                              finger span most of a 9.7-inch screen.
+                              Checked once, at the moment the gesture engages,
+                              and against the PAN branch too: that pair never
+                              reached the pinch test at all - it was accepted as
+                              a two-finger pan, and a pan applies zoom from the
+                              separation just the same. Measuring it live instead
+                              would stop a real pinch the moment the fingers
+                              spread past this, which is a thing people do. */
   PINCH_CONVERGE:  20,     /* A pinch is two contacts whose SEPARATION
                               changes. The old test only asked whether they
                               drifted in opposing directions - two contacts
@@ -2712,8 +2763,10 @@ function appendInk(st, pt, now, touch) {
        lifted. Anchor on the last position that mattered; any real
        progress moves out of the circle and re-anchors. */
     if (!st.dwellAt || dist(st.dwellAt.x, st.dwellAt.y, cx, cy) > SC.DWELL_RADIUS) {
-      st.dwellAt = { x: cx, y: cy, t: now };
-    } else if (now - st.dwellAt.t > SC.DWELL_MS && st.pathLen > SC.DWELL_MIN_PATH) {
+      st.dwellAt = { x: cx, y: cy, t: now, path: st.pathLen };
+    } else if (now - st.dwellAt.t > SC.DWELL_MS &&
+               st.pathLen - st.dwellAt.path < SC.DWELL_PATH &&
+               st.pathLen > SC.DWELL_MIN_PATH) {
       discardActiveInk(st, now, 'dwell');
     }
   }
@@ -2884,6 +2937,13 @@ function endTouch(touch, now, cancelled) {
       requestRender();
       return;
     }
+    if (settings.palmLevel >= PALM_MAX && st.dwellAt &&
+        now - st.dwellAt.t > SC.DWELL_END_MS &&
+        now - st.dwellAt.t > (now - st.t0) * SC.DWELL_END_FRAC &&
+        st.pathLen - st.dwellAt.path < SC.DWELL_END_PATH) {
+      discardActiveInk(st, now, 'dwell');
+      return;
+    }
     finalizeInk(st, now);
     return;
   }
@@ -2894,10 +2954,28 @@ function endTouch(touch, now, cancelled) {
     palmMemAdd(st.sx, st.sy, now);
   } else if (age < SC.TAP_MS && st.pathLen < 5) {
     queueTapDot(st, now);
+  } else if (shortMark(st, age)) {
+    /* decided in hindsight, at the lift - see SC.SHORT_MS */
+    st.state = 'ink';
+    traceVerdict('shortmark', st.id, now);
+    startInkRecord(st, now);
+    finalizeInk(st, now);
   } else {
     palmMemAdd(st.sx, st.sy, now);
   }
   if (pendingDotId === st.id) hidePendingDot(st.id);
+}
+
+/* A probe that never earned ink, judged once it has lifted. Everything
+   here is unavailable while the contact is still down, which is why the
+   live gate cannot make this call. */
+function shortMark(st, age) {
+  if (st.suspect || st.state === 'palm') return false;
+  if (settings.palmLevel === PALM_OFF || settings.palmLevel === PALM_STRICT) return false;
+  if (age >= SC.SHORT_MS || st.path.length < 4) return false;
+  if (st.net < SC.SHORT_NET || st.net > SC.SHORT_MAX_NET) return false;
+  if (st.coh < SC.SHORT_COH) return false;
+  return st.net / Math.max(st.pathLen, 1) > SC.SHORT_STRAIGHT;
 }
 
 /* ---------- gesture engine: pan + pinch-zoom + momentum ---------- */
@@ -2934,6 +3012,7 @@ function engageGesture(ids, now, pairDist) {
   gesture = {
     lastCx: c.x, lastCy: c.y,
     lastD: pairDist || 0, lastT: now,
+    wide: (pairDist || 0) >= SC.PINCH_MAX_SPAN,
     vx: 0, vy: 0, fromHand: false, key: null
   };
   traceGesture('engage', ids.length, Math.round(pairDist || 0), now);
@@ -3143,7 +3222,7 @@ function applyGesture(now) {
          under the centroid stays under the centroid. --- */
   if (ms.length >= 2) {
     var d = dist(ms[0].cx, ms[0].cy, ms[1].cx, ms[1].cy);
-    if (gesture.lastD > 30 && d > 30) {
+    if (!gesture.wide && gesture.lastD > 30 && d > 30) {
       /* no real pinch scales the page by more than a few percent in one
          frame; anything larger is a bad measurement, not a gesture */
       var f = lim(d / gesture.lastD, 0.85, 1.18);

@@ -744,6 +744,83 @@ test('a long stroke with genuine direction changes survives', function (done) {
 
 /* ---------------- run ---------------- */
 console.log('\npalm rejection behaviour\n');
+
+/* ---------------- stylus: writing small ---------------- */
+
+/* Contact 144376933, replayed verbatim from a report sent from the iPad
+ * with NOTHING else on the glass - no palm, no second contact. It is a
+ * stylus writing a small character: it inked at 212ms and then, at
+ * 1461ms, was erased as "dwell" because it had stayed inside a 14px
+ * circle for just over 300ms while drawing the flat of a letter. Four
+ * strokes in that one 24-second recording died the same way, which is
+ * what "my stylus is treated as the palm and removed" actually was. */
+var WRITE_933 = [
+  [0, 253, 172], [112, 241, 178], [17, 239, 182], [17, 239, 187], [50, 241, 187],
+  [16, 244, 185], [16, 247, 181], [17, 249, 179], [16, 249, 177], [20, 250, 175],
+  [46, 249, 176], [18, 249, 177], [17, 249, 179], [16, 249, 180], [33, 251, 181],
+  [17, 253, 181], [17, 256, 181], [16, 258, 180], [17, 260, 176], [17, 261, 173],
+  [16, 262, 168], [17, 262, 165], [18, 262, 163], [15, 262, 162], [33, 262, 164],
+  [18, 262, 169], [16, 262, 170], [17, 263, 174], [16, 263, 176], [17, 264, 179],
+  [17, 264, 184], [17, 264, 187], [17, 264, 189], [15, 264, 191], [19, 265, 191],
+  [14, 267, 189], [19, 269, 184], [16, 272, 181], [16, 275, 177], [17, 277, 175],
+  [16, 278, 172], [18, 279, 171], [65, 279, 172], [17, 279, 173], [17, 279, 175],
+  [17, 280, 175], [16, 281, 176], [16, 282, 178], [18, 283, 180], [18, 284, 180],
+  [14, 285, 180], [18, 287, 180], [32, 288, 180], [33, 289, 180], [34, 290, 180],
+  [17, 292, 178], [16, 294, 177], [33, 295, 176], [18, 296, 176], [17, 297, 175],
+  [17, 299, 175], [17, 300, 175], [16, 301, 175], [16, 300, 179], [17, 300, 183],
+  [18, 295, 187], [15, 293, 189], [17, 291, 189], [17, 290, 189], [16, 290, 186],
+  [18, 291, 183], [17, 293, 180], [14, 293, 179], [18, 294, 178], [32, 294, 180],
+  [18, 294, 183], [17, 294, 186], [50, 295, 186], [15, 297, 185], [19, 298, 184],
+  [15, 298, 182], [16, 299, 182], [34, 300, 182], [33, 300, 183], [33, 302, 183],
+  [17, 304, 183], [17, 306, 181], [17, 308, 180]
+];
+
+test('writing a small character is not a settling palm', function (done) {
+  var app = fresh();
+  replay(app, 933, WRITE_933);
+  after(300, function () {
+    app.flushFrames();
+    check('a small stylus character survives to the lift', app.strokes().length === 1,
+          app.strokes().length + ' strokes');
+    var v = app.trace().samples.filter(function (r) { return r[0] === "v"; })
+                               .map(function (r) { return r[2]; });
+    check('...and is never called dwell', v.indexOf('dwell') < 0, v.join(','));
+    done();
+  });
+});
+
+/* A short deliberate mark - a comma, a minus sign, the tick on a 7. Too
+ * slow and too short to pass the live commit gate, so it used to leave
+ * nothing at all: "it is not accurate when i draw small line kind of
+ * thing". The lift is what proves it was a pen. */
+test('a small slow mark still leaves a mark', function (done) {
+  var app = fresh();
+  app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 22, y1: PEN.y + 4, speed: 0.07 });
+  after(300, function () {
+    app.flushFrames();
+    check('a 22px mark drawn slowly is drawn', app.strokes().length === 1,
+          app.strokes().length + ' strokes');
+    done();
+  });
+});
+
+/* ...but the same mark must not be a licence for a palm that lands,
+ * creeps and then sits there. It never lifts in time. */
+test('a palm that lands and sits is not rescued as a small mark', function (done) {
+  var app = fresh();
+  app.down(50, 640, 600);
+  var i;
+  for (i = 1; i <= 8; i++) { app.tick(40); app.moveTo(50, 640 + i * 2, 600 + i); }
+  for (i = 1; i <= 20; i++) { app.tick(60); app.moveTo(50, 656 + (i % 2), 608); }
+  app.up(50);
+  after(300, function () {
+    app.flushFrames();
+    check('a resting palm leaves nothing', app.strokes().length === 0,
+          app.strokes().length + ' strokes');
+    done();
+  });
+});
+
 (function run(i) {
   if (i >= tests.length) {
     console.log('\n' + pass + ' passed, ' + fail + ' failed');
