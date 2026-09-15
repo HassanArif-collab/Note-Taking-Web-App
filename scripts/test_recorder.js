@@ -154,5 +154,56 @@ check('a finger sliding during a pinch does not ink (real data)',
 check('...and that pinch actually zooms', Math.abs(zoomOf(p7) - z7) > 0.02,
       z7 + ' -> ' + zoomOf(p7));
 
-console.log('\n' + pass + ' passed, ' + fail + ' failed');
-process.exit(fail ? 1 : 0);
+/* ---- stylus session, replayed from the iPad ----
+ * A stylus means MORE contacts on the glass, not fewer: nib, palm heel,
+ * sometimes a knuckle. Any two of them drifting used to read as a pinch,
+ * because the test only asked whether they moved in opposing directions
+ * and never whether the distance between them actually changed. In the
+ * recording, two contacts 528px apart - stylus and resting palm - sent
+ * the zoom from 1.16 down to 0.72 and back. */
+var sx = fresh();
+var zx = zoomOf(sx);
+sx.down(336, 410, 491);
+sx.down(337, 823, 143);
+var k;
+for (k = 1; k <= 45; k++) {
+  sx.tick(20);
+  sx.moveTo(336, 410 + k * 1.7, 491 + k * 3.9);
+  sx.moveTo(337, 823 - k * 2.1, 143 + k * 5.1);
+}
+sx.up(336); sx.up(337);
+check('two slowly drifting contacts do not zoom the page',
+      Math.abs(zoomOf(sx) - zx) < 0.02, zx + ' -> ' + zoomOf(sx));
+
+/* ...but a real pinch still has to work */
+var rp = fresh();
+var zr = zoomOf(rp);
+rp.down(10, 380, 300);
+rp.down(11, 560, 300);
+for (k = 1; k <= 25; k++) {
+  rp.tick(16);
+  rp.moveTo(10, 380 - k * 5, 300);
+  rp.moveTo(11, 560 + k * 5, 300);
+}
+rp.up(10); rp.up(11);
+check('a deliberate pinch still zooms', Math.abs(zoomOf(rp) - zr) > 0.02,
+      zr + ' -> ' + zoomOf(rp));
+
+/* a dot beside a resting palm - the commonest thing a stylus does */
+var dt = fresh();
+dt.down(99, 700, 620);
+for (k = 0; k < 6; k++) { dt.tick(40); dt.moveTo(99, 700 + (k % 2), 620); }
+dt.stroke({ id: 1, x0: 300, y0: 300, x1: 420, y1: 320, speed: 0.3, wobble: 3 });
+dt.tick(200);
+dt.down(2, 432, 326);
+dt.tick(90);
+dt.up(2);
+dt.up(99);
+
+setTimeout(function () {
+  dt.flushFrames();
+  check('a dot lands even with the palm down', dt.strokes().length === 2,
+        dt.strokes().length + ' strokes');
+  console.log('\n' + pass + ' passed, ' + fail + ' failed');
+  process.exit(fail ? 1 : 0);
+}, 400);

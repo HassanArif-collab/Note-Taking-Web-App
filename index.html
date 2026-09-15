@@ -886,8 +886,9 @@ var SC = {
   ZONE_BOTTOM:     104,    /* handedness soft zone (px) */
   ZONE_SIDE:       112,
   BIG_RADIUS:      18,     /* contact radius treated as palm (if reported) */
-  TAP_MS:          220,    /* tap window for dots (a deliberate tap
-                              is quick; a palm brush lingers) */
+  TAP_MS:          300,    /* tap window for dots. A disc stylus lands and
+                              lifts more slowly than a fingertip, and 220ms
+                              was refusing real taps. */
   BOUNCE_MS:       220,    /* dot queued this long before it appears */
   BOUNCE_PX:       18,     /* re-land inside this cancels the dot */
   DISCARD_SPEED:   0.022,  /* mid-stroke discard: slower than this */
@@ -951,6 +952,8 @@ var SC = {
                               which is what this guard was really for. */
   USURP_RATIO:     0.6,    /* incumbent this much slower than the
                               contender = the palm, not the pen */
+  DOT_SURE_PX:     130,    /* a tap this close to the last ink is the pen */
+  DOT_SURE_MS:     2500,
   DOT_NEAR_PX:     250,    /* a tap dot must land near recent writing    */
   DOT_NEAR_MS:     4000,   /* and soon after it, or it is a palm tap.    */
   SETTLE_MS:       60,     /* A contact's first samples are its patch
@@ -999,6 +1002,18 @@ var SC = {
                               directly instead of requiring BOTH fingers to be
                               moving, so an anchored pinch - one finger planted,
                               the other sliding - is finally recognised. */
+  TWOTAP_TOGETHER: 260,    /* both fingers must land within this of each
+                              other to count as a two-finger tap */
+  PINCH_CONVERGE:  20,     /* A pinch is two contacts whose SEPARATION
+                              changes. The old test only asked whether they
+                              drifted in opposing directions - two contacts
+                              528px apart, a stylus and a resting palm, each
+                              creeping a couple of px the other way, passed
+                              it and zoomed the page. Now the distance
+                              between them has to actually change by this
+                              much within the sample window. */
+  GEST_MIN_SPEED:  0.12,   /* ...and both have to be genuinely moving. The
+                              old floor was 0.01 px/ms, which is drift. */
   PAN_DEG:         35,     /* coherence cone for two-finger pan */
   PAN_RATIO:       3,
   PAN_SPEED:       0.05,
@@ -2753,11 +2768,21 @@ function dotIsCredible(st, now) {
   /* a two-finger tap is a gesture, not two decimal points - without
      this it fires the undo AND leaves a dot, which cancels out */
   if (twoTap) return false;
-  if (st.suspect) return false;
   if (st.rx > 12) return false;
   if (!lastInkPt) return false;
-  if (now - lastInkPt.t > SC.DOT_NEAR_MS) return false;
-  return dist(lastInkPt.x, lastInkPt.y, st.sx, st.sy) < SC.DOT_NEAR_PX;
+  var age = now - lastInkPt.t;
+  var near = dist(lastInkPt.x, lastInkPt.y, st.sx, st.sy);
+
+  /* A tap landing right on top of where you were writing a moment ago is
+     the pen, whatever else is on the glass. Requiring "not a suspect"
+     meant that with a hand resting - which is always, with a stylus -
+     every decimal point was refused. The palm is never this close to
+     the nib. */
+  if (near < SC.DOT_SURE_PX && age < SC.DOT_SURE_MS) return true;
+
+  if (st.suspect) return false;
+  if (age > SC.DOT_NEAR_MS) return false;
+  return near < SC.DOT_NEAR_PX;
 }
 
 function queueTapDot(st, now) {
@@ -3020,8 +3045,19 @@ function detectGesture(now) {
       if (v1 > 0.01 && v2 > 0.01) {
         var d1 = (vecs[0].rv.dx * ax + vecs[0].rv.dy * ay) / v1;
         var d2 = (vecs[1].rv.dx * ax + vecs[1].rv.dy * ay) / v2;
-        if (d1 * d2 < -0.5) {
+        /* how far each moved ALONG the line joining them, so their
+           difference is the change in separation itself */
+        var p1 = vecs[0].rv.dx * ax + vecs[0].rv.dy * ay;
+        var p2 = vecs[1].rv.dx * ax + vecs[1].rv.dy * ay;
+        var converge = Math.abs(p2 - p1);
+        if (d1 * d2 < -0.5 &&
+            converge > SC.PINCH_CONVERGE &&
+            vecs[0].rv.v > SC.GEST_MIN_SPEED && vecs[1].rv.v > SC.GEST_MIN_SPEED) {
           engageGesture([vecs[0].id, vecs[1].id], now, al);
+          return;
+        }
+        if (d1 * d2 < -0.5) {
+          traceGesture('bail-converge', live, Math.round(converge), now);
           return;
         }
       }
@@ -3040,6 +3076,11 @@ function detectGesture(now) {
   if (!ok) { traceGesture('bail-angle', live, vecs.length, now); return; }
   if (maxV / Math.max(minV, 0.001) > SC.PAN_RATIO) {
     traceGesture('bail-ratio', live, Math.round(maxV / Math.max(minV, 0.001)), now);
+    return;
+  }
+  /* a resting hand drifts; a deliberate pan does not creep */
+  if (minV < SC.GEST_MIN_SPEED) {
+    traceGesture('bail-drift', live, Math.round(minV * 1000), now);
     return;
   }
 
@@ -4126,9 +4167,20 @@ function onTouchStart(e) {
   stopMomentum();
   var now = Date.now();
   var down = e.touches ? e.touches.length : 1;
-  /* exactly two fingers arriving starts a candidate; a third cancels it */
-  if (down === 2) twoTap = { t: now, moved: 0 };
-  else if (down > 2) twoTap = null;
+  /* Two fingers ARRIVING TOGETHER start a candidate; a third cancels it.
+     The "together" matters: with a stylus the palm is always already
+     down, so every nib touch made a pair, every pair suppressed the tap
+     dot, and dots simply never worked. A hand that has been resting for
+     seconds is not half of a two-finger tap. */
+  if (down === 2) {
+    var oldest = 0, tk;
+    for (tk in touchStates) {
+      if (!touchStates.hasOwnProperty(tk)) continue;
+      var age0 = now - touchStates[tk].t0;
+      if (age0 > oldest) oldest = age0;
+    }
+    twoTap = oldest <= SC.TWOTAP_TOGETHER ? { t: now, moved: 0 } : null;
+  } else if (down > 2) twoTap = null;
   var ch = e.changedTouches;
   var burst = ch.length >= 2 || (e.touches && e.touches.length >= 3);
   if (burst) traceGesture('burst', ch.length, e.touches ? e.touches.length : 0, now);
