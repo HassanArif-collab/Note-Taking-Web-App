@@ -81,6 +81,9 @@ function replay(trace, opts, done) {
       if (contacts[id]) contacts[id].upAt = t;
       app.up(id, phase === 3);
     }
+    /* after every sample, with only the past known - which is the only
+       thing the device ever has */
+    if (opts.onSample) opts.onSample(app, t, phase, id);
   }
   app.flushFrames();
 

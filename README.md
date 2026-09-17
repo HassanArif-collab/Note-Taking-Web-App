@@ -193,6 +193,8 @@ node scripts/test_backup.js   # storage and backup (20 assertions)
 node scripts/test_features.js # pages, folders, photos (23 assertions)
 node scripts/serve.js         # serve the app to the iPad, collect recordings
 node scripts/score.js         # replay every recording, print a scoreboard
+node scripts/train.js         # refit the pen/palm scorer to traces/
+node scripts/train.js --dry   # ...report only, change nothing
 node scripts/replay.js FILE   # replay one recording, contact by contact
 ```
 
@@ -241,6 +243,39 @@ flex `gap`, `clamp()`, the `download` attribute, `Array.includes`,
 
 **A single unsupported token is a silent white screen on the iPad**, with no
 error anyone can see. `check_es5.js` is not optional.
+
+### The scorer
+
+Everything below this was a threshold on one quantity, chosen by hand, and
+that approach has a ceiling this project reached: a palm and a pen overlap on
+every measurement taken alone — duration, speed, straightness, travel, all of
+them. They do not overlap on all twenty-two at once.
+
+So a contact is described by twenty-two numbers and they are weighed together.
+The weights are **fitted to the recordings in traces/**, where a drill said in
+advance whether the hand or the pen was on the glass. `scripts/train.js` does
+the fitting and writes `PEN_W` into `index.html`; the device only ever
+evaluates a dot product, which an iPad 3 does in microseconds.
+
+The features are computed by `index.html` itself through a live replay, so the
+numbers fitted offline are produced by the exact code that runs on the device
+and cannot drift from it.
+
+Measured leave-one-recording-out — never scored on a recording it trained on:
+**100% of pen contacts kept, 86% of palm contacts stopped.**
+
+Two things to know before retraining:
+
+- **Two features are masked on purpose.** "How far down the page" and "how far
+  to the writing-hand side" score well, because every pen drill so far was
+  written across the middle — so "low and to the right" perfectly predicts palm
+  *in this corpus* and predicts nothing on a real page, where people write in
+  the corners. Unmasked, the fit refuses a normal stroke in the bottom-right
+  outright. `test_palm.js` catches it.
+- **The score is a veto, not a replacement.** The hand-written lanes decide when
+  something looks like writing; the score decides whether *this* contact is the
+  one doing it. The lanes already pass every recorded pen stroke; what they
+  cannot do is turn a palm away.
 
 ### How palm rejection works
 

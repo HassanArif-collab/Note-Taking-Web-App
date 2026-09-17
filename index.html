@@ -1094,6 +1094,21 @@ var SC = {
                               12px threshold was again too late. The
                               window already guarantees several samples,
                               which is what this guard was really for. */
+  PEN_MIN:         0.6,    /* How much a contact must look like the pen, on the
+                              fitted score, before it may commit. Swept against
+                              every recording in traces/:
+
+                                PEN_MIN  palm stray  pen-palm-10  pen-small
+                                0 (off)  41          15/10        16/27
+                                0.4      20          14/10        16/27
+                                0.6      19          12/10        16/27
+                                0.7      18          11/10        15/27
+                                0.8      14           7/10        15/27  <- and
+                                         pen-only collapses to 21/31
+
+                              0.7 buys one fewer stray mark for one lost small
+                              mark. Small marks are already the weakest part of
+                              this engine, so the trade goes the other way. */
   USURP_RATIO:     0.6,    /* incumbent this much slower than the
                               contender = the palm, not the pen */
   DOT_SURE_PX:     130,    /* a tap this close to the last ink is the pen */
@@ -2299,8 +2314,19 @@ function flashRejectedDot() {
 }
 
 /* ---------- suspect detection (cluster, memory, zone, bounce) ---------- */
+/* "suspect" is five different rules wearing one coat, and collapsing them
+   loses most of what they know: landing where a palm was a moment ago and
+   landing in the bottom band of the glass are not remotely equal evidence,
+   yet both used to produce the same single 1. Writing low on the page -
+   which people do - was refused because the weak positional rule carried
+   the weight the strong ones had earned. Each rule now reports itself. */
+function clearSus(st) {
+  st.sus = { team: 0, mem: 0, bounce: 0, anat: 0, zone: 0, big: 0 };
+}
+
 function computeSuspect(st, touch, now) {
   var k, o;
+  clearSus(st);
   for (k in touchStates) {
     if (!touchStates.hasOwnProperty(k)) continue;
     o = touchStates[k];
@@ -2308,20 +2334,24 @@ function computeSuspect(st, touch, now) {
     /* palm team: two contacts landing close together in time */
     if (Math.abs(o.t0 - now) < SC.TEAM_MS && dist(o.sx, o.sy, st.sx, st.sy) < SC.TEAM_PX) {
       o.suspect = true;
+      st.sus.team = 1;
       return true;
     }
     /* landing right next to a touch already classified palm */
-    if (o.state === 'palm' && dist(o.x, o.y, st.sx, st.sy) < 64) return true;
+    if (o.state === 'palm' && dist(o.x, o.y, st.sx, st.sy) < 64) { st.sus.mem = 1; return true; }
   }
   /* palm memory: this spot recently hosted a palm */
   var i;
   for (i = 0; i < palmMem.length; i++) {
     if (now - palmMem[i].t < SC.MEM_MS && dist(palmMem[i].x, palmMem[i].y, st.sx, st.sy) < SC.MEM_PX) {
+      st.sus.mem = 1;
       return true;
     }
   }
   /* bounce chain: quick tap-lift-land cycle = palm bounce */
-  if (lastBounce && now - lastBounce.t < 800 && dist(lastBounce.x, lastBounce.y, st.sx, st.sy) < 26) return true;
+  if (lastBounce && now - lastBounce.t < 800 && dist(lastBounce.x, lastBounce.y, st.sx, st.sy) < 26) {
+    st.sus.bounce = 1; return true;
+  }
   /* palm anatomy: the heel of the hand sits BELOW the pen tip and
      on the writing-hand side of it. If we know where the pen was
      writing a moment ago, a contact in that quadrant is a palm.
@@ -2331,9 +2361,9 @@ function computeSuspect(st, touch, now) {
   if (settings.palmLevel >= PALM_MAX && lastInkPt && now - lastInkPt.t < SC.ANAT_MS) {
     var adx = st.sx - lastInkPt.x, ady = st.sy - lastInkPt.y;
     if (ady > SC.ANAT_DY && dist(lastInkPt.x, lastInkPt.y, st.sx, st.sy) > SC.ANAT_MIN_DIST) {
-      if (settings.hand === HAND_R && adx > SC.ANAT_SLACK) return true;
-      if (settings.hand === HAND_L && adx < -SC.ANAT_SLACK) return true;
-      if (settings.hand === HAND_BOTH && Math.abs(adx) > 80) return true;
+      if (settings.hand === HAND_R && adx > SC.ANAT_SLACK) { st.sus.anat = 1; return true; }
+      if (settings.hand === HAND_L && adx < -SC.ANAT_SLACK) { st.sus.anat = 1; return true; }
+      if (settings.hand === HAND_BOTH && Math.abs(adx) > 80) { st.sus.anat = 1; return true; }
     }
   }
   /* handedness soft zone (Max only, one hand chosen).
@@ -2344,9 +2374,9 @@ function computeSuspect(st, touch, now) {
      landed in the wrong place whenever the page was zoomed. */
   if (settings.palmLevel >= PALM_MAX && settings.hand !== HAND_BOTH) {
     var zx = st.cx - wrapRect.left, zy = st.cy - wrapRect.top;
-    if (zy > viewH - SC.ZONE_BOTTOM) return true;
-    if (settings.hand === HAND_R && zx > viewW - SC.ZONE_SIDE) return true;
-    if (settings.hand === HAND_L && zx < SC.ZONE_SIDE) return true;
+    if (zy > viewH - SC.ZONE_BOTTOM) { st.sus.zone = 1; return true; }
+    if (settings.hand === HAND_R && zx > viewW - SC.ZONE_SIDE) { st.sus.zone = 1; return true; }
+    if (settings.hand === HAND_L && zx < SC.ZONE_SIDE) { st.sus.zone = 1; return true; }
   }
   /* oversized contact area, if the hardware reports one */
   if ((touch.radiusX || 0) > SC.BIG_RADIUS) return true;
@@ -2389,6 +2419,137 @@ function pushSpeed(st, v) {
   var b = st.sp.slice().sort(function (x, y) { return x - y; });
   st.vel = b[b.length >> 1];
 }
+
+/* ============================================================
+ * THE SCORER
+ *
+ * Every rule above this point is a threshold on one quantity, chosen by
+ * hand. That approach has a ceiling, and this project reached it: a palm
+ * and a pen overlap on every single measurement taken alone. They do not
+ * overlap on all of them at once.
+ *
+ * So: describe a contact with eighteen numbers, and weigh them together.
+ * The weights are not invented - they are fitted to the recordings in
+ * traces/, where a drill said in advance whether the hand or the pen was
+ * on the glass. scripts/train.js does the fitting and writes PEN_W back
+ * into this file. The device only ever evaluates a dot product, which an
+ * iPad 3 does in microseconds.
+ *
+ * Every feature is computable from what has already happened. Nothing
+ * here may look at the future, or it would work in the trainer and be
+ * useless live.
+ * ============================================================ */
+var FEAT_N = 22;
+
+var FEAT_NAMES = [
+  'age', 'travelled', 'got-somewhere', 'straightness',
+  'speed', 'peak-speed', 'burstiness', 'coherence',
+  'turn-rate', 'centroid-hops', 'company', 'crowding',
+  'arrived-together', 'in-the-palm-band', 'on-the-hand-side',
+  'near-recent-ink', 'soon-after-ink',
+  'landed-with-others', 'where-a-palm-was', 'bounce-chain',
+  'below-the-pen', 'in-the-edge-band'
+];
+
+function contactFeatures(st, now) {
+  var f = [], i, age = now - st.t0;
+
+  /* --- what it is doing --- */
+  f[0] = Math.min(age / 600, 1);
+  f[1] = Math.min(st.pathLen / 120, 1);
+  f[2] = Math.min(st.net / 120, 1);
+  f[3] = st.net / Math.max(st.pathLen, 1);
+  f[4] = Math.min(st.vel / 0.6, 1);
+
+  var mx = 0, mn = 1e9;
+  for (i = 0; i < st.sp.length; i++) {
+    if (st.sp[i] > mx) mx = st.sp[i];
+    if (st.sp[i] < mn) mn = st.sp[i];
+  }
+  if (!st.sp.length) { mx = 0; mn = 0; }
+  f[5] = Math.min(mx / 1.2, 1);
+  f[6] = mx > 0 ? Math.min((mx - mn) / mx, 1) : 0;
+  f[7] = st.coh;
+
+  var turns = 0;
+  for (i = 1; i < st.dirs.length; i++) {
+    if (st.dirs[i][0] * st.dirs[i - 1][0] + st.dirs[i][1] * st.dirs[i - 1][1] < 0.5) turns++;
+  }
+  f[8] = st.dirs.length > 1 ? turns / (st.dirs.length - 1) : 0;
+  f[9] = Math.min(st.isoJumps / 2, 1);
+
+  /* --- what else is on the glass. A pen is usually alone or paired with
+         one resting hand; a settling palm arrives in a crowd. --- */
+  var live = 0, nearest = 1e9, mates = 0, k, o, d;
+  for (k in touchStates) {
+    if (!touchStates.hasOwnProperty(k)) continue;
+    o = touchStates[k];
+    live++;
+    if (o === st) continue;
+    d = dist(o.cx, o.cy, st.cx, st.cy);
+    if (d < nearest) nearest = d;
+    if (Math.abs(o.t0 - st.t0) < SC.TEAM_MS) mates++;
+  }
+  f[10] = Math.min((live - 1) / 4, 1);
+  f[11] = nearest < 1e9 ? 1 - Math.min(nearest / 400, 1) : 0;
+  f[12] = Math.min(mates / 2, 1);
+
+  /* --- where it is --- */
+  var zx = st.cx - wrapRect.left, zy = st.cy - wrapRect.top;
+  var band = SC.ZONE_BOTTOM * 2;
+  f[13] = Math.max(0, Math.min((zy - (viewH - band)) / band, 1));
+  if (settings.hand === HAND_BOTH) f[14] = 0;
+  else {
+    var side = settings.hand === HAND_L ? 1 - zx / Math.max(viewW, 1)
+                                        : zx / Math.max(viewW, 1);
+    f[14] = Math.max(0, Math.min((side - 0.6) / 0.4, 1));
+  }
+
+  /* --- how it relates to what was just written --- */
+  if (lastInkPt) {
+    f[15] = 1 - Math.min(dist(lastInkPt.x, lastInkPt.y, st.sx, st.sy) / 400, 1);
+    f[16] = 1 - Math.min((now - lastInkPt.t) / 3000, 1);
+  } else { f[15] = 0; f[16] = 0; }
+
+  /* each suspicion rule as its own input. They were each found by
+     replaying a real recording and they are not equally strong; handing
+     them over separately lets the fit say so. */
+  var su = st.sus || {};
+  f[17] = su.team ? 1 : 0;
+  f[18] = su.mem ? 1 : 0;
+  f[19] = su.bounce ? 1 : 0;
+  f[20] = su.anat ? 1 : 0;
+  f[21] = su.zone ? 1 : 0;
+  return f;
+}
+
+/* trained by scripts/train.js against traces/ - do not hand-edit */
+var PEN_B = 1.4198;
+var PEN_W = [0.6114, -0.0143, -0.3401, 0.0598, 0.4603, -0.4665, 0.0889, -0.4274, 0.1739, -0.1172, -2.9796, -3.7789, -1.9209, 0.0000, 0.0000, 0.6572, 0.0705, -0.1003, -0.8602, 0.0000, -0.1790, -0.6145];
+var PEN_TRAINED = true;
+
+function penScore(st, now) {
+  if (!PEN_TRAINED) return -1;          /* untrained: the old rules decide */
+  var f = contactFeatures(st, now), z = PEN_B, i;
+  for (i = 0; i < FEAT_N; i++) z += PEN_W[i] * f[i];
+  return 1 / (1 + Math.exp(-z));
+}
+
+/* tooling hook: scripts/train.js reads features out of a live replay, so
+   the numbers it fits are produced by this exact code and cannot drift
+   from what the device computes */
+window.__mnFeat = function () {
+  var out = {}, k, now = Date.now();
+  for (k in touchStates) {
+    if (!touchStates.hasOwnProperty(k)) continue;
+    if (touchStates[k].kind !== 'probe') continue;
+    out[k] = { f: contactFeatures(touchStates[k], now),
+               age: now - touchStates[k].t0,
+               state: touchStates[k].state };
+  }
+  return out;
+};
+window.__mnFeatNames = FEAT_NAMES;
 
 function inkStraightness(st) {
   return st.net / Math.max(st.pathLen, 1);
@@ -2601,7 +2762,8 @@ function beginTouch(touch, now, burst) {
     path: [[pt.x, pt.y, now]],
     pathLen: 0, net: 0,
     vel: 0, sp: [], jumps: 0, isoJumps: 0, coh: 1, dirs: [],
-    suspect: false, rx: touch.radiusX || 0
+    suspect: false, rx: touch.radiusX || 0,
+    sus: { team: 0, mem: 0, bounce: 0, anat: 0, zone: 0, big: 0 }
   };
 
   if (gesture) st.state = 'palm';                       /* do not disturb a pan */
@@ -2812,6 +2974,16 @@ function tryCommit(st, now) {
        st.coh > SC.COMMIT_COH && st.net > SC.COMMIT_NET * boost) ||
       (st.net > SC.FAST_NET * boost && st.vel > SC.FAST_SPEED * boost) ||
       (st.net > SC.DECISIVE_NET * boost && st.vel > SC.DECISIVE_SPEED * boost)) {
+    /* The hand-written lanes decide WHEN something looks like writing.
+       The fitted score decides whether this particular contact, given
+       everything known about it at once, is the one doing the writing.
+       A veto rather than a replacement: the lanes already pass every
+       recorded pen stroke, and what they cannot do is turn a palm away. */
+    var ps = penScore(st, now);
+    if (ps >= 0 && ps < SC.PEN_MIN) {
+      if (age > SC.PALM_AGE) verdictPalm(st, now);
+      return;
+    }
     promoteInk(st, now);
     return;
   }

@@ -118,13 +118,36 @@ test('small careful symbol (45px at 0.10 px/ms) inks', function (done) {
   });
 });
 
+/* ...and the other half of the same rule: a flicker of the length a
+   resting hand actually produces must NOT leave a dot, however close to
+   recent writing it lands. This is what was putting 22 of the 39 stray
+   marks on the page. */
+test('a palm-length flicker near recent writing leaves nothing', function (done) {
+  var app = fresh();
+  app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 120, y1: PEN.y, speed: 0.3 });
+  app.tick(200);
+  app.down(2, PEN.x + 130, PEN.y + 6);
+  app.tick(45);
+  app.up(2);
+  after(400, function () {
+    app.flushFrames();
+    check('write + 45ms flicker -> still 1 stroke', app.strokes().length === 1,
+          app.strokes().length + ' strokes');
+    done();
+  });
+});
+
 test('deliberate dot near recent writing still inks', function (done) {
   var app = fresh();
   app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 120, y1: PEN.y, speed: 0.3 });
   app.tick(200);
-  /* a decimal point: quick tap right where we were just writing */
+  /* A decimal point, at the length a real one actually is. This tap used
+     to be 70ms, which is not a pen at all - measured across three aim
+     drills, deliberate taps run 267-490ms at the median, while a resting
+     hand fragments into contacts of 32-58ms. The old number sat squarely
+     in the palm's range and was invented, not observed. */
   app.down(2, PEN.x + 130, PEN.y + 6);
-  app.tick(70);
+  app.tick(280);
   app.up(2);
   after(400, function () {
     app.flushFrames();
