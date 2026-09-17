@@ -268,6 +268,15 @@ App.prototype.importBackup = function (txt) {
 /* Requests the app attempted through XMLHttpRequest. */
 App.prototype.requests = function () { return this.win._xhr || []; };
 
+/* run a drill without waiting out its timer: start it, do whatever the
+   hand would do, then stop it. */
+App.prototype.drill = function (id) {
+  if (!this.win.__mnDrill.start(id)) throw new Error('no drill named ' + id);
+  return this;
+};
+App.prototype.drillStop = function () { this.win.__mnDrill.stop(); return this; };
+App.prototype.drills = function () { return this.win.__mnDrill.list; };
+
 /* flush the debounced save and read back what the engine committed */
 /* v5 keeps a small index plus one key per note, so reading back means
  * following the index - the same thing the app does on load. */
@@ -338,6 +347,11 @@ function load(opts) {
   wrap._left = 0; wrap._top = 56;
   wrap._w = opts.viewW || 1024; wrap._h2 = opts.viewH || 712;
 
+  /* "http:" is the test server on the LAN, "https:" is GitHub Pages.
+     The app only uploads from the former. */
+  win.location = { protocol: opts.protocol || 'http:', host: 'localhost:8080',
+                   href: (opts.protocol || 'http:') + '//localhost:8080/' };
+
   /* record what the app tries to send instead of hitting the network */
   win._xhr = [];
   function FakeXHR() { this.readyState = 0; }
@@ -381,7 +395,8 @@ function load(opts) {
     },
     btoa: function (b) { return Buffer.from(b, 'binary').toString('base64'); },
     unescape: unescape, encodeURIComponent: encodeURIComponent,
-    setTimeout: setTimeout, clearTimeout: clearTimeout, setInterval: setInterval,
+    setTimeout: setTimeout, clearTimeout: clearTimeout,
+    setInterval: setInterval, clearInterval: clearInterval,
     Date: Date, Math: Math, JSON: JSON, parseInt: parseInt, parseFloat: parseFloat,
     isNaN: isNaN, String: String, Number: Number, Array: Array, Object: Object,
     RegExp: RegExp, Error: Error, Proxy: Proxy,

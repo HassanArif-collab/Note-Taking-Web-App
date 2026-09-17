@@ -1,50 +1,49 @@
 # Touch traces
 
 Recordings of real touch input from the iPad, used to tune and verify palm
-rejection against an actual hand instead of a synthetic model.
+rejection. Each one is what the glass actually reported — raw client
+coordinates plus the geometry they were captured in — so replaying a file
+gives the engine exactly what it saw on the device.
 
-Record one from the kebab menu: **Touch trace** (starts), reproduce the problem,
-**Touch trace** again (stops), **Show trace**, Copy. Mail it to yourself, save it
-here as `<what-went-wrong>.json`, then:
+## Where they come from
 
 ```
-node ../scripts/replay.js palm-dots-while-writing.json
+node scripts/serve.js
 ```
 
-A trace stores raw client coordinates plus the geometry they were captured in
-(viewport, zoom, scroll, palm level, handedness). The engine is deterministic,
-so replaying those raw samples reproduces every decision exactly - and any
-internal value (velocity, coherence, straightness, suspect flags) can be
-recomputed from them. That is why the recorder does not store internals: they
-would be redundant.
+Open the printed address on the iPad (same wifi), then **⋮ → Testing drills**.
+Each drill records itself for a fixed time and posts the result here
+automatically.
 
-## What the recorder cannot see
+## Why drills rather than bug reports
 
-It captures what the engine **decided**, never whether the decision was
-**right**. No sensor on this hardware reports which contact was a palm - an
-iPad 3 gives no touch radius, no force, and no stylus id. Ground truth has to
-come from you.
+A drill says what the hand is about to do **before** it does it, so every
+contact in the file carries ground truth:
 
-Two ways to supply it, both free:
+| `want` | meaning |
+|---|---|
+| `0` | the hand was on the glass and the pen was not. Any mark is a failure. |
+| `N` | exactly N strokes were drawn on purpose. More is the palm; fewer is the pen being refused. |
+| `-1` | only the pen was down, so every contact that lasted long enough to be a mark should have left one. |
 
-### 1. Undo is a label
+That is the difference between "it felt bad" and a number.
 
-An undo recorded just after a mark appeared means "that mark was wrong". Replay
-prints these and points at whichever contact inked just before. So when a stray
-mark shows up while recording, **undo it** - that turns normal use into
-labelled data.
+## Reading them
 
-### 2. Scripted sessions
+```
+node scripts/score.js                   every recording, as a scoreboard
+node scripts/score.js pen               only ones whose name matches
+node scripts/score.js --html old.html   the same recordings, another build
+node scripts/replay.js <file>           one recording, contact by contact
+```
 
-A session where the correct answer is known in advance is worth far more than a
-mixed one. Record these separately, one file each:
+`score.js` exits non-zero if any drill fails, so a change that costs you a
+stroke cannot be shipped by accident.
 
-| File | What to do | Correct result |
-|------|-----------|----------------|
-| `only-palm.json` | Rest your hand and shift it around. Write **nothing**. | 0 marks. Anything that inks is a false positive. |
-| `only-pen.json` | Write a few lines with your hand held **off** the glass. | Every stroke inks. Anything missing is a false negative. |
-| `normal-writing.json` | Write a few lines the way you actually do, hand resting. | Every pen stroke inks, nothing else does. |
-| `slow-and-careful.json` | Draw slow deliberate straight things - fraction bars, minus signs, a long division - hand resting. | All of them ink. This is the case most at risk from the straight-and-slow veto. |
+## fixture-*.json
 
-Keep each under ~20 seconds. The buffer holds 4000 samples and drops the oldest
-beyond that, so short and targeted beats long and general.
+Synthetic. Motion I made up, so the scoreboard runs before anyone has touched
+the glass. **They are not evidence about a real hand** — tuning against
+invented motion is exactly how the engine came to erase real handwriting.
+`score.js` labels them so they can never be mistaken for the real thing.
+Delete them once there are enough real recordings.

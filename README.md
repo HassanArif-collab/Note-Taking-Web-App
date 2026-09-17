@@ -105,12 +105,27 @@ A stray mark now and then is expected; undo it and carry on.
 
 ## Reporting a problem
 
-The app records itself continuously — the last ~25 seconds of touch input, all
-the time. When something goes wrong:
+### The quick way
 
-1. **Undo the bad mark first.** That tells the app the mark was wrong, which is
-   the only way it can learn which contact was your palm.
-2. ⋮ menu → **Copy report** → the text is pre-selected, copy and paste it.
+⋮ menu → **Copy report** → the text is pre-selected. Copy it and paste it into
+the chat. The app records itself continuously, so it already has the last ~25
+seconds. Undo the bad mark first — that marks it as wrong.
+
+### The way that actually fixes things
+
+**⋮ → Testing drills.** Ten short drills that each tell you what to do —
+*rest your hand and do not write*, *palm off, small marks only* — and record
+themselves while you do it.
+
+The difference is that a drill knows the right answer **before** you start, so
+nothing has to be explained afterwards. A stray mark in *palm-rest* is a
+failure, full stop. A missing mark in *pen-small* is a failure, full stop. That
+turns "the writing experience is bad" into a number that can be watched going
+down.
+
+To send them straight to the developer's machine instead of copying text, see
+**Testing drills** under For developers. Without that they fall back to
+copy/paste and still work.
 
 There is also ⋮ → **Touch capabilities**, which reports what your screen
 actually measures. On an iPad 3 the answer is nothing — no contact size, no
@@ -144,6 +159,13 @@ implemented.
 - **Two-finger tap to undo.** Makes a stray mark a reflex instead of a trip to
   the toolbar.
 
+### Palm rejection, still to come
+
+- **Latency.** Ink appears ~130ms after you start moving, because a contact
+  has to earn the right to draw before it draws anything. This is the largest
+  single reason writing feels bad, and "decide late, draw early" above is what
+  removes it.
+
 ### Features
 
 - **Zoom window** — write large in a strip at the bottom and have it land small
@@ -166,9 +188,44 @@ dependencies.
 ```
 node scripts/check_es5.js     # Safari 9 gate - run before every push
 node scripts/test_palm.js     # palm-rejection behaviour (51 assertions)
-node scripts/test_recorder.js # recorder and pinch-zoom (21 assertions)
-node scripts/replay.js FILE   # replay a recorded touch trace
+node scripts/test_recorder.js # recorder, pinch-zoom, drills (27 assertions)
+node scripts/test_backup.js   # storage and backup (20 assertions)
+node scripts/test_features.js # pages, folders, photos (23 assertions)
+node scripts/serve.js         # serve the app to the iPad, collect recordings
+node scripts/score.js         # replay every recording, print a scoreboard
+node scripts/replay.js FILE   # replay one recording, contact by contact
 ```
+
+### Testing drills
+
+The engine was tuned for a long time against contacts that were invented
+rather than recorded, which is how it came to erase real handwriting: there
+had never been a recording of a pen writing small to test against. Drills fix
+that at the source.
+
+```bash
+node scripts/serve.js
+```
+
+It prints a LAN address. Open that on the iPad — same wifi — instead of the
+GitHub Pages URL, then ⋮ → **Testing drills**. Each drill records itself and
+posts straight into `traces/`. Then:
+
+```bash
+node scripts/score.js
+```
+
+Uploading to GitHub failed because a 2012 TLS stack cannot negotiate a modern
+HTTPS endpoint. Plain HTTP on the LAN has no TLS to fail, and serving the app
+from the same origin means no CORS and no mixed-content block either. On the
+real site `canUpload()` is false and drills fall back to copy/paste.
+
+If the iPad cannot reach it: check both are on the same wifi, allow Node
+through the Windows firewall, and pause any VPN (Cloudflare WARP will route
+the iPad away from your LAN).
+
+See `traces/README.md` for what `want` means and why `fixture-*.json` files
+are not evidence.
 
 `scripts/harness.js` loads the real `index.html` into Node behind a DOM stub, so
 the engine is tested exactly as it runs. `scripts/replay.js` replays a trace and

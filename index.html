@@ -301,6 +301,30 @@ input { font: inherit; }
   box-shadow: 0 4px 20px rgba(0,0,0,0.4); display: block; margin: 0 auto;
 }
 #exportHint { color: #E8E8E8; font-size: 13px; margin-top: 14px; }
+#trainHint { color: #FFFFFF; font-size: 16px; font-weight: 600; margin-bottom: 10px; }
+#trainList {
+  max-width: 520px; margin: 0 auto; max-height: 68%;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
+#trainList button {
+  display: block; width: 100%; text-align: left; margin: 0 0 6px 0;
+  background: #FFFFFF; border: 0; border-radius: 10px; padding: 10px 14px;
+  font-size: 15px; font-weight: 600; color: #1A1A1A;
+}
+#trainList button .sub {
+  display: block; font-size: 12px; font-weight: 400; color: #6A6A6A; margin-top: 2px;
+}
+#trainList button.done { background: #DDF1E0; }
+#trainCloseBtn {
+  margin-top: 14px; color: #FFFFFF; font-size: 15px; font-weight: 600;
+  background: rgba(255,255,255,0.16); border-radius: 18px; padding: 10px 26px; border: 0;
+}
+#trainBanner {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 40; display: none;
+  background: rgba(18,18,18,0.9); color: #FFFFFF; font-size: 15px; font-weight: 600;
+  padding: 10px 14px; text-align: center; pointer-events: none;
+}
+#trainBanner.on { display: block; }
 #backupHint { color: #FFFFFF; font-size: 17px; font-weight: 600; margin-bottom: 4px; }
 #backupInfo { color: #D8DCE2; font-size: 13px; margin-bottom: 10px; min-height: 17px; }
 #backupText {
@@ -729,6 +753,14 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
     <textarea id="traceText" rows="12" readonly></textarea>
     <button id="traceCloseBtn">Close</button>
   </div>
+
+  <!-- testing drills -->
+  <div id="trainOverlay" class="overlay">
+    <div id="trainHint">Each drill records itself and sends it to the PC.</div>
+    <div id="trainList"></div>
+    <button id="trainCloseBtn">Close</button>
+  </div>
+  <div id="trainBanner"></div>
 
   <!-- export overlay -->
   <div id="exportOverlay" class="overlay">
@@ -4030,7 +4062,10 @@ function capsReport() {
     + NL + NL + lines.join(NL);
 }
 
-var TRACE_MAX = 2000;   /* ~20-30s; a copy/paste report must stay pasteable */
+var TRACE_MAX = 20000;  /* a whole drill, not a glimpse. The copy/paste report
+                           still emits only the last PASTE_MAX of these, because
+                           that path has to stay something a person can select. */
+var PASTE_MAX = 2000;
 var traceBuf = new Array(TRACE_MAX);
 var traceHead = 0;         /* next slot to write */
 var traceCount = 0;        /* valid entries, capped at TRACE_MAX */
@@ -4080,6 +4115,11 @@ function traceView(now) {
   traceLastZoom = zoom;
   tracePush(['z', Math.round(zoom * 1000) / 1000,
              Math.round(scrollX), Math.round(scrollY), traceNow(now)]);
+}
+
+/* a drill starts from silence, so the recording is only the drill */
+function traceReset() {
+  traceHead = 0; traceCount = 0; traceT0 = 0;
 }
 
 /* read the ring back in chronological order */
@@ -4225,15 +4265,153 @@ function doImport() {
 /* ---------- copy the report out ----------
  * Uploading straight to GitHub did not work from a 2012 TLS stack,
  * so the report is shown as text to select and paste. */
-function showTrace() {
-  var txt;
-  try { txt = JSON.stringify(buildTrace('report')); }
-  catch (e) { toast('Could not build the report'); return; }
+function showTraceText(txt) {
   traceText.value = txt;
   traceOverlay.className = 'overlay on';
   /* pre-select so it is one Copy tap */
   try { traceText.focus(); traceText.setSelectionRange(0, txt.length); } catch (e) {}
 }
+
+function showTrace() {
+  var txt, t;
+  try {
+    t = buildTrace('report');
+    /* the ring holds a whole drill now; a person can only paste so much */
+    if (t.samples.length > PASTE_MAX) {
+      t.samples = t.samples.slice(t.samples.length - PASTE_MAX);
+    }
+    txt = JSON.stringify(t);
+  } catch (e) { toast('Could not build the report'); return; }
+  showTraceText(txt);
+}
+
+/* ============================================================
+ * TESTING DRILLS
+ *
+ * The engine was tuned against contacts I invented, which is how it
+ * came to erase real handwriting: there had never been a recording of
+ * a pen writing small to test against. A drill names what the hand is
+ * about to do BEFORE it does it, so every contact in the recording
+ * carries ground truth and nobody has to explain it afterwards.
+ *
+ * want: how many strokes should exist when the drill ends.
+ *       0 means any mark at all is a failure; -1 means unknown, so
+ *       just count what happened.
+ * ============================================================ */
+var DRILLS = [
+  { id: 'palm-rest',     s: 20, want: 0,  what: 'Rest your hand on the page. Do NOT write.' },
+  { id: 'palm-slide',    s: 20, want: 0,  what: 'Rest your hand and shift it about. Do NOT write.' },
+  { id: 'palm-bounce',   s: 20, want: 0,  what: 'Lift your hand and put it down, over and over.' },
+  { id: 'pen-only',      s: 30, want: -1, what: 'Write normally. Keep your palm OFF the glass.' },
+  { id: 'pen-small',     s: 30, want: -1, what: 'Palm OFF. Small marks only - dots, commas, minus signs.' },
+  { id: 'pen-slow',      s: 30, want: -1, what: 'Palm OFF. Write slowly and deliberately.' },
+  { id: 'palm-then-pen', s: 25, want: -1, what: 'Rest your hand FIRST. Count to two. THEN write.' },
+  { id: 'pen-palm-10',   s: 40, want: 10, what: 'Palm down. Draw exactly 10 separate lines.' },
+  { id: 'zoom',          s: 25, want: 0,  what: 'Pinch to zoom in and out, five times. Do not write.' },
+  { id: 'scroll',        s: 20, want: 0,  what: 'Two-finger scroll up and down. Do not write.' }
+];
+
+var drillNow = null, drillTimer = null, drillDone = {};
+
+/* served from a PC on the LAN, so an upload has somewhere to go.
+   GitHub failed because a 2012 TLS stack cannot negotiate a modern
+   HTTPS endpoint; plain HTTP on the LAN has no TLS to fail, and the
+   same origin means no CORS and no mixed-content block either. */
+function canUpload() {
+  return !!(window.location && window.location.protocol === 'http:');
+}
+
+function traceUpload(obj, done) {
+  var x;
+  try { x = new XMLHttpRequest(); } catch (e) { done(false); return; }
+  try {
+    x.open('POST', '/trace', true);
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.onreadystatechange = function () {
+      if (x.readyState === 4) done(x.status >= 200 && x.status < 300);
+    };
+    x.send(JSON.stringify(obj));
+  } catch (e2) { done(false); }
+}
+
+function drillBanner(txt) {
+  var b = byId('trainBanner');
+  if (!b) return;
+  if (!txt) { b.className = ''; return; }
+  b.innerHTML = txt;
+  b.className = 'on';
+}
+
+function drillStart(d) {
+  drillNow = d;
+  traceOn = true;
+  traceReset();
+  var left = d.s;
+  drillBanner(d.what + '   ' + left + 's');
+  if (drillTimer) { clearInterval(drillTimer); drillTimer = null; }
+  drillTimer = setInterval(function () {
+    left--;
+    if (left <= 0) { drillStop(); return; }
+    drillBanner(d.what + '   ' + left + 's');
+  }, 1000);
+}
+
+function drillStop() {
+  if (drillTimer) { clearInterval(drillTimer); drillTimer = null; }
+  var d = drillNow;
+  drillNow = null;
+  drillBanner(null);
+  if (!d) return;
+  var obj;
+  try { obj = buildTrace(d.id); }
+  catch (e) { toast('Could not build the recording'); return; }
+  obj.drill = d.id;
+  obj.want = d.want;
+  drillDone[d.id] = true;
+  if (!canUpload()) { showTraceText(JSON.stringify(obj)); return; }
+  traceUpload(obj, function (ok) {
+    if (ok) toast(d.id + ' sent');
+    else showTraceText(JSON.stringify(obj));
+  });
+}
+
+function showTraining() {
+  var list = byId('trainList');
+  if (!list) return;
+  list.innerHTML = '';
+  var i;
+  for (i = 0; i < DRILLS.length; i++) {
+    (function (d, k) {
+      var b = document.createElement('button');
+      b.className = drillDone[d.id] ? 'done' : '';
+      b.innerHTML = (k + 1) + '. ' + d.id +
+                    '<span class="sub">' + d.what + '  (' + d.s + 's)</span>';
+      b.addEventListener('click', function () {
+        byId('trainOverlay').className = 'overlay';
+        closePanels();
+        drillStart(d);
+      });
+      list.appendChild(b);
+    })(DRILLS[i], i);
+  }
+  byId('trainHint').innerHTML = canUpload()
+    ? 'Each drill records itself and sends it to the PC.'
+    : 'Not on the test server - drills will ask you to copy the text out.';
+  byId('trainOverlay').className = 'overlay on';
+}
+
+/* tooling hook: the harness drives drills without waiting on the timer */
+window.__mnDrill = {
+  list: DRILLS,
+  start: function (id) {
+    var i;
+    for (i = 0; i < DRILLS.length; i++) {
+      if (DRILLS[i].id === id) { drillStart(DRILLS[i]); return true; }
+    }
+    return false;
+  },
+  stop: drillStop
+};
 
 /* tooling hook: scripts/replay.js and the test harness read the
    trace from here. */
@@ -4770,6 +4948,7 @@ function buildMoreMenu() {
     { lbl: 'Palm rejection', val: PALM_NAMES[settings.palmLevel], act: function () { settings.palmLevel = nextPalmLevel(settings.palmLevel); applyPalmUI(); afterSettingChange(); } },
     { lbl: 'Writing hand', val: HAND_NAMES[settings.hand], act: function () { settings.hand = (settings.hand + 1) % 3; afterSettingChange(); } },
     { lbl: 'Touch guide', val: settings.guideDots ? 'On' : 'Off', act: function () { settings.guideDots = !settings.guideDots; hidePendingDot(); afterSettingChange(); } },
+    { lbl: 'Testing drills', val: canUpload() ? 'server' : 'paste', act: showTraining },
     { lbl: 'Copy report', val: traceCount ? traceCount + ' pts' : 'empty', act: showTrace },
     { lbl: 'Touch capabilities', val: '', act: function () { window.alert(capsReport()); } },
     { lbl: 'Recording', val: traceOn ? 'On' : 'Off', act: function () { traceOn = !traceOn; afterSettingChange(); } },
@@ -4936,6 +5115,9 @@ undoBtn.addEventListener('click', doUndo);
 redoBtn.addEventListener('click', doRedo);
 byId('exportCloseBtn').addEventListener('click', function () { exportOverlay.className = 'overlay'; });
 byId('traceCloseBtn').addEventListener('click', function () { traceOverlay.className = 'overlay'; });
+byId('trainCloseBtn').addEventListener('click', function () {
+  byId('trainOverlay').className = 'overlay';
+});
 byId('backupCloseBtn').addEventListener('click', function () { backupOverlay.className = 'overlay'; });
 photoInput.addEventListener('change', function () {
   var f = this.files && this.files[0];

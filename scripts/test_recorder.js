@@ -219,6 +219,54 @@ dt.tick(90);
 dt.up(2);
 dt.up(99);
 
+/* ---- testing drills ----
+ * The engine was tuned against contacts I invented, which is how it came
+ * to erase real handwriting. A drill names what the hand is about to do
+ * before it does it, so the recording carries ground truth and nobody has
+ * to remember or explain it afterwards. */
+var dr = fresh();
+dr.stroke({ id: 1, x0: 100, y0: 100, x1: 220, y1: 130, speed: 0.3 });  /* before */
+dr.drill('pen-small');
+dr.stroke({ id: 2, x0: 400, y0: 300, x1: 432, y1: 306, speed: 0.2 });
+dr.drillStop();
+var up = dr.requests();
+check('a drill uploads itself', up.length === 1 && up[0].method === 'POST' &&
+      up[0].url === '/trace', JSON.stringify(up.map(function (q) { return q.url; })));
+
+var sent = up.length ? JSON.parse(up[0].body) : {};
+check('...labelled with the drill', sent.drill === 'pen-small' && sent.label === 'pen-small',
+      sent.drill + '/' + sent.label);
+check('...carrying what the answer should be', sent.want === -1, String(sent.want));
+check('...and starting from silence, not from whatever came before',
+      !!sent.samples && sent.samples.length > 0 &&
+      sent.samples[0][sent.samples[0].length - 2] === 0,
+      'first t=' + (sent.samples && sent.samples[0] &&
+                    sent.samples[0][sent.samples[0].length - 2]));
+
+/* every drill has to be answerable: 0 means any mark is a failure, a
+   positive number means exactly that many were drawn on purpose, -1 means
+   only the pen was down so every contact should have left a mark. */
+var defs = dr.drills(), badDef = 0, dq;
+for (dq = 0; dq < defs.length; dq++) {
+  if (typeof defs[dq].want !== 'number' || !defs[dq].id || !defs[dq].what ||
+      !(defs[dq].s > 0)) badDef++;
+}
+check('every drill states its own ground truth', defs.length >= 10 && badDef === 0,
+      defs.length + ' drills, ' + badDef + ' malformed');
+
+/* off the test server there is nothing to POST to, so it must fall back to
+   the paste path rather than silently losing the recording */
+var dh = H.load({ quiet: true, dpr: 2, viewW: 1024, viewH: 712, protocol: 'https:' });
+dh.flushFrames();
+dh.drill('palm-rest');
+dh.down(9, 700, 640);
+dh.tick(300);
+dh.up(9);
+dh.drillStop();
+check('a drill off the server falls back to copy/paste, losing nothing',
+      dh.requests().length === 0 && dh.els.traceText.value.length > 0,
+      dh.requests().length + ' posts, ' + dh.els.traceText.value.length + ' chars');
+
 setTimeout(function () {
   dt.flushFrames();
   check('a dot lands even with the palm down', dt.strokes().length === 2,
