@@ -34,15 +34,24 @@ var TYPES = {
   '.svg': 'image/svg+xml'
 };
 
+/* A VPN or virtual adapter has an address the iPad can never reach, and
+   listing it first is a trap: point the tablet at the WARP address and
+   Safari sits there until it gives up with "the server stopped
+   responding", which looks exactly like a firewall problem and is not. */
+var VIRTUAL = /warp|vpn|virtual|vmware|vbox|virtualbox|hyper-v|tailscale|zerotier|wintun|tap-|tun[0-9]|loopback|bluetooth|docker/i;
+
 function lanAddresses() {
   var out = [], ifs = os.networkInterfaces(), name, i;
   for (name in ifs) {
     if (!Object.prototype.hasOwnProperty.call(ifs, name)) continue;
     for (i = 0; i < ifs[name].length; i++) {
       var a = ifs[name][i];
-      if (a.family === 'IPv4' && !a.internal) out.push({ name: name, addr: a.address });
+      if (a.family !== 'IPv4' || a.internal) continue;
+      out.push({ name: name, addr: a.address, virtual: VIRTUAL.test(name) });
     }
   }
+  /* a real wifi or ethernet address first, whatever the OS enumeration order */
+  out.sort(function (p, q) { return (p.virtual ? 1 : 0) - (q.virtual ? 1 : 0); });
   return out;
 }
 
@@ -82,7 +91,24 @@ function saveTrace(body, res) {
   res.end('ok');
 }
 
-http.createServer(function (req, res) {
+var srv = http.createServer(function (req, res) {
+  /* Log first, answer second. If the iPad cannot get here at all, the
+     terminal stays silent and the problem is the network - a firewall,
+     a VPN, or the wrong address. If a line appears and the page still
+     will not load, the problem is in here. That distinction is worth
+     more than any amount of guessing. */
+  console.log('  -> ' + req.method + ' ' + req.url + '   from ' +
+              String(req.socket.remoteAddress).replace('::ffff:', ''));
+  try {
+    handle(req, res);
+  } catch (e) {
+    console.log('  !! ' + e.message);
+    try { res.writeHead(500, { 'Content-Type': 'text/plain' }); res.end('error'); }
+    catch (e2) {}
+  }
+});
+
+function handle(req, res) {
   if (req.method === 'POST' && req.url.split('?')[0] === '/trace') {
     var body = '';
     req.setEncoding('utf8');
@@ -117,7 +143,18 @@ http.createServer(function (req, res) {
     'Expires': '0'
   });
   res.end(fs.readFileSync(file));
-}).listen(PORT, '0.0.0.0', function () {
+}
+
+/* one bad request must never take the server down mid-session */
+srv.on('clientError', function (e, sock) {
+  console.log('  !! bad request: ' + e.message);
+  try { sock.end('HTTP/1.1 400 Bad Request\r\n\r\n'); } catch (e2) {}
+});
+process.on('uncaughtException', function (e) {
+  console.log('  !! ' + e.message + '  (still running)');
+});
+
+srv.listen(PORT, '0.0.0.0', function () {
   var a = lanAddresses(), i;
   console.log('');
   console.log('MathNotes test server');
@@ -126,11 +163,24 @@ http.createServer(function (req, res) {
   if (!a.length) {
     console.log('  No network address found - is wifi on?');
   } else {
+    var real = 0;
+    for (i = 0; i < a.length; i++) if (!a[i].virtual) real++;
     console.log('  Open this on the iPad (same wifi):');
     for (i = 0; i < a.length; i++) {
+      if (a[i].virtual) continue;
       console.log('      http://' + a[i].addr + ':' + PORT + '     (' + a[i].name + ')');
     }
+    if (!real) console.log('      ...none. Every adapter here is a VPN. Turn the VPN off.');
+    for (i = 0; i < a.length; i++) {
+      if (!a[i].virtual) continue;
+      console.log('  (ignore ' + a[i].addr + ' - that is ' + a[i].name +
+                  ', the iPad cannot reach it)');
+    }
   }
+  console.log('');
+  console.log('  Every request shows up below. If you load the page on the');
+  console.log('  iPad and nothing appears here, it never reached this PC:');
+  console.log('  turn off Cloudflare WARP on BOTH devices and try again.');
   console.log('');
   console.log('  Ctrl+C to stop.');
   console.log('');
