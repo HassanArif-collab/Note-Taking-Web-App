@@ -984,9 +984,29 @@ var SC = {
   ZONE_BOTTOM:     104,    /* handedness soft zone (px) */
   ZONE_SIDE:       112,
   BIG_RADIUS:      18,     /* contact radius treated as palm (if reported) */
-  TAP_MS:          300,    /* tap window for dots. A disc stylus lands and
-                              lifts more slowly than a fingertip, and 220ms
-                              was refusing real taps. */
+  TAP_MS:          300,    /* Upper end of the tap window. Raising this to
+                              900 looked obviously right - recorded taps ran
+                              to 700ms - and swept WORSE on every palm drill,
+                              because a resting hand has long contacts too.
+                              The sweep over traces/ is in the commit; the
+                              honest summary is that the ceiling was never
+                              the problem. */
+  TAP_MIN_MS:      70,    /* ...and the lower end, which did not exist and
+                              is what actually mattered. A resting hand
+                              fragments into contacts lasting 32-58ms at
+                              the median, and every one of them was inside
+                              a window whose only bound was "shorter than
+                              300ms". So the rule accepted the palm and
+                              rejected the pen - exactly inverted.
+                              At this floor, 29 of 37 recorded pen taps
+                              survive and 112 of 136 palm flickers are
+                              gone. The two populations genuinely overlap,
+                              so this is a trade and not a separation:
+                              check score.js against traces/ before
+                              moving it. */
+  TAP_PATH:        5,      /* Swept 5, 7, 9 and 12 against traces/: 5 is
+                              marginally the best and 12 costs four real
+                              marks. Left where it was, having checked. */
   BOUNCE_MS:       220,    /* dot queued this long before it appears */
   BOUNCE_PX:       18,     /* re-land inside this cancels the dot */
   DISCARD_SPEED:   0.022,  /* mid-stroke discard: slower than this */
@@ -2250,9 +2270,16 @@ function showPendingDot(id, x, y) {
   if (pendingDotId !== null) return;      /* one ring at a time */
   pendingDotId = id;
   pendingDot.className = '';
+  /* docToScreen returns a coordinate on the SCREEN, but this ring lives
+     inside #canvasWrap, so its own origin is the top-left of the page
+     area. Handing it a screen coordinate drew it wrapTop pixels below the
+     nib - 102px on the iPad, reported as "the circle is made far below
+     where the stylus tip is". The two elements positioned the same way
+     from docToScreen sit OUTSIDE the wrapper, which is why only this one
+     was wrong. */
   var sp = docToScreen(x, y);
-  pendingDot.style.left = sp.x + 'px';
-  pendingDot.style.top = sp.y + 'px';
+  pendingDot.style.left = (sp.x - wrapRect.left) + 'px';
+  pendingDot.style.top = (sp.y - wrapRect.top) + 'px';
   pendingDot.style.display = 'block';
 }
 function hidePendingDot(id) {
@@ -3048,9 +3075,17 @@ function endTouch(touch, now, cancelled) {
 
   /* probe that never earned ink */
   var age = now - st.t0;
-  if (st.state === 'palm' || cancelled) {
+  /* A contact that has not moved for 400ms is called palm by tryCommit,
+     which is right about INK and says nothing about a dot: a deliberate
+     tap on a small target is held still, and the recorded ones ran to
+     490ms. The dot is decided here, at the lift, with the whole life of
+     the contact known - so that earlier verdict is not allowed to veto
+     it. dotIsCredible still has to agree. */
+  var stillTap = st.pathLen < SC.TAP_PATH &&
+                 age > SC.TAP_MIN_MS && age < SC.TAP_MS;
+  if (cancelled || (st.state === 'palm' && !stillTap)) {
     palmMemAdd(st.sx, st.sy, now);
-  } else if (age < SC.TAP_MS && st.pathLen < 5) {
+  } else if (stillTap) {
     queueTapDot(st, now);
   } else if (shortMark(st, age)) {
     /* decided in hindsight, at the lift - see SC.SHORT_MS */
