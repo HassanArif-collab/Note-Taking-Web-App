@@ -94,10 +94,25 @@ function strokeTop(st) {
   return lo;
 }
 
+var pgNav = fresh();
+write(pgNav, 1);
+pgNav.clickMenu('Pages');
+check('the page navigator shows a thumbnail per page',
+      (pgNav.els.pagesGrid.children || []).length === 1,
+      (pgNav.els.pagesGrid.children || []).length + ' thumbnails for 1 page');
+check('...and says where you are',
+      pgNav.els.pagesTitle.innerHTML.indexOf('Page 1 of 1') >= 0,
+      pgNav.els.pagesTitle.innerHTML);
+
 var pg = fresh();
 write(pg, 1);
 var y0 = strokeTop(pg.strokes()[0]);
-pg.answer('+').clickMenu('Pages');
+/* Pages used to be a window.prompt asking for a number typed by hand.
+   It is a thumbnail grid now, so the test drives the button rather than
+   the prompt - and the old test kept passing against the new UI for a
+   while because answer() simply went unused. */
+pg.clickMenu('Pages');
+pg.els.pagesInsertBtn._fire('click', {});
 var y1 = strokeTop(pg.strokes()[0]);
 check('inserting a page pushes the marks down', y1 > y0 + 900, y0 + ' -> ' + y1);
 check('...without losing any', pg.strokes().length === 1);
@@ -107,7 +122,8 @@ check('one undo puts them back', Math.abs(strokeTop(pg.strokes()[0]) - y0) < 1,
 
 var pd = fresh();
 write(pd, 1);
-pd.confirmAll(true).answer('-').clickMenu('Pages');
+pd.confirmAll(true).clickMenu('Pages');
+pd.els.pagesDeleteBtn._fire('click', {});
 check('deleting a page removes the marks on it', pd.strokes().length === 0,
       pd.strokes().length + ' strokes');
 pd.els.undoBtn._fire('click', {});

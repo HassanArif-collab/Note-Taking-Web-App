@@ -37,13 +37,11 @@ thickness, with 24 colours to choose from.
 
 ### Pages
 
-Tap the **page pill** (bottom left), or **Pages** in the menu:
-
-- a **number** jumps to that page
-- **+** inserts a blank page here and pushes everything below it down
-- **-** deletes this page (it asks first, and says how many marks are on it)
-
-Both are a single undo.
+Tap the **page pill** (bottom left), or **Pages** in the menu, and you get a
+grid of thumbnails of every page. Tap one to go there — the page you are on
+is outlined in blue. **Insert page here** adds a blank page and pushes
+everything below it down; **Delete this page** removes it (it asks first, and
+says how many marks are on it). Each is a single undo.
 
 ### Notebooks and folders
 
@@ -225,7 +223,7 @@ node scripts/check_es5.js     # Safari 9 gate - run before every push
 node scripts/test_palm.js     # palm-rejection behaviour (57 assertions)
 node scripts/test_recorder.js # recorder, pinch-zoom, drills (29 assertions)
 node scripts/test_backup.js   # storage and backup (20 assertions)
-node scripts/test_features.js # pages, folders, photos, zoom window (33 assertions)
+node scripts/test_features.js # pages, folders, photos, zoom window (35 assertions)
 node scripts/serve.js         # serve the app to the iPad, collect recordings
 node scripts/score.js         # replay every recording, print a scoreboard
 node scripts/train.js         # refit the pen/palm scorer to traces/
