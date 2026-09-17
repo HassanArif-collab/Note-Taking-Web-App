@@ -2021,10 +2021,133 @@ function render() {
   }
   if (eraserTouchId !== null) drawEraserCursor(ctx);
   drawSelectionOverlays(ctx);
+  if (zw.on) drawZoomWindow(ctx);
   if (Math.abs(scrollY - lastRenderScrollY) > 0.5 || Math.abs(zoom - lastRenderZoom) > 0.001 || pillTotalDirty) updateScrollPill();
   pillTotalDirty = false;
   lastRenderScrollY = scrollY;
   lastRenderZoom = zoom;
+}
+
+/* ============================================================
+ * ZOOM WINDOW
+ *
+ * A passive disc stylus cannot write small. The contact patch is several
+ * millimetres across and its reported centre wanders inside it, so below
+ * roughly a centimetre the letters are not limited by the hand but by the
+ * hardware - which is most of why maths is unpleasant on this iPad.
+ *
+ * So write large and land small. The bottom of the screen becomes a strip
+ * magnifying a small box of the page; whatever is written in the strip
+ * goes into that box at a third the size. The box then walks along the
+ * line on its own, so a whole line can be written without touching
+ * anything else.
+ *
+ * It is not a zoom of the view: the page above keeps its own scale and
+ * scroll, and the box is in document coordinates. Nothing in the
+ * rejection engine knows this exists - docPoint does the conversion, and
+ * everything downstream sees ordinary page coordinates.
+ * ============================================================ */
+var ZW_FRAC = 0.42;        /* strip height, as a share of the view */
+var ZW_MAG  = 3.2;         /* how much bigger you write than what lands */
+var ZW_EDGE = 0.72;        /* advance once writing passes this much of the box */
+var ZW_STEP = 0.62;        /* ...and move it along by this much of a box */
+var zw = { on: false, x: 40, y: 0 };
+
+function zwGeom() {
+  var h = Math.round(viewH * ZW_FRAC);
+  return {
+    top: viewH - h, h: h, w: viewW,
+    bw: viewW / ZW_MAG, bh: h / ZW_MAG
+  };
+}
+
+/* is this point, in wrap-relative screen px, inside the strip */
+function zwHit(sx, sy) {
+  if (!zw.on) return false;
+  return sy >= zwGeom().top;
+}
+
+function zwClamp() {
+  var g = zwGeom();
+  if (zw.x < 0) zw.x = 0;
+  if (zw.x > Math.max(0, viewW - g.bw)) zw.x = Math.max(0, viewW - g.bw);
+  if (zw.y < 0) zw.y = 0;
+  if (docH && zw.y > Math.max(0, docH - g.bh)) zw.y = Math.max(0, docH - g.bh);
+}
+
+/* walk the box along the line, and wrap to the next one at the margin */
+function zwAdvance(maxX) {
+  var g = zwGeom();
+  if (maxX < zw.x + g.bw * ZW_EDGE) return;
+  zw.x += g.bw * ZW_STEP;
+  if (zw.x + g.bw > viewW) {
+    zw.x = 40;
+    zw.y += Math.max(settings.spacing || 32, g.bh * 0.55);
+  }
+  zwClamp();
+  requestRender();
+}
+
+function zwToggle() {
+  zw.on = !zw.on;
+  if (zw.on) {
+    /* open onto whatever is in the middle of what you are looking at */
+    var g = zwGeom();
+    zw.x = 40;
+    zw.y = scrollY + (viewH / zoom) * 0.28;
+    zwClamp();
+    toast('Write in the strip - it lands in the box above');
+  }
+  applyPalmUI();
+  requestRender();
+}
+
+function drawZoomWindow(c) {
+  var g = zwGeom();
+  zwClamp();
+
+  /* the box, outlined on the page above, so it is obvious where the
+     writing is actually going */
+  c.setTransform(dpr * zoom, 0, 0, dpr * zoom, -dpr * zoom * scrollX, -dpr * zoom * scrollY);
+  c.strokeStyle = 'rgba(226,35,26,0.85)';
+  c.lineWidth = 1.5 / zoom;
+  c.setLineDash ? c.setLineDash([6 / zoom, 4 / zoom]) : 0;
+  c.strokeRect(zw.x, zw.y, g.bw, g.bh);
+  c.setLineDash ? c.setLineDash([]) : 0;
+
+  /* the strip itself */
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  var P = PAPERS[settings.paperColor] || PAPERS[0];
+  c.fillStyle = P.dark ? '#141414' : '#FFFFFF';
+  c.fillRect(0, g.top, g.w, g.h);
+
+  c.save();
+  c.beginPath();
+  c.rect(0, g.top, g.w, g.h);
+  c.clip();
+
+  /* document -> strip: no page zoom, no page scroll, just the box */
+  c.setTransform(dpr * ZW_MAG, 0, 0, dpr * ZW_MAG,
+                 dpr * (0 - zw.x * ZW_MAG),
+                 dpr * (g.top - zw.y * ZW_MAG));
+  drawPaperPages(c, zw.y - 4, zw.y + g.bh + 4);
+  /* strokes are drawn rather than the tiles scaled up: a tile is only one
+     device pixel per document pixel, and magnified it would be visibly
+     soft - which rather defeats a magnifier */
+  var band = sortedStrokesForBand(zw.y - 4, zw.y + g.bh + 4), j;
+  for (j = 0; j < band.length; j++) renderStrokeFull(c, band[j]);
+  for (j in inkNow) {
+    if (inkNow.hasOwnProperty(j)) renderStrokeFull(c, inkNow[j].stroke);
+  }
+  c.restore();
+
+  /* a lip along the top edge so the strip reads as a separate surface */
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.fillStyle = 'rgba(226,35,26,0.85)';
+  c.fillRect(0, g.top, g.w, 2);
+  c.fillStyle = P.dark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.38)';
+  c.font = '11px -apple-system, Helvetica, sans-serif';
+  c.fillText('tap the page to move the box', 10, g.top + 15);
 }
 
 /* ---------- resize ---------- */
@@ -2342,9 +2465,17 @@ function currentPenWidth() {
 
 function docPoint(t) {
   var dy = settings.nibFix ? SC.NIB_DY : 0;
+  var sx = t.clientX - wrapRect.left;
+  var sy = t.clientY + dy - wrapRect.top;
+  if (zwHit(sx, sy)) {
+    /* inside the strip the page's own zoom and scroll do not apply: the
+       box is a window onto the document, placed in document coordinates */
+    var g = zwGeom();
+    return { x: zw.x + sx / ZW_MAG, y: zw.y + (sy - g.top) / ZW_MAG };
+  }
   return {
-    x: (t.clientX - wrapRect.left) / zoom + scrollX,
-    y: (t.clientY + dy - wrapRect.top) / zoom + scrollY
+    x: sx / zoom + scrollX,
+    y: sy / zoom + scrollY
   };
 }
 function docToScreen(x, y) {
@@ -2461,7 +2592,9 @@ function computeSuspect(st, touch, now) {
      landed in the wrong place whenever the page was zoomed. */
   if (settings.palmLevel >= PALM_MAX && settings.hand !== HAND_BOTH) {
     var zx = st.cx - wrapRect.left, zy = st.cy - wrapRect.top;
-    if (zy > viewH - SC.ZONE_BOTTOM) { st.sus.zone = 1; return true; }
+    /* the bottom band is where a hand rests - unless the zoom window has
+       been opened there, in which case it is where the pen is meant to be */
+    if (!zw.on && zy > viewH - SC.ZONE_BOTTOM) { st.sus.zone = 1; return true; }
     if (settings.hand === HAND_R && zx > viewW - SC.ZONE_SIDE) { st.sus.zone = 1; return true; }
     if (settings.hand === HAND_L && zx < SC.ZONE_SIDE) { st.sus.zone = 1; return true; }
   }
@@ -2883,6 +3016,16 @@ function beginTouch(touch, now, burst) {
     sus: { team: 0, mem: 0, bounce: 0, anat: 0, zone: 0, big: 0 }
   };
 
+  /* With the strip open the page above is for aiming, not writing: a
+     touch up there puts the box somewhere else rather than drawing, which
+     is the only way to start a new line without leaving the strip. */
+  if (zw.on && !zwHit(touch.clientX - wrapRect.left, touch.clientY - wrapRect.top)) {
+    st.kind = 'zwplace';
+    touchStates[id] = st;
+    return;
+  }
+  st.viaZW = zw.on;
+
   if (gesture) st.state = 'palm';                       /* do not disturb a pan */
   else if (anyInkActive()) {                            /* a stroke owns the pen */
     if (settings.palmLevel !== PALM_OFF && allInkDubious(now)) {
@@ -3275,6 +3418,11 @@ function finalizeInk(st, now) {
   pushUndo({ t: 'add', s: s });
   var lp = s.pts[s.pts.length - 1];
   lastInkPt = { x: lp[0], y: lp[1], t: now };
+  if (st.viaZW && zw.on) {
+    var mx = 0, mq;
+    for (mq = 0; mq < s.pts.length; mq++) { if (s.pts[mq][0] > mx) mx = s.pts[mq][0]; }
+    zwAdvance(mx);
+  }
   var bb = strokeBBox(s);
   invalidateRange(bb.y0, bb.y1);
   recomputeDoc();
@@ -3351,6 +3499,18 @@ function endTouch(touch, now, cancelled) {
   if (!st) return;
   delete touchStates[touch.identifier];
 
+  if (st.kind === 'zwplace') {
+    if (!cancelled) {
+      var g = zwGeom();
+      var pp = { x: (st.cx - wrapRect.left) / zoom + scrollX,
+                 y: (st.cy - wrapRect.top) / zoom + scrollY };
+      zw.x = pp.x - g.bw / 2;
+      zw.y = pp.y - g.bh / 2;
+      zwClamp();
+      requestRender();
+    }
+    return;
+  }
   if (st.kind === 'erase') {
     if (eraserTouchId === st.id) eraserTouchId = null;
     requestRender();
@@ -5148,6 +5308,9 @@ window.__mnTrace = function () { return buildTrace('readback'); };
    ink actually varies rather than assuming it does */
 window.__mnWidthAt = strokeWidthAt;
 
+/* tooling hook: where the zoom window's box currently is */
+window.__mnZW = function () { var g = zwGeom(); return { on: zw.on, x: zw.x, y: zw.y, bw: g.bw, bh: g.bh, top: g.top }; };
+
 /* ---------- event wiring ---------- */
 function onTouchStart(e) {
   e.preventDefault();
@@ -5689,6 +5852,7 @@ function buildMoreMenu() {
                               : 'Ink drawn where the glass reports it');
         afterSettingChange();
       } },
+    { lbl: 'Zoom window', val: zw.on ? 'On' : 'Off', act: zwToggle },
     { lbl: 'Testing drills', val: canUpload() ? 'server' : 'paste', act: showTraining },
     { lbl: 'Send as I write', val: !canUpload() ? 'no server' : (liveOn ? 'On' : 'Off'),
       act: function () {

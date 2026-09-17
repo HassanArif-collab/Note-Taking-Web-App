@@ -288,6 +288,7 @@ App.prototype.drillPrep = function (id) { this.win.__mnDrill.prep(id); return th
 App.prototype.drillDone = function () { return this.win.__mnDrill.done(); };
 App.prototype.drillStop = function () { this.win.__mnDrill.stop(); return this; };
 App.prototype.drills = function () { return this.win.__mnDrill.list; };
+App.prototype.zw = function () { return this.win.__mnZW(); };
 
 /* flush the debounced save and read back what the engine committed */
 /* v5 keeps a small index plus one key per note, so reading back means

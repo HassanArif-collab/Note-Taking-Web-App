@@ -227,5 +227,77 @@ var wFast = bw.win.__mnWidthAt(bs, 22);
 check('a ballpoint lays down more ink when moving slowly', wSlow > wFast,
       wSlow.toFixed(2) + 'px slow vs ' + wFast.toFixed(2) + 'px fast');
 
+
+/* ---------- zoom window ----------
+ * A passive disc cannot write small: the contact patch is millimetres
+ * across and its reported centre wanders inside it, so below about a
+ * centimetre the letters are limited by the hardware rather than the
+ * hand. So write large in a strip at the bottom and land small in a box
+ * on the page. The box is in document coordinates and has nothing to do
+ * with the page zoom or scroll. */
+
+var WRAPTOP = 56;   /* the harness puts the canvas under a 56px header */
+
+function zwApp() {
+  var a = H.load({ quiet: true, dpr: 2, viewW: 768, viewH: 826,
+    seed: { mathnotes_v4: JSON.stringify({ v: 4,
+      notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
+      notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, strokes: [] } },
+      cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
+  a.flushFrames();
+  a.clickMenu('Zoom window');
+  a.flushFrames();
+  return a;
+}
+
+var za = zwApp();
+var zg = za.zw();
+check('the zoom window opens', zg.on === true, String(zg.on));
+
+/* 300px drawn on the glass must land as 300/mag on the page, inside the box */
+za.stroke({ id: 1, x0: 60, y0: zg.top + 120 + WRAPTOP,
+            x1: 360, y1: zg.top + 140 + WRAPTOP, speed: 0.3, wobble: 2 });
+za.tick(200); za.flushFrames();
+var zst = za.strokes()[0];
+var zmin = 1e9, zmax = -1e9, zq;
+if (zst) {
+  for (zq = 0; zq < zst.pts.length; zq++) {
+    if (zst.pts[zq][0] < zmin) zmin = zst.pts[zq][0];
+    if (zst.pts[zq][0] > zmax) zmax = zst.pts[zq][0];
+  }
+}
+check('writing in the strip lands smaller on the page',
+      !!zst && Math.abs((zmax - zmin) - 300 / 3.2) < 12,
+      zst ? Math.round(zmax - zmin) + 'px on the page for 300px of hand' : 'no stroke');
+check('...and it lands inside the box, not under the hand',
+      !!zst && zmin >= zg.x - 2 && zmax <= zg.x + zg.bw + 2,
+      zst ? 'x ' + Math.round(zmin) + '..' + Math.round(zmax) +
+            ' vs box ' + Math.round(zg.x) + '..' + Math.round(zg.x + zg.bw) : '-');
+
+/* the box walks along the line by itself, or a line could never be
+   finished without reaching up to move it every few letters */
+var zb = zwApp();
+var zbg = zb.zw();
+zb.stroke({ id: 1, x0: 60, y0: zbg.top + 120 + WRAPTOP,
+            x1: 700, y1: zbg.top + 140 + WRAPTOP, speed: 0.35, wobble: 2 });
+zb.tick(250); zb.flushFrames();
+check('the box advances once writing reaches its right edge',
+      zb.zw().x > zbg.x + 100,
+      Math.round(zbg.x) + ' -> ' + Math.round(zb.zw().x));
+
+/* with the strip open the page above aims rather than writes - it is the
+   only way to start a new line without leaving the strip */
+var zc = zwApp();
+zc.down(9, 400, 200 + WRAPTOP);
+zc.tick(120);
+zc.up(9);
+zc.flushFrames();
+var zcz = zc.zw();
+check('tapping the page moves the box there', 
+      Math.abs((zcz.x + zcz.bw / 2) - 400) < 4 && Math.abs((zcz.y + zcz.bh / 2) - 200) < 4,
+      'centre (' + Math.round(zcz.x + zcz.bw / 2) + ',' + Math.round(zcz.y + zcz.bh / 2) + ')');
+check('...and leaves no ink where it was tapped', zc.strokes().length === 0,
+      zc.strokes().length + ' strokes');
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

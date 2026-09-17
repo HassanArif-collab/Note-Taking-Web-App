@@ -51,6 +51,23 @@ The **menu button** (top left) opens the notebook drawer. The **folder button**
 in its header puts the current notebook inside another, or back at the top
 level. A folder cannot be put inside its own child.
 
+### Zoom window — for writing small
+
+**⋮ menu → Zoom window.** The bottom of the screen becomes a strip that
+magnifies a small box of the page. Write large in the strip; it lands small
+in the box, at about a third the size.
+
+The box walks along the line on its own as you reach its right edge, and wraps
+to the next line at the margin, so a whole line can be written without
+touching anything else. To put it somewhere else, **tap the page above** —
+while the strip is open the page is for aiming, not writing.
+
+This exists because a passive disc stylus **cannot** write small. The contact
+patch is several millimetres across and its reported centre wanders inside it,
+so below roughly a centimetre the letters are limited by the hardware, not by
+your hand. Writing large and landing small sidesteps that entirely, which is
+why it matters most for maths.
+
 ### Photos
 
 **Menu → Insert photo** puts a picture from the camera roll on the page — handy
@@ -189,9 +206,6 @@ implemented.
 
 ### Features
 
-- **Zoom window** — write large in a strip at the bottom and have it land small
-  on the page. The most useful thing left: a disc stylus cannot write small, and
-  maths needs small.
 - Reorder pages, and a page thumbnail view.
 - Better export: multi-page PDF instead of the 4-page PNG cap, which may fail
   outright on this iPad because it builds one enormous canvas.
@@ -208,10 +222,10 @@ dependencies.
 
 ```
 node scripts/check_es5.js     # Safari 9 gate - run before every push
-node scripts/test_palm.js     # palm-rejection behaviour (51 assertions)
-node scripts/test_recorder.js # recorder, pinch-zoom, drills (27 assertions)
+node scripts/test_palm.js     # palm-rejection behaviour (57 assertions)
+node scripts/test_recorder.js # recorder, pinch-zoom, drills (29 assertions)
 node scripts/test_backup.js   # storage and backup (20 assertions)
-node scripts/test_features.js # pages, folders, photos (23 assertions)
+node scripts/test_features.js # pages, folders, photos, zoom window (33 assertions)
 node scripts/serve.js         # serve the app to the iPad, collect recordings
 node scripts/score.js         # replay every recording, print a scoreboard
 node scripts/train.js         # refit the pen/palm scorer to traces/
