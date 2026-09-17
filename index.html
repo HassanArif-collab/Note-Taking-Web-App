@@ -360,6 +360,20 @@ input { font: inherit; }
 #trainBanner.fail { background: #B3261E; }
 #trainBanner .dot { opacity: 1; }
 #trainBanner .dot.off { opacity: 0.25; }
+#trainTargets {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 25; display: none; pointer-events: none;
+}
+#trainTargets.on { display: block; }
+#trainTargets .tgt {
+  position: absolute; width: 27px; height: 27px; margin: -14px 0 0 -14px;
+  color: #E2231A; font-size: 26px; line-height: 27px; text-align: center;
+  font-weight: 300; opacity: 0.85;
+}
+#trainTargets .tgt b {
+  position: absolute; left: 12px; top: 12px; width: 3px; height: 3px;
+  background: #E2231A; border-radius: 2px; font-size: 0;
+}
 #backupHint { color: #FFFFFF; font-size: 17px; font-weight: 600; margin-bottom: 4px; }
 #backupInfo { color: #D8DCE2; font-size: 13px; margin-bottom: 10px; min-height: 17px; }
 #backupText {
@@ -810,6 +824,7 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
     <button id="trainCloseBtn">Close</button>
   </div>
   <div id="trainBanner"></div>
+  <div id="trainTargets"></div>
 
   <!-- export overlay -->
   <div id="exportOverlay" class="overlay">
@@ -4367,8 +4382,47 @@ var DRILLS = [
   { id: 'zoom', s: 25, want: 0,
     what: 'No stylus. Pinch with two fingers to zoom in and out, five times.' },
   { id: 'scroll', s: 20, want: 0,
-    what: 'No stylus. Two fingers, drag up and down to scroll the page.' }
+    what: 'No stylus. Two fingers, drag up and down to scroll the page.' },
+  { id: 'aim', s: 40, want: -2, targets: true,
+    what: 'Nine red crosses appear. Tap the exact centre of each one with the stylus, top-left first, going left to right. Take your time.' }
 ];
+
+/* Where the crosses are put, in the same client coordinates the samples
+   use, so the recording carries both the aim and the result. Everything
+   else here measures whether a mark appeared; this is the only drill that
+   can measure whether it appeared in the right PLACE - the digitizer
+   reports where it thinks the contact is, and if that differs from where
+   the nib actually is, every other recording looks perfectly correct
+   while the ink lands wrong. */
+function drillTargets() {
+  var out = [], gx, gy;
+  for (gy = 0; gy < 3; gy++) {
+    for (gx = 0; gx < 3; gx++) {
+      out.push([Math.round(wrapRect.left + viewW * (0.18 + 0.32 * gx)),
+                Math.round(wrapRect.top + viewH * (0.18 + 0.32 * gy))]);
+    }
+  }
+  return out;
+}
+
+var drillTargetList = null;
+
+function drillShowTargets(list) {
+  var box = byId('trainTargets');
+  if (!box) return;
+  if (!list) { box.className = ''; box.innerHTML = ''; return; }
+  box.innerHTML = '';
+  var i;
+  for (i = 0; i < list.length; i++) {
+    var d = document.createElement('div');
+    d.className = 'tgt';
+    d.style.left = (list[i][0] - wrapRect.left) + 'px';
+    d.style.top = (list[i][1] - wrapRect.top) + 'px';
+    d.innerHTML = '+<b>.</b>';
+    box.appendChild(d);
+  }
+  box.className = 'on';
+}
 
 var DRILL_LEAD = 3;     /* seconds of "get ready" before recording starts, so the
                            tap that launched the drill is never in the data */
@@ -4447,6 +4501,7 @@ function drillBegin(d, left) {
   drillPhase = 'rec';
   traceReset();
   drillStrokes0 = noteStrokeCount();
+  if (d.targets) { drillTargetList = drillTargets(); drillShowTargets(drillTargetList); }
   drillTick(d, left);
 }
 
@@ -4464,6 +4519,8 @@ function drillStart(d, noLead) {
   traceReset();
   drillStrokes0 = noteStrokeCount();
 
+  drillTargetList = null;
+  drillShowTargets(null);
   var lead = noLead ? 0 : DRILL_LEAD, left = d.s;
   if (lead <= 0) drillBegin(d, left);
   else {
@@ -4504,6 +4561,9 @@ function drillStop() {
   obj.drill = d.id;
   obj.want = d.want;
   obj.marks = marks;
+  if (drillTargetList) obj.targets = drillTargetList;
+  drillTargetList = null;
+  drillShowTargets(null);
 
   var rec = { marks: marks, samples: obj.samples.length, ok: v.ok, text: v.text, sent: false };
   drillDone[d.id] = rec;

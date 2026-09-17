@@ -121,6 +121,39 @@ function scoreOne(file, next) {
       verdict = ok ? 'PASS' : 'FAIL';
       detail = drew + ' of ' + marks + ' pen contacts drew';
       if (marks > drew) detail += '  (' + (marks - drew) + ' lost)';
+    } else if (trace.targets && trace.targets.length) {
+      /* the only drill that knows where the pen was AIMED. A consistent
+         offset is the disc reporting a place the nib is not, which is
+         correctable; a large scatter with no consistent offset is the
+         digitizer being imprecise, which is not. */
+      var dxs = [], dys = [], ds = [], tk, bi, bd, dd;
+      for (k = 0; k < ids.length; k++) {
+        var cc = r.contacts[ids[k]];
+        if (cc.path > 14) continue;                 /* a tap, not a stroke */
+        bi = -1; bd = 1e9;
+        for (tk = 0; tk < trace.targets.length; tk++) {
+          dd = Math.sqrt(Math.pow(cc.x0 - trace.targets[tk][0], 2) +
+                         Math.pow(cc.y0 - trace.targets[tk][1], 2));
+          if (dd < bd) { bd = dd; bi = tk; }
+        }
+        if (bi < 0 || bd > 90) continue;            /* not aimed at any cross */
+        dxs.push(cc.x0 - trace.targets[bi][0]);
+        dys.push(cc.y0 - trace.targets[bi][1]);
+        ds.push(bd);
+      }
+      function med(arr) {
+        if (!arr.length) return 0;
+        var a2 = arr.slice().sort(function (p, q) { return p - q; });
+        return a2[Math.floor(a2.length / 2)];
+      }
+      ok = true;
+      verdict = 'INFO';
+      detail = ds.length + ' taps landed near a cross' +
+               (ds.length ? '  |  typical miss ' + Math.round(med(ds)) + 'px' +
+                            '  |  bias ' + (med(dxs) >= 0 ? '+' : '') + Math.round(med(dxs)) + 'x ' +
+                            (med(dys) >= 0 ? '+' : '') + Math.round(med(dys)) + 'y'
+                          : '');
+      if (drew < ds.length) detail += '  |  only ' + drew + ' left a mark';
     } else {
       /* want -2: the hand and the pen are both on the glass, so no count
          is knowable from the recording alone. Report, do not judge. */
