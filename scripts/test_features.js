@@ -146,5 +146,86 @@ for (q = 0; q < after.length; q++) {
 }
 check('a folder cannot be put inside its own child', loops === 0, loops + ' loops');
 
+
+/* ---------- line quality ----------
+ * A passive disc rests on a contact patch several millimetres across, and
+ * the reported centre of that patch wanders while the nib itself is
+ * still. Drawn raw, a slow line comes out visibly furred. Filtering fixes
+ * that and costs lag, which is worse than fur - so the filter believes a
+ * new point more the faster the pen is moving, and completely at speed. */
+
+function gloveApp() {
+  var a = H.load({ quiet: true, dpr: 2, viewW: 1024, viewH: 712,
+    seed: { mathnotes_v4: JSON.stringify({ v: 4,
+      notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
+      notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, strokes: [] } },
+      cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
+  a.flushFrames();
+  return a;
+}
+
+function wobbleOf(app) {
+  var st = app.strokes()[0];
+  if (!st) return -1;
+  var L = 0, k;
+  for (k = 1; k < st.pts.length; k++) {
+    L += Math.sqrt(Math.pow(st.pts[k][0] - st.pts[k - 1][0], 2) +
+                   Math.pow(st.pts[k][1] - st.pts[k - 1][1], 2));
+  }
+  var straight = Math.sqrt(
+    Math.pow(st.pts[st.pts.length - 1][0] - st.pts[0][0], 2) +
+    Math.pow(st.pts[st.pts.length - 1][1] - st.pts[0][1], 2));
+  return straight > 0 ? (L / straight - 1) * 100 : -1;
+}
+
+var lq = gloveApp();
+var lqSeed = 12345;
+function lqRnd() {
+  lqSeed = (lqSeed * 1103515245 + 12345) & 0x7fffffff;
+  return (lqSeed / 0x7fffffff) * 2 - 1;
+}
+lq.down(1, 200, 400);
+for (var lqi = 1; lqi <= 60; lqi++) {
+  lq.tick(33);
+  lq.moveTo(1, 200 + lqi * 2.2 + lqRnd() * 1.8, 400 + lqRnd() * 1.8);
+}
+lq.up(1); lq.flushFrames();
+var wob = wobbleOf(lq);
+check('a slow line is not furred by the wandering contact patch',
+      wob >= 0 && wob < 8, wob.toFixed(1) + '% longer than straight (raw input is ~20%)');
+
+/* lag is the thing filtering is not allowed to buy */
+function lagAt(speed) {
+  var a = gloveApp(), step = speed * 16, i;
+  a.down(1, 200, 400);
+  for (i = 1; i <= 40; i++) { a.tick(16); a.moveTo(1, 200 + i * step, 400); }
+  a.up(1); a.flushFrames();
+  var st = a.strokes()[0];
+  if (!st) return 1e9;
+  return (200 + 40 * step) - st.pts[st.pts.length - 1][0];
+}
+var fastLag = lagAt(0.6), slowLag = lagAt(0.05);
+check('a fast stroke does not trail the nib at all', fastLag < 0.5,
+      fastLag.toFixed(1) + 'px behind');
+check('...and even a slow one trails by less than a nib width', slowLag < 3,
+      slowLag.toFixed(1) + 'px behind');
+
+/* a constant width is the single thing that most makes ink read as wire */
+var bw = gloveApp();
+bw.down(1, 200, 400);
+for (var bi = 1; bi <= 14; bi++) { bw.tick(16); bw.moveTo(1, 200 + bi * 1, 400); }
+for (bi = 1; bi <= 14; bi++) { bw.tick(16); bw.moveTo(1, 214 + bi * 10, 400); }
+bw.up(1); bw.flushFrames();
+var bs = bw.strokes()[0];
+/* No "if it is exposed" fallback here. The first version of this had one,
+   and since strokeWidthAt lives inside the app's closure it was never
+   exposed, so the check passed without ever running - a test that agrees
+   with you is worse than no test, and this file has been bitten by that
+   before. */
+var wSlow = bw.win.__mnWidthAt(bs, 6);
+var wFast = bw.win.__mnWidthAt(bs, 22);
+check('a ballpoint lays down more ink when moving slowly', wSlow > wFast,
+      wSlow.toFixed(2) + 'px slow vs ' + wFast.toFixed(2) + 'px fast');
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

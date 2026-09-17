@@ -1067,6 +1067,26 @@ var SC = {
   RIGID_ANGLE:     0.45,   /* radians of agreement between displacements */
   RIGID_RATIO:     1.8,    /* fastest / slowest magnitude */
   RIGID_MIN_MOVE:  6,
+  SMOOTH_MIN:      0.34,   /* How much of a new point to believe when the pen
+                              is barely moving. A passive disc tip rests on a
+                              contact patch several millimetres across, and the
+                              reported centre of that patch wanders while the
+                              nib itself is still - so a slow line came out
+                              visibly furred. Filtering hard when slow removes
+                              that; filtering hard when FAST would lag the pen,
+                              which is worse than furry, so the amount of
+                              belief rises with speed until it is total. */
+  SMOOTH_FAST:     0.40,   /* px/ms at which no filtering is applied at all */
+  SPEED_SMOOTH:    2,      /* half-window, in samples, for the speed that
+                              drives line width. Taken from a single pair of
+                              points it is far too noisy to set a width from -
+                              the line pulsed rather than tapered. */
+  BALL_TAPER:      0.22,   /* how much a ballpoint thins when moving fast. Real
+                              ink lays down less when the nib is dragged, and a
+                              perfectly constant width is the single thing that
+                              most makes a stroke read as a wire. Small: a
+                              ballpoint is not a fountain pen. */
+  PENCIL_TAPER:    0.30,
   NIB_DY:          8,      /* The glass reports the contact about 8px ABOVE
                               where the nib is aimed, so ink landed high.
                               Measured over three aim drills - 9, 8 and 8 -
@@ -1736,11 +1756,20 @@ function insertPhotoFile(file) {
 function penCap(pen) { return pen === PEN_HIGH ? 'butt' : 'round'; }
 
 function pointSpeedAt(s, i) {
+  var p = s.pts, n = p.length;
+  if (n < 2) return 0;
   if (i < 1) i = 1;
-  var p = s.pts, a = p[i - 1], b = p[i];
-  var dt = b[2] - a[2];
-  if (dt < 4) dt = 4;
-  return dist(a[0], a[1], b[0], b[1]) / dt;
+  /* averaged over a few samples either side: one pair of points on a disc
+     stylus is mostly noise, and a width driven by it pulses instead of
+     tapering */
+  var lo = i - SC.SPEED_SMOOTH; if (lo < 1) lo = 1;
+  var hi = i + SC.SPEED_SMOOTH; if (hi > n - 1) hi = n - 1;
+  var d = 0, t = 0, k;
+  for (k = lo; k <= hi; k++) {
+    d += dist(p[k - 1][0], p[k - 1][1], p[k][0], p[k][1]);
+    t += Math.max(p[k][2] - p[k - 1][2], 4);
+  }
+  return t > 0 ? d / t : 0;
 }
 
 function segAngleAt(s, i) {
@@ -1751,9 +1780,15 @@ function segAngleAt(s, i) {
 
 function strokeWidthAt(s, i) {
   var base = s.w;
-  if (s.pen === PEN_BALL) return base;
   if (s.pen === PEN_HIGH) return Math.max(base * 2.4, 9);
-  if (s.pen === PEN_PENCIL) return base * 1.05;
+  if (s.pen === PEN_BALL) {
+    /* a hair thinner when dragged quickly - the difference between ink and
+       a wire, and small enough that it is felt rather than seen */
+    return base * (1 + SC.BALL_TAPER * (lim(1 - pointSpeedAt(s, i) / 0.55, 0, 1) - 0.5));
+  }
+  if (s.pen === PEN_PENCIL) {
+    return base * 1.05 * (1 + SC.PENCIL_TAPER * (lim(1 - pointSpeedAt(s, i) / 0.5, 0, 1) - 0.5));
+  }
   if (s.pen === PEN_FOUNTAIN) {
     var v = pointSpeedAt(s, i);
     return base * (0.62 + 0.75 * lim(1 - v / 0.45, 0, 1));
@@ -2876,7 +2911,23 @@ function beginTouch(touch, now, burst) {
 }
 
 function startInkRecord(st, now) {
-  var s = mkStroke(settings.pen, currentPenWidth(), settings.color, st.path);
+  /* the probe's own trail becomes the head of the stroke, so it needs the
+     same filtering as everything after it or the first few millimetres of
+     every stroke are visibly rougher than the rest */
+  var seed = st.path, sm = [], q, fx, fy;
+  for (q = 0; q < seed.length; q++) {
+    if (!q) { fx = seed[q][0]; fy = seed[q][1]; }
+    else {
+      var dtq = Math.max(seed[q][2] - seed[q - 1][2], 4);
+      var vq = dist(seed[q - 1][0], seed[q - 1][1], seed[q][0], seed[q][1]) / dtq;
+      var aq = SC.SMOOTH_MIN + (1 - SC.SMOOTH_MIN) * lim(vq / SC.SMOOTH_FAST, 0, 1);
+      fx += (seed[q][0] - fx) * aq;
+      fy += (seed[q][1] - fy) * aq;
+    }
+    sm.push([fx, fy, seed[q][2]]);
+  }
+  st.fx = fx; st.fy = fy;
+  var s = mkStroke(settings.pen, currentPenWidth(), settings.color, sm);
   inkNow[st.id] = { stroke: s };
   if (st.state === 'ink' && settings.palmLevel !== PALM_OFF) {
     /* a contender that earned ink evicts the stroke it was competing
@@ -3128,7 +3179,17 @@ function appendInk(st, pt, now, touch) {
 
   st.x = pt.x; st.y = pt.y; st.lastT = now;
   st.cx = cx; st.cy = cy;
-  s.pts.push([pt.x, pt.y, now]);
+
+  /* Filter what gets drawn, never what gets judged. The rejection engine
+     runs on the raw stream because that is what the glass actually did,
+     and smoothing it would quietly change every threshold that took a
+     recording to find. */
+  if (st.fx == null) { st.fx = pt.x; st.fy = pt.y; }
+  var sa = SC.SMOOTH_MIN +
+           (1 - SC.SMOOTH_MIN) * lim(v / SC.SMOOTH_FAST, 0, 1);
+  st.fx += (pt.x - st.fx) * sa;
+  st.fy += (pt.y - st.fy) * sa;
+  s.pts.push([st.fx, st.fy, now]);
   st.net = dist(st.csx, st.csy, cx, cy);
 
   /* incremental live segment (one per move, never the tail) */
@@ -5082,6 +5143,10 @@ window.__mnDrill = {
 /* tooling hook: scripts/replay.js and the test harness read the
    trace from here. */
 window.__mnTrace = function () { return buildTrace('readback'); };
+
+/* tooling hook: the width a stroke is drawn at, so a test can check that
+   ink actually varies rather than assuming it does */
+window.__mnWidthAt = strokeWidthAt;
 
 /* ---------- event wiring ---------- */
 function onTouchStart(e) {
