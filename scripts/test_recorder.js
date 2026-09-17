@@ -237,11 +237,29 @@ var sent = up.length ? JSON.parse(up[0].body) : {};
 check('...labelled with the drill', sent.drill === 'pen-small' && sent.label === 'pen-small',
       sent.drill + '/' + sent.label);
 check('...carrying what the answer should be', sent.want === -1, String(sent.want));
-check('...and starting from silence, not from whatever came before',
-      !!sent.samples && sent.samples.length > 0 &&
-      sent.samples[0][sent.samples[0].length - 2] === 0,
-      'first t=' + (sent.samples && sent.samples[0] &&
-                    sent.samples[0][sent.samples[0].length - 2]));
+/* The stroke written BEFORE the drill must not be in the recording. The
+   first version of this test only checked that the first timestamp was
+   zero, which is true whether or not the ring was cleared - and it went
+   on passing when a countdown moved the reset behind a timer and let the
+   previous minute of writing leak into every drill. */
+var seen = {}, sq;
+for (sq = 0; sq < (sent.samples || []).length; sq++) {
+  var sr = sent.samples[sq];
+  if (sr[0] === 'v' || sr[0] === 'g' || sr[0] === 'z') continue;
+  seen[sr[1]] = true;
+}
+check('...holding the drill and nothing that came before it',
+      !seen[1] && !!seen[2], 'contacts: ' + Object.keys(seen).join(','));
+
+/* The get-ready countdown exists so a hand can move into position without
+   that movement becoming the data. Started the way the iPad starts it -
+   countdown and all - the positioning must be gone by the time recording
+   really begins. Checked below, after the countdown has actually elapsed. */
+var dl = fresh();
+dl.win.__mnDrill.start('palm-rest');
+dl.down(7, 690, 640);        /* the hand moving into position */
+dl.tick(400);
+dl.up(7);
 
 /* every drill has to be answerable: 0 means any mark is a failure, a
    positive number means exactly that many were drawn on purpose, -1 means
@@ -271,6 +289,22 @@ setTimeout(function () {
   dt.flushFrames();
   check('a dot lands even with the palm down', dt.strokes().length === 2,
         dt.strokes().length + ' strokes');
+
+  /* the countdown has now really elapsed, so this lands in the recording */
+  dl.down(8, 700, 645);
+  dl.tick(300);
+  dl.up(8);
+  dl.win.__mnDrill.stop();
+  var lead = JSON.parse(dl.requests()[0].body);
+  var lids = {}, lq;
+  for (lq = 0; lq < (lead.samples || []).length; lq++) {
+    var lr = lead.samples[lq];
+    if (lr[0] === 'v' || lr[0] === 'g' || lr[0] === 'z') continue;
+    lids[lr[1]] = true;
+  }
+  check('the get-ready countdown is not in the recording',
+        !lids[7] && !!lids[8], 'contacts: ' + Object.keys(lids).join(','));
+
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
-}, 400);
+}, 4200);

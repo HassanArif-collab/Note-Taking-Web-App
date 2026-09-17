@@ -38,7 +38,7 @@ function mockCtx() {
 
 function mkEl(id) {
   var el = {
-    id: id, _h: {}, children: [], style: {}, className: '', innerHTML: '',
+    id: id, _h: {}, children: [], style: {}, className: '', _innerHTML: '',
     textContent: '', value: '', width: 0, height: 0, disabled: false,
     addEventListener: function (t, fn) { (this._h[t] = this._h[t] || []).push(fn); },
     removeEventListener: function () {},
@@ -71,6 +71,14 @@ function mkEl(id) {
       for (var i = 0; i < hs.length; i++) hs[i].call(this, ev);
     }
   };
+  Object.defineProperty(el, 'innerHTML', {
+    get: function () { return this._innerHTML; },
+    set: function (v) {
+      this._innerHTML = String(v);
+      this.children.length = 0;   /* assigning markup replaces the contents */
+    },
+    enumerable: true, configurable: true
+  });
   Object.defineProperty(el, 'clientWidth',  { get: function () { return this._w  || 1024; } });
   Object.defineProperty(el, 'clientHeight', { get: function () { return this._h2 || 712; } });
   Object.defineProperty(el, 'offsetWidth',  { get: function () { return this._w  || 1024; } });
@@ -271,9 +279,13 @@ App.prototype.requests = function () { return this.win._xhr || []; };
 /* run a drill without waiting out its timer: start it, do whatever the
    hand would do, then stop it. */
 App.prototype.drill = function (id) {
-  if (!this.win.__mnDrill.start(id)) throw new Error('no drill named ' + id);
+  /* noLead: skip the three second get-ready, which exists for a human
+     moving their hand into position and only gets in the way here */
+  if (!this.win.__mnDrill.start(id, true)) throw new Error('no drill named ' + id);
   return this;
 };
+App.prototype.drillPrep = function (id) { this.win.__mnDrill.prep(id); return this; };
+App.prototype.drillDone = function () { return this.win.__mnDrill.done(); };
 App.prototype.drillStop = function () { this.win.__mnDrill.stop(); return this; };
 App.prototype.drills = function () { return this.win.__mnDrill.list; };
 

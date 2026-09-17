@@ -301,30 +301,65 @@ input { font: inherit; }
   box-shadow: 0 4px 20px rgba(0,0,0,0.4); display: block; margin: 0 auto;
 }
 #exportHint { color: #E8E8E8; font-size: 13px; margin-top: 14px; }
-#trainHint { color: #FFFFFF; font-size: 16px; font-weight: 600; margin-bottom: 10px; }
-#trainList {
-  max-width: 520px; margin: 0 auto; max-height: 68%;
-  overflow-y: auto; -webkit-overflow-scrolling: touch;
+#trainBox {
+  max-width: 560px; margin: 0 auto; background: #FFFFFF; border-radius: 12px;
+  padding: 14px; text-align: left; max-height: 82%; overflow: hidden;
 }
+#trainHead { margin-bottom: 8px; }
+#trainTitle { font-size: 18px; font-weight: 700; color: #1A1A1A; }
+#trainProgress { font-size: 13px; color: #5A6270; margin-top: 2px; }
+#trainGuide {
+  font-size: 13px; line-height: 1.45; color: #3A4250;
+  background: #F2F5F9; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px;
+}
+#trainGuide b { color: #1A1A1A; }
+#trainList { max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 #trainList button {
   display: block; width: 100%; text-align: left; margin: 0 0 6px 0;
-  background: #FFFFFF; border: 0; border-radius: 10px; padding: 10px 14px;
-  font-size: 15px; font-weight: 600; color: #1A1A1A;
+  background: #F7F8FA; border: 1px solid #E2E6EC; border-radius: 10px;
+  padding: 9px 12px; font-size: 15px; font-weight: 600; color: #1A1A1A;
 }
 #trainList button .sub {
   display: block; font-size: 12px; font-weight: 400; color: #6A6A6A; margin-top: 2px;
 }
-#trainList button.done { background: #DDF1E0; }
+#trainList button .res { display: block; font-size: 12px; font-weight: 600; margin-top: 3px; }
+#trainList button.pass { background: #E7F6EA; border-color: #A9DCB5; }
+#trainList button.pass .res { color: #1E7B33; }
+#trainList button.fail { background: #FDECEC; border-color: #F2B8B8; }
+#trainList button.fail .res { color: #B3261E; }
+#trainPrep { display: none; }
+#trainPrep.on { display: block; }
+#trainPrepName { font-size: 13px; font-weight: 700; color: #5A6270; letter-spacing: 0.04em; }
+#trainPrepWhat { font-size: 20px; line-height: 1.35; color: #1A1A1A; margin: 6px 0 10px 0; }
+#trainPrepNote { font-size: 12px; color: #6A6A6A; line-height: 1.4; margin-bottom: 12px; }
+#trainStartBtn {
+  display: block; width: 100%; background: #E2231A; color: #FFFFFF; border: 0;
+  border-radius: 10px; padding: 14px; font-size: 17px; font-weight: 700;
+}
+#trainBackBtn {
+  display: block; width: 100%; background: none; border: 0; color: #5A6270;
+  font-size: 14px; padding: 10px; margin-top: 4px;
+}
 #trainCloseBtn {
   margin-top: 14px; color: #FFFFFF; font-size: 15px; font-weight: 600;
   background: rgba(255,255,255,0.16); border-radius: 18px; padding: 10px 26px; border: 0;
 }
 #trainBanner {
   position: absolute; top: 0; left: 0; right: 0; z-index: 40; display: none;
-  background: rgba(18,18,18,0.9); color: #FFFFFF; font-size: 15px; font-weight: 600;
-  padding: 10px 14px; text-align: center; pointer-events: none;
+  color: #FFFFFF; font-size: 15px; font-weight: 700;
+  padding: 8px 14px; text-align: center; pointer-events: none;
+  background: rgba(18,18,18,0.92);
 }
 #trainBanner.on { display: block; }
+#trainBanner .what {
+  display: block; font-size: 13px; font-weight: 400; margin-top: 3px; opacity: 0.9;
+}
+#trainBanner.ready { background: #B26A00; }
+#trainBanner.rec { background: #B3261E; }
+#trainBanner.pass { background: #1E7B33; }
+#trainBanner.fail { background: #B3261E; }
+#trainBanner .dot { opacity: 1; }
+#trainBanner .dot.off { opacity: 0.25; }
 #backupHint { color: #FFFFFF; font-size: 17px; font-weight: 600; margin-bottom: 4px; }
 #backupInfo { color: #D8DCE2; font-size: 13px; margin-bottom: 10px; min-height: 17px; }
 #backupText {
@@ -756,8 +791,22 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
 
   <!-- testing drills -->
   <div id="trainOverlay" class="overlay">
-    <div id="trainHint">Each drill records itself and sends it to the PC.</div>
-    <div id="trainList"></div>
+    <div id="trainBox">
+      <div id="trainHead">
+        <div id="trainTitle">Testing drills</div>
+        <div id="trainProgress"></div>
+      </div>
+      <div id="trainGuide"></div>
+      <div id="trainList"></div>
+      <div id="trainPrep">
+        <div id="trainPrepName"></div>
+        <div id="trainPrepWhat"></div>
+        <div id="trainPrepNote">Get your hand into position first. Recording starts
+          after a three second countdown, so the tap does not end up in the data.</div>
+        <button id="trainStartBtn">Start recording</button>
+        <button id="trainBackBtn">Back</button>
+      </div>
+    </div>
     <button id="trainCloseBtn">Close</button>
   </div>
   <div id="trainBanner"></div>
@@ -4299,19 +4348,58 @@ function showTrace() {
  *       just count what happened.
  * ============================================================ */
 var DRILLS = [
-  { id: 'palm-rest',     s: 20, want: 0,  what: 'Rest your hand on the page. Do NOT write.' },
-  { id: 'palm-slide',    s: 20, want: 0,  what: 'Rest your hand and shift it about. Do NOT write.' },
-  { id: 'palm-bounce',   s: 20, want: 0,  what: 'Lift your hand and put it down, over and over.' },
-  { id: 'pen-only',      s: 30, want: -1, what: 'Write normally. Keep your palm OFF the glass.' },
-  { id: 'pen-small',     s: 30, want: -1, what: 'Palm OFF. Small marks only - dots, commas, minus signs.' },
-  { id: 'pen-slow',      s: 30, want: -1, what: 'Palm OFF. Write slowly and deliberately.' },
-  { id: 'palm-then-pen', s: 25, want: -1, what: 'Rest your hand FIRST. Count to two. THEN write.' },
-  { id: 'pen-palm-10',   s: 40, want: 10, what: 'Palm down. Draw exactly 10 separate lines.' },
-  { id: 'zoom',          s: 25, want: 0,  what: 'Pinch to zoom in and out, five times. Do not write.' },
-  { id: 'scroll',        s: 20, want: 0,  what: 'Two-finger scroll up and down. Do not write.' }
+  { id: 'palm-rest', s: 20, want: 0,
+    what: 'Rest the side of your hand on the page, as if about to write. Keep the stylus AWAY from the glass. Hold still.' },
+  { id: 'palm-slide', s: 20, want: 0,
+    what: 'Same hand position. Now slide and shift your hand around, the way it moves along a line. Stylus AWAY.' },
+  { id: 'palm-bounce', s: 20, want: 0,
+    what: 'Put your hand down, lift it, put it down again - about once a second, over and over. Stylus AWAY.' },
+  { id: 'pen-only', s: 30, want: -1,
+    what: 'Lift your palm completely OFF the glass. Write normally, stylus only.' },
+  { id: 'pen-small', s: 30, want: -1,
+    what: 'Palm OFF the glass. Small marks only: dots, commas, minus signs, tiny letters.' },
+  { id: 'pen-slow', s: 30, want: -1,
+    what: 'Palm OFF the glass. Write very slowly and carefully.' },
+  { id: 'palm-then-pen', s: 25, want: -1,
+    what: 'Rest your hand FIRST and wait two seconds. THEN start writing, hand still down.' },
+  { id: 'pen-palm-10', s: 40, want: 10,
+    what: 'Hand resting as normal. Draw exactly 10 separate lines. Count them as you go.' },
+  { id: 'zoom', s: 25, want: 0,
+    what: 'No stylus. Pinch with two fingers to zoom in and out, five times.' },
+  { id: 'scroll', s: 20, want: 0,
+    what: 'No stylus. Two fingers, drag up and down to scroll the page.' }
 ];
 
-var drillNow = null, drillTimer = null, drillDone = {};
+var DRILL_LEAD = 3;     /* seconds of "get ready" before recording starts, so the
+                           tap that launched the drill is never in the data */
+
+var drillNow = null, drillTimer = null, drillDone = {}, drillPrep = null;
+var drillPhase = '', drillStrokes0 = 0, drillBlink = false;
+
+function noteStrokeCount() {
+  var nn = activeNote();
+  return nn && nn.strokes ? nn.strokes.length : 0;
+}
+
+/* whether the drill got the answer it asked for, judged on the spot so the
+   iPad says so itself instead of waiting for someone to run the scoreboard */
+function drillVerdict(d, marks) {
+  if (d.want === 0) {
+    return { ok: marks === 0,
+             text: marks === 0 ? 'clean - no stray marks'
+                               : marks + ' stray mark' + (marks === 1 ? '' : 's') + ' - that is the bug' };
+  }
+  if (d.want > 0) {
+    return { ok: marks === d.want,
+             text: marks === d.want ? 'exactly ' + d.want + ', correct'
+                                    : marks + ' marks, wanted ' + d.want +
+                                      (marks > d.want ? ' - the extra are your palm'
+                                                      : ' - the pen was refused') };
+  }
+  return { ok: marks > 0,
+           text: marks > 0 ? marks + ' mark' + (marks === 1 ? '' : 's') + ' recorded'
+                           : 'nothing was drawn at all' };
+}
 
 /* served from a PC on the LAN, so an upload has somewhere to go.
    GitHub failed because a 2012 TLS stack cannot negotiate a modern
@@ -4334,25 +4422,70 @@ function traceUpload(obj, done) {
   } catch (e2) { done(false); }
 }
 
-function drillBanner(txt) {
+function drillBanner(txt, cls) {
   var b = byId('trainBanner');
   if (!b) return;
-  if (!txt) { b.className = ''; return; }
+  if (!txt) { b.className = ''; b.innerHTML = ''; return; }
   b.innerHTML = txt;
-  b.className = 'on';
+  b.className = 'on' + (cls ? ' ' + cls : '');
 }
 
-function drillStart(d) {
+/* the live line. Without it the screen looks dead and there is no way to
+   tell a drill that is recording from one that has silently stopped. */
+function drillTick(d, left) {
+  drillBlink = !drillBlink;
+  var marks = noteStrokeCount() - drillStrokes0;
+  drillBanner(
+    '<span class="dot' + (drillBlink ? '' : ' off') + '">&#9679;</span> REC ' +
+    left + 's &nbsp;&middot;&nbsp; ' + liveTouchCount() + ' on glass' +
+    ' &nbsp;&middot;&nbsp; ' + traceCount + ' samples' +
+    ' &nbsp;&middot;&nbsp; ' + marks + ' mark' + (marks === 1 ? '' : 's') +
+    '<span class="what">' + d.what + '</span>', 'rec');
+}
+
+function drillBegin(d, left) {
+  drillPhase = 'rec';
+  traceReset();
+  drillStrokes0 = noteStrokeCount();
+  drillTick(d, left);
+}
+
+function drillStart(d, noLead) {
   drillNow = d;
   traceOn = true;
-  traceReset();
-  var left = d.s;
-  drillBanner(d.what + '   ' + left + 's');
   if (drillTimer) { clearInterval(drillTimer); drillTimer = null; }
+
+  /* Reset twice, and both are needed. Here, because whatever was on the
+     screen before the drill is not part of it - and the countdown must not
+     be the only thing standing between old input and the recording, or a
+     drill started right after some writing quietly carries that writing
+     into its data. Then again at drillBegin, to drop the get-ready period
+     itself, which is a hand moving into position and nothing else. */
+  traceReset();
+  drillStrokes0 = noteStrokeCount();
+
+  var lead = noLead ? 0 : DRILL_LEAD, left = d.s;
+  if (lead <= 0) drillBegin(d, left);
+  else {
+    drillPhase = 'ready';
+    drillBanner('GET READY &nbsp; <b>' + lead + '</b>' +
+                '<span class="what">' + d.what + '</span>', 'ready');
+  }
+
   drillTimer = setInterval(function () {
+    if (drillPhase === 'ready') {
+      lead--;
+      if (lead > 0) {
+        drillBanner('GET READY &nbsp; <b>' + lead + '</b>' +
+                    '<span class="what">' + d.what + '</span>', 'ready');
+        return;
+      }
+      drillBegin(d, left);
+      return;
+    }
     left--;
     if (left <= 0) { drillStop(); return; }
-    drillBanner(d.what + '   ' + left + 's');
+    drillTick(d, left);
   }, 1000);
 }
 
@@ -4360,56 +4493,125 @@ function drillStop() {
   if (drillTimer) { clearInterval(drillTimer); drillTimer = null; }
   var d = drillNow;
   drillNow = null;
-  drillBanner(null);
+  drillPhase = '';
   if (!d) return;
+
+  var marks = noteStrokeCount() - drillStrokes0;
+  var v = drillVerdict(d, marks);
   var obj;
   try { obj = buildTrace(d.id); }
-  catch (e) { toast('Could not build the recording'); return; }
+  catch (e) { drillBanner(null); toast('Could not build the recording'); return; }
   obj.drill = d.id;
   obj.want = d.want;
-  drillDone[d.id] = true;
-  if (!canUpload()) { showTraceText(JSON.stringify(obj)); return; }
+  obj.marks = marks;
+
+  var rec = { marks: marks, samples: obj.samples.length, ok: v.ok, text: v.text, sent: false };
+  drillDone[d.id] = rec;
+
+  function show() {
+    drillBanner((rec.ok ? '&#10003; ' : '&#10007; ') + d.id + ' &nbsp;&middot;&nbsp; ' +
+                v.text + ' &nbsp;&middot;&nbsp; ' + rec.samples + ' samples' +
+                '<span class="what">' + (rec.sent ? 'sent to the PC' : 'copy the text out') +
+                ' &nbsp;&middot;&nbsp; ' + drillDoneCount() + ' of ' + DRILLS.length +
+                ' recorded</span>', rec.ok ? 'pass' : 'fail');
+    setTimeout(function () { if (!drillNow) drillBanner(null); }, 6000);
+  }
+
+  if (!canUpload()) { show(); showTraceText(JSON.stringify(obj)); return; }
+  drillBanner('sending ' + d.id + '...', 'ready');
   traceUpload(obj, function (ok) {
-    if (ok) toast(d.id + ' sent');
-    else showTraceText(JSON.stringify(obj));
+    rec.sent = ok;
+    show();
+    if (!ok) showTraceText(JSON.stringify(obj));
   });
 }
 
-function showTraining() {
+function drillDoneCount() {
+  var c = 0, k;
+  for (k in drillDone) { if (Object.prototype.hasOwnProperty.call(drillDone, k)) c++; }
+  return c;
+}
+
+function drillShowList() {
+  drillPrep = null;
+  byId('trainPrep').className = '';
+  byId('trainGuide').style.display = '';
+  byId('trainList').style.display = '';
+
   var list = byId('trainList');
-  if (!list) return;
   list.innerHTML = '';
   var i;
   for (i = 0; i < DRILLS.length; i++) {
     (function (d, k) {
+      var rec = drillDone[d.id];
       var b = document.createElement('button');
-      b.className = drillDone[d.id] ? 'done' : '';
-      b.innerHTML = (k + 1) + '. ' + d.id +
-                    '<span class="sub">' + d.what + '  (' + d.s + 's)</span>';
-      b.addEventListener('click', function () {
-        byId('trainOverlay').className = 'overlay';
-        closePanels();
-        drillStart(d);
-      });
+      b.className = rec ? (rec.ok ? 'pass' : 'fail') : '';
+      b.innerHTML = (k + 1) + '. ' + d.id + '  (' + d.s + 's)' +
+        '<span class="sub">' + d.what + '</span>' +
+        (rec ? '<span class="res">' + (rec.ok ? '&#10003; ' : '&#10007; ') + rec.text +
+               ' &middot; ' + rec.samples + ' samples &middot; ' +
+               (rec.sent ? 'sent' : 'not sent') +
+               ' &middot; tap to redo</span>' : '');
+      b.addEventListener('click', function () { drillShowPrep(d); });
       list.appendChild(b);
     })(DRILLS[i], i);
   }
-  byId('trainHint').innerHTML = canUpload()
-    ? 'Each drill records itself and sends it to the PC.'
-    : 'Not on the test server - drills will ask you to copy the text out.';
+
+  byId('trainProgress').innerHTML = drillDoneCount() + ' of ' + DRILLS.length +
+    ' recorded &nbsp;&middot;&nbsp; ' +
+    (canUpload() ? 'connected to the PC' : 'NOT on the test server');
+
+  byId('trainGuide').innerHTML = canUpload()
+    ? '<b>What this is.</b> Ten short drills. Each one tells you what to do with ' +
+      'your hand and the stylus, records itself, and sends the recording to the PC ' +
+      'on its own.<br><br>' +
+      '<b>Why it matters.</b> A drill knows the right answer before you start, so ' +
+      'nothing has to be explained afterwards. A stray mark during a palm drill is ' +
+      'a failure, full stop.<br><br>' +
+      '<b>How.</b> Tap a drill, get your hand in position, tap the red button. ' +
+      'A countdown gives you three seconds, then a red bar records and shows you ' +
+      'live what it is picking up. Green means the drill got what it asked for.'
+    : '<b>Not on the test server.</b> These still work, but each drill will show ' +
+      'its recording as text for you to copy out by hand. To send them ' +
+      'automatically, open this page from the PC address instead of the web link.';
+
   byId('trainOverlay').className = 'overlay on';
 }
+
+function drillShowPrep(d) {
+  drillPrep = d;
+  byId('trainGuide').style.display = 'none';
+  byId('trainList').style.display = 'none';
+  byId('trainPrep').className = 'on';
+  byId('trainPrepName').innerHTML = 'DRILL &nbsp;' + d.id.toUpperCase() +
+                                    ' &nbsp;&middot;&nbsp; ' + d.s + ' SECONDS';
+  byId('trainPrepWhat').innerHTML = d.what;
+  byId('trainProgress').innerHTML = d.want === 0
+    ? 'Any mark at all during this drill is a failure.'
+    : (d.want > 0 ? 'Exactly ' + d.want + ' marks should exist at the end.'
+                  : 'Only the pen is on the glass, so every mark should appear.');
+}
+
+function showTraining() { drillShowList(); }
 
 /* tooling hook: the harness drives drills without waiting on the timer */
 window.__mnDrill = {
   list: DRILLS,
-  start: function (id) {
+  start: function (id, noLead) {
     var i;
     for (i = 0; i < DRILLS.length; i++) {
-      if (DRILLS[i].id === id) { drillStart(DRILLS[i]); return true; }
+      if (DRILLS[i].id === id) { drillStart(DRILLS[i], noLead); return true; }
     }
     return false;
   },
+  prep: function (id) {
+    var i;
+    for (i = 0; i < DRILLS.length; i++) {
+      if (DRILLS[i].id === id) { drillShowPrep(DRILLS[i]); return true; }
+    }
+    return false;
+  },
+  done: function () { return drillDone; },
   stop: drillStop
 };
 
@@ -5117,6 +5319,14 @@ byId('exportCloseBtn').addEventListener('click', function () { exportOverlay.cla
 byId('traceCloseBtn').addEventListener('click', function () { traceOverlay.className = 'overlay'; });
 byId('trainCloseBtn').addEventListener('click', function () {
   byId('trainOverlay').className = 'overlay';
+});
+byId('trainBackBtn').addEventListener('click', drillShowList);
+byId('trainStartBtn').addEventListener('click', function () {
+  var d = drillPrep;
+  if (!d) return;
+  byId('trainOverlay').className = 'overlay';
+  closePanels();
+  drillStart(d);
 });
 byId('backupCloseBtn').addEventListener('click', function () { backupOverlay.className = 'overlay'; });
 photoInput.addEventListener('change', function () {
