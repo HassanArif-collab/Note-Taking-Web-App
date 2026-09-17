@@ -1059,6 +1059,32 @@ var SC = {
   RIGID_ANGLE:     0.45,   /* radians of agreement between displacements */
   RIGID_RATIO:     1.8,    /* fastest / slowest magnitude */
   RIGID_MIN_MOVE:  6,
+  NIB_DY:          8,      /* The glass reports the contact about 8px ABOVE
+                              where the nib is aimed, so ink landed high.
+                              Measured over three aim drills - 9, 8 and 8 -
+                              with a horizontal bias of roughly zero, which
+                              is the shape of a real offset rather than
+                              scatter. The first two were taken against a
+                              "+" character, which sits wherever its font
+                              puts it in the line box and could have been
+                              the whole effect; the third used two bars
+                              crossing at an exact point and came back the
+                              same, so it is the hardware or the angle the
+                              disc is sighted through, not typography.
+                              Applied in screen pixels before the zoom
+                              divide, because the offset is physical: it is
+                              8px of glass whatever the page is zoomed to. */
+  SLOW_NET:        10,     /* Writing slowly on purpose runs at 0.043-0.061
+                              px/ms in the recordings, and COMMIT_SPEED is
+                              0.09, so the main lane never fires for it. Such
+                              a stroke used to reach the page only when a
+                              chance burst lifted the windowed median over
+                              the bar - median wait 762ms, worst 1351ms, and
+                              erratic, which is what "very bad" meant.
+                              A contact nobody suspects, that has gone this
+                              far in a consistent direction, is writing. It
+                              does not also have to be fast. */
+  SLOW_COH:        0.50,
   DECISIVE_SPEED:  0.12,   /* decisive lane needs real writing speed too.
                               0.05 px/ms is 50 px/s - slower than anyone
                               writes, and it let every palm slide ink. */
@@ -1175,6 +1201,21 @@ var SC = {
                               commit normally; if it did not, it was not a pen. */
   SHORT_COH:       0.55,   /* ...going somewhere, not milling about */
   SHORT_STRAIGHT:  0.5,    /* ...and most of its travel was progress */
+  PAN_TO_PINCH:    26,     /* How far the separation must have changed, in
+                              total, before a gesture that began as a pan may
+                              scale at all. */
+  PINCH_RATIO:     0.8,    /* ...and it must have changed faster than the
+                              fingers moved together. That is what actually
+                              separates the two gestures: pinching changes
+                              the distance between the fingers and leaves
+                              their midpoint alone, while scrolling carries
+                              the midpoint across the page and changes the
+                              distance only by the amount hands wobble.
+                              Asking merely "has the separation changed by
+                              30px" was not enough - it is satisfied by
+                              wobble over a long scroll, and it refused an
+                              anchored pinch whose spread had mostly
+                              happened before the gesture engaged. */
   PINCH_MAX_SPAN:  430,    /* A pinch is two fingers of ONE hand. A stylus in
                               the top right and a palm in the bottom left, 540px
                               apart, closed to 378px while writing and zoomed the
@@ -1249,6 +1290,7 @@ var settings = {
   spacing: 38,
   template: TPL_RULED,
   guideDots: true,
+  nibFix: true,
   paperDark: false,
   paperColor: 0,
   uiDark: false,
@@ -1415,6 +1457,7 @@ function applyStoredSettings(set) {
     if (data.set.spacing === 32 || data.set.spacing === 38 || data.set.spacing === 44) settings.spacing = data.set.spacing;
     if (typeof data.set.template === 'number') settings.template = data.set.template;
     if (typeof data.set.guideDots === 'boolean') settings.guideDots = data.set.guideDots;
+    if (typeof data.set.nibFix === 'boolean') settings.nibFix = data.set.nibFix;
     if (typeof data.set.paperColor === 'number' && data.set.paperColor >= 0 && data.set.paperColor < PAPERS.length) {
       settings.paperColor = data.set.paperColor;
     } else if (typeof data.set.paperDark === 'boolean') {
@@ -2255,9 +2298,10 @@ function currentPenWidth() {
 }
 
 function docPoint(t) {
+  var dy = settings.nibFix ? SC.NIB_DY : 0;
   return {
     x: (t.clientX - wrapRect.left) / zoom + scrollX,
-    y: (t.clientY - wrapRect.top) / zoom + scrollY
+    y: (t.clientY + dy - wrapRect.top) / zoom + scrollY
   };
 }
 function docToScreen(x, y) {
@@ -2983,6 +3027,12 @@ function tryCommit(st, now) {
   /* Until the window is full the median is not yet meaningful, and
      FAST and DECISIVE had no age gate at all - so one centroid jump
      could commit a contact that had barely existed. */
+  /* The speed window stays in front of every lane, including the slow one.
+     Letting the slow lane skip it looked free - it asks about distance and
+     direction, not speed - and cost fourteen extra palm marks across the
+     recordings, because a palm creeping in an unsuspected spot reaches a
+     small net displacement perfectly well. Five samples of history is the
+     cheapest evidence there is. */
   if (st.sp.length < SPEED_WIN) return;
   var age = now - st.t0;
   var boost = st.suspect ? SC.SUSPECT_BOOST : 1;
@@ -3003,7 +3053,17 @@ function tryCommit(st, now) {
   if ((age > needAge && st.vel > SC.COMMIT_SPEED * boost &&
        st.coh > SC.COMMIT_COH && st.net > SC.COMMIT_NET * boost) ||
       (st.net > SC.FAST_NET * boost && st.vel > SC.FAST_SPEED * boost) ||
-      (st.net > SC.DECISIVE_NET * boost && st.vel > SC.DECISIVE_SPEED * boost)) {
+      (st.net > SC.DECISIVE_NET * boost && st.vel > SC.DECISIVE_SPEED * boost) ||
+      /* Slow writing curves; a palm sliding does not. Without this the
+         slow lane let a steady straight drag commit wherever nothing
+         happened to be suspicious - four recorded palm slides went
+         straight through. The cost is that a slow, deliberate, perfectly
+         straight line - an underline, a fraction bar - has to wait for
+         one of the other lanes, which is the same trade VETO_STRAIGHT
+         already makes for suspects. */
+      (!st.suspect && settings.palmLevel !== PALM_STRICT &&
+       age > needAge && st.net > SC.SLOW_NET && st.coh > SC.SLOW_COH &&
+       inkStraightness(st) < SC.VETO_STRAIGHT)) {
     /* The hand-written lanes decide WHEN something looks like writing.
        The fitted score decides whether this particular contact, given
        everything known about it at once, is the one doing the writing.
@@ -3340,13 +3400,16 @@ function gestureMembers() {
   return out;
 }
 
-function engageGesture(ids, now, pairDist) {
+function engageGesture(ids, now, pairDist, kind) {
   var c = gestureCentroid(true);
   if (!c) return;
   var i, o;
   gesture = {
     lastCx: c.x, lastCy: c.y,
     lastD: pairDist || 0, lastT: now,
+    baseD: pairDist || 0,
+    sumD: 0, sumC: 0,
+    kind: kind || 'pan',
     wide: (pairDist || 0) >= SC.PINCH_MAX_SPAN,
     vx: 0, vy: 0, fromHand: false, key: null
   };
@@ -3405,7 +3468,12 @@ function tryPinch(now) {
   if (Math.abs(d - pinchTrack.d0) < SC.PINCH_DELTA) return false;
 
   discardAllActiveInk(now);
-  engageGesture([a.id, b.id], now, d);
+  /* This is the OTHER pinch detector - the one that outranks a stroke
+     already holding the pen, and the reason "the palm draws" and "it will
+     not zoom" stopped being the same complaint. It has its own separation
+     test above and is every bit as much a pinch as the inline one; left
+     untagged it defaulted to 'pan' and silently stopped zooming. */
+  engageGesture([a.id, b.id], now, d, 'pinch');
   pinchTrack = null;
   return true;
 }
@@ -3467,7 +3535,7 @@ function detectGesture(now) {
         if (d1 * d2 < -0.5 &&
             converge > SC.PINCH_CONVERGE &&
             vecs[0].rv.v > SC.GEST_MIN_SPEED && vecs[1].rv.v > SC.GEST_MIN_SPEED) {
-          engageGesture([vecs[0].id, vecs[1].id], now, al);
+          engageGesture([vecs[0].id, vecs[1].id], now, al, 'pinch');
           return;
         }
         if (d1 * d2 < -0.5) {
@@ -3504,7 +3572,7 @@ function detectGesture(now) {
   var pair = 0;
   var mo1 = touchStates[ms[0]], mo2 = touchStates[ms[1]];
   if (mo1 && mo2) pair = dist(mo1.cx, mo1.cy, mo2.cx, mo2.cy);
-  engageGesture(ids, now, pair);
+  engageGesture(ids, now, pair, 'pan');
 }
 
 function gestureCentroid(includeProbes) {
@@ -3544,12 +3612,20 @@ function applyGesture(now) {
     gesture.key = key;
     gesture.lastCx = c.x; gesture.lastCy = c.y; gesture.lastT = now;
     gesture.lastD = m0.length >= 2 ? dist(m0[0].cx, m0[0].cy, m0[1].cx, m0[1].cy) : 0;
+    /* baseD belongs to the pair that has just been replaced, and leaving it
+       behind is how a scroll turned into a zoom: the separation of the NEW
+       pair differs from the old one by far more than a spread ever would,
+       so the gesture promoted itself to a pinch on a difference that never
+       happened. A flickering palm made that happen sixteen times in one
+       twenty second scroll. */
+    gesture.baseD = gesture.lastD;
     return;
   }
 
   var dx = c.x - gesture.lastCx;
   var dy = c.y - gesture.lastCy;
   var dt = Math.max(now - gesture.lastT, 4);
+  gesture.sumC += Math.sqrt(dx * dx + dy * dy);
 
   var ms = gestureMembers();
 
@@ -3557,7 +3633,25 @@ function applyGesture(now) {
          under the centroid stays under the centroid. --- */
   if (ms.length >= 2) {
     var d = dist(ms[0].cx, ms[0].cy, ms[1].cx, ms[1].cy);
-    if (!gesture.wide && gesture.lastD > 30 && d > 30) {
+    /* Two fingers dragging the page apart by a few pixels is not a pinch.
+       A scroll engages through the pan branch, and zoom used to be applied
+       from any change in separation at all - so every two-finger scroll
+       crept the zoom, which is what "it zooms when it should only scroll"
+       was. A gesture that began as a pan has to actually spread before it
+       is allowed to scale, and then it becomes a pinch and stays one. */
+    /* Only a gesture the pinch detector actually recognised may scale.
+       Promoting a pan to a pinch once it had spread "enough" was tried
+       two ways - a distance threshold, then separation-versus-centroid
+       travel - and both drifted the zoom across a plain scroll, because
+       with a hand resting on the glass the pair of contacts being measured
+       keeps changing underneath the gesture and every swap looks like a
+       spread. A scroll now cannot zoom at all, by construction.
+       The cost is the anchored pinch - one finger planted, the other
+       sliding - which no longer scales. It was never reliably separable
+       from a pen stroke beside a resting finger anyway, which is what the
+       note above tryPinch has said all along. */
+    if (gesture.kind !== 'pinch') { gesture.lastD = d; }
+    else if (!gesture.wide && gesture.lastD > 30 && d > 30) {
       /* no real pinch scales the page by more than a few percent in one
          frame; anything larger is a bad measurement, not a gesture */
       var f = lim(d / gesture.lastD, 0.85, 1.18);
@@ -5487,6 +5581,13 @@ function buildMoreMenu() {
     { lbl: 'Palm rejection', val: PALM_NAMES[settings.palmLevel], act: function () { settings.palmLevel = nextPalmLevel(settings.palmLevel); applyPalmUI(); afterSettingChange(); } },
     { lbl: 'Writing hand', val: HAND_NAMES[settings.hand], act: function () { settings.hand = (settings.hand + 1) % 3; afterSettingChange(); } },
     { lbl: 'Touch guide', val: settings.guideDots ? 'On' : 'Off', act: function () { settings.guideDots = !settings.guideDots; hidePendingDot(); afterSettingChange(); } },
+    { lbl: 'Nib offset', val: settings.nibFix ? SC.NIB_DY + 'px down' : 'Off',
+      act: function () {
+        settings.nibFix = !settings.nibFix;
+        toast(settings.nibFix ? 'Ink shifted ' + SC.NIB_DY + 'px down'
+                              : 'Ink drawn where the glass reports it');
+        afterSettingChange();
+      } },
     { lbl: 'Testing drills', val: canUpload() ? 'server' : 'paste', act: showTraining },
     { lbl: 'Send as I write', val: !canUpload() ? 'no server' : (liveOn ? 'On' : 'Off'),
       act: function () {

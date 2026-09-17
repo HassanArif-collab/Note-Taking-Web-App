@@ -110,6 +110,7 @@ function replay(trace, opts, done) {
       dots: dots,
       gestures: gestures,
       zoom: mine ? mine.zoom : 1,
+      own: mine,                      /* what THIS build decided, and when */
       device: deviceSide(trace)
     });
   }, opts.settleMs || 400);

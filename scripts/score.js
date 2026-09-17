@@ -95,6 +95,25 @@ function scoreOne(file, next) {
     }
     var zoomed = Math.abs((r.zoom || 1) - 1) > 0.02;
 
+    /* How long the page stayed blank after the pen touched it. A drill can
+       draw every mark it was asked for and still feel broken, and this is
+       the number that says so: pen-slow scored 7 of 8 while taking three
+       quarters of a second to show anything.
+       Read from THIS build's verdicts, not from the ones baked into the
+       recording - the first version of this measured what the iPad decided
+       months ago and so could never move, whatever was changed. */
+    var waits = [], wk, down0 = {};
+    var own = (r.own && r.own.samples) ? r.own.samples : [];
+    for (wk = 0; wk < own.length; wk++) {
+      var sr = own[wk];
+      if (sr[0] === 0) { down0[sr[1]] = sr[4]; continue; }
+      if (sr[0] === 'v' && (sr[2] === 'ink' || sr[2] === 'shortmark') &&
+          down0[sr[1]] != null) waits.push(sr[3] - down0[sr[1]]);
+    }
+    waits.sort(function (p, q) { return p - q; });
+    var wMed = waits.length ? waits[Math.floor(waits.length / 2)] : 0;
+    var wMax = waits.length ? waits[waits.length - 1] : 0;
+
     var verdict, detail, ok;
     if (want === 0) {
       ok = (drew === 0);
@@ -139,6 +158,11 @@ function scoreOne(file, next) {
       verdict = ok ? 'PASS' : 'FAIL';
       detail = drew + ' of ' + marks + ' pen contacts drew';
       if (marks > drew) detail += '  (' + (marks - drew) + ' lost)';
+      if (waits.length) {
+        detail += '  |  wait ' + wMed + 'ms (worst ' + wMax + ')';
+        if (wMed > 250) ok = false;        /* drawn late is still broken */
+        verdict = ok ? 'PASS' : 'FAIL';
+      }
     } else if (trace.targets && trace.targets.length) {
       /* the only drill that knows where the pen was AIMED. A consistent
          offset is the disc reporting a place the nib is not, which is

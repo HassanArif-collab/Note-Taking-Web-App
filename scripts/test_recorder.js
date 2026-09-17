@@ -151,8 +151,33 @@ for (i = 1; i < MOVER.length; i++) {
 p7.up(310); p7.up(311);
 check('a finger sliding during a pinch does not ink (real data)',
       p7.strokes().length === 0, p7.strokes().length + ' strokes');
+/* Only a gesture a pinch detector actually recognised may scale. Promoting
+   a pan to a pinch once it had "spread enough" drifted the zoom across
+   every plain scroll - with a hand resting on the glass the pair being
+   measured keeps changing, and each swap looks like a spread. Tried as a
+   distance threshold and again as separation-versus-centroid travel; both
+   leaked. An anchored pinch still zooms, because tryPinch recognises it on
+   its own separation test rather than by promotion. */
 check('...and that pinch actually zooms', Math.abs(zoomOf(p7) - z7) > 0.02,
       z7 + ' -> ' + zoomOf(p7));
+
+/* A two-finger scroll must not zoom, however long it goes on. Fingers
+ * dragging a page always drift apart and together a little, and the zoom
+ * used to be recomputed from that drift on every frame - a recorded
+ * twenty second scroll ended at 0.87, having wandered the whole way. */
+var sc = fresh();
+var zsc = zoomOf(sc);
+sc.down(40, 300, 400);
+sc.down(41, 460, 405);
+for (k = 1; k <= 40; k++) {
+  sc.tick(16);
+  /* both travelling together, with the wobble a real hand has */
+  sc.moveTo(40, 300 + (k % 3) - 1, 400 - k * 6);
+  sc.moveTo(41, 460 - (k % 3) + 1, 405 - k * 6);
+}
+sc.up(40); sc.up(41);
+check('a two-finger scroll does not zoom', Math.abs(zoomOf(sc) - zsc) < 0.005,
+      zsc + ' -> ' + zoomOf(sc));
 
 /* ---- stylus session, replayed from the iPad ----
  * A stylus means MORE contacts on the glass, not fewer: nib, palm heel,
