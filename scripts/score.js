@@ -74,15 +74,34 @@ function scoreOne(file, next) {
     for (k = 0; k < ids.length; k++) {
       if (isMark(r.contacts[ids[k]], r.lastT)) marks++;
     }
+    /* a contact's LAST verdict is what became of it. ink and shortmark
+       both mean a mark was drawn; dwell, palm, jumping and the rest mean
+       it was taken back. Counting shortmark as a rejection - which the
+       first version of this did - reported the rescue of a small mark as
+       a failure to draw it. */
+    var drew = 0, taken = 0, why = {}, id, v;
+    for (id in r.verdicts) {
+      if (!Object.prototype.hasOwnProperty.call(r.verdicts, id)) continue;
+      v = r.verdicts[id];
+      if (v === 'ink' || v === 'shortmark') drew++;
+      else { taken++; why[v] = (why[v] || 0) + 1; }
+    }
+    drew += r.dots;
+
     var got = r.strokes.length;
+    var undone = 0, uq;
+    for (uq = 0; uq < (trace.samples || []).length; uq++) {
+      if (trace.samples[uq][0] === 'v' && trace.samples[uq][2] === 'undo') undone++;
+    }
     var zoomed = Math.abs((r.zoom || 1) - 1) > 0.02;
 
     var verdict, detail, ok;
     if (want === 0) {
-      ok = (got === 0);
+      ok = (drew === 0);
       verdict = ok ? 'PASS' : 'FAIL';
-      detail = got + ' stray mark' + (got === 1 ? '' : 's') +
-               ' from ' + ids.length + ' contacts';
+      detail = drew + ' stray mark' + (drew === 1 ? '' : 's') +
+               ' from ' + ids.length + ' contacts' +
+               (undone ? '  (' + undone + ' you undid)' : '');
       if (drill === 'zoom') {
         if (!zoomed) { ok = false; verdict = 'FAIL'; detail += ', and it never zoomed'; }
         else detail += ', zoom ok';
@@ -96,24 +115,24 @@ function scoreOne(file, next) {
       detail = got + ' of ' + want + ' strokes';
       if (got > want) detail += '  (' + (got - want) + ' from the palm)';
       if (got < want) detail += '  (' + (want - got) + ' refused)';
-    } else {
+    } else if (want === -1) {
       /* pen only: every contact that was a mark should have drawn */
-      ok = (marks > 0 && got >= marks);
+      ok = (marks > 0 && drew >= marks);
       verdict = ok ? 'PASS' : 'FAIL';
-      detail = got + ' of ' + marks + ' pen contacts drew';
-      if (marks > got) detail += '  (' + (marks - got) + ' lost)';
+      detail = drew + ' of ' + marks + ' pen contacts drew';
+      if (marks > drew) detail += '  (' + (marks - drew) + ' lost)';
+    } else {
+      /* want -2: the hand and the pen are both on the glass, so no count
+         is knowable from the recording alone. Report, do not judge. */
+      ok = true;
+      verdict = 'INFO';
+      detail = drew + ' marks drawn, ' + taken + ' contacts taken back, ' +
+               ids.length + ' contacts total';
     }
 
-    /* which rule ate them, so a failure names its own cause */
-    var why = {}, id;
-    for (id in r.verdicts) {
-      if (!Object.prototype.hasOwnProperty.call(r.verdicts, id)) continue;
-      var v = r.verdicts[id];
-      if (v === 'ink') continue;
-      why[v] = (why[v] || 0) + 1;
-    }
     var whyList = [], w;
     for (w in why) { if (Object.prototype.hasOwnProperty.call(why, w)) whyList.push(w + ' x' + why[w]); }
+    whyList.sort();
 
     /* a fixture is motion I invented, which is how the engine went wrong
        in the first place. It keeps the scoreboard runnable before anyone
@@ -147,10 +166,13 @@ function report() {
       console.log('  ' + pad(r.file, 16) + pad('SKIP', 6) + r.err);
       continue;
     }
-    if (r.ok) passed++; else failed++;
+    if (r.verdict === 'INFO') { /* reported, not judged */ }
+    else if (r.ok) passed++; else failed++;
     console.log('  ' + pad(r.drill, 16) + pad(r.verdict, 6) + r.detail +
                 (r.synthetic ? '   (synthetic)' : ''));
-    if (!r.ok && r.why) console.log('  ' + pad('', 22) + 'rejected by: ' + r.why);
+    if (r.why && (!r.ok || r.verdict === 'INFO')) {
+      console.log('  ' + pad('', 22) + 'taken back by: ' + r.why);
+    }
   }
   console.log('');
   console.log('  ' + passed + ' of ' + (passed + failed) + ' drills pass' +
