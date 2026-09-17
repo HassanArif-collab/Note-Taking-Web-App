@@ -2524,9 +2524,39 @@ function contactFeatures(st, now) {
 }
 
 /* trained by scripts/train.js against traces/ - do not hand-edit */
-var PEN_B = 1.4198;
-var PEN_W = [0.6114, -0.0143, -0.3401, 0.0598, 0.4603, -0.4665, 0.0889, -0.4274, 0.1739, -0.1172, -2.9796, -3.7789, -1.9209, 0.0000, 0.0000, 0.6572, 0.0705, -0.1003, -0.8602, 0.0000, -0.1790, -0.6145];
-var PEN_TRAINED = true;
+var PEN_B = -0.3116;
+var PEN_W = [0.8332, 0.2607, -0.5587, 0.0687, 0.9586, -1.3160, 0.7414, -0.6022, 0.0114, -0.7698, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 1.5443, -0.8113, -0.7325, -0.9848, 0.0000, -0.3118, -1.2964];
+/* OFF, and the reason matters more than the switch.
+ *
+ * Fitted, this scored 100% of pen contacts kept and 86% of palm contacts
+ * stopped on held-out recordings, and it was wrong. Its strongest inputs
+ * by far were "how many contacts are on the glass" and "how close the
+ * nearest one is" - and those are 0.00 for every pen drill and 0.57 for
+ * every palm drill, because the pen drills were recorded with the hand
+ * OFF the glass and the palm drills with nothing but hand. The model
+ * learned to recognise the DRILL, not the contact.
+ *
+ * On a real page the hand is always down, so every contact looks like a
+ * palm drill and the pen is refused. Reported as "the pen is not working
+ * with the palm on it now", which is exactly what this predicts.
+ *
+ * pen-palm-10 was supposed to catch that and reported PASS, because
+ * score.js counted TEN MARKS and never asked whose. Replaying it shows
+ * contacts alive for three and a half seconds, travelling 432px and
+ * ending 54px from where they started, drawing happily. Ten marks, the
+ * wrong ten.
+ *
+ * Mask the leaking features and the fit collapses to 54% pen kept and
+ * 62% palm stopped - near chance. So the honest conclusion is that the
+ * features which GENERALISE do not separate pen from palm on this
+ * hardware, and no amount of fitting fixes that.
+ *
+ * What would turn this back on: recordings that carry per-contact labels
+ * WITH THE HAND DOWN. The aim drill can provide them - crosses are at
+ * known positions, so a contact that lands on one is the pen and anything
+ * else at that moment is not. Until such recordings exist this stays
+ * false, and penScore returns -1, and the hand-written rules decide. */
+var PEN_TRAINED = false;
 
 function penScore(st, now) {
   if (!PEN_TRAINED) return -1;          /* untrained: the old rules decide */

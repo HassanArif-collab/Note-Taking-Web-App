@@ -110,11 +110,29 @@ function scoreOne(file, next) {
         ok = false; verdict = 'FAIL'; detail += ', and it zoomed when it should only scroll';
       }
     } else if (want > 0) {
-      ok = (got === want);
-      verdict = ok ? 'PASS' : 'FAIL';
-      detail = got + ' of ' + want + ' strokes';
-      if (got > want) detail += '  (' + (got - want) + ' from the palm)';
-      if (got < want) detail += '  (' + (want - got) + ' refused)';
+      /* Counting marks is not the same as counting the RIGHT marks, and
+         this line once reported "10 of 10  PASS" on a recording where the
+         contacts that drew had been alive for three and a half seconds
+         and ended 54px from where they started. Ten marks, the wrong ten.
+         With the hand and the pen both on the glass and no per-contact
+         label, that cannot be checked - so it is no longer allowed to say
+         PASS. It reports, and names what drew. */
+      var longest = 0, slowest = 0, kk;
+      for (kk = 0; kk < ids.length; kk++) {
+        var c2 = r.contacts[ids[kk]];
+        var v2 = r.verdicts[ids[kk]];
+        if (v2 !== 'ink' && v2 !== 'shortmark') continue;
+        var life = (c2.upAt == null ? r.lastT : c2.upAt) - c2.downAt;
+        if (life > longest) longest = life;
+        if (c2.path > 60 && c2.net / Math.max(c2.path, 1) < 0.25) slowest++;
+      }
+      ok = true;
+      verdict = 'INFO';
+      detail = got + ' marks for ' + want + ' drawn';
+      if (got !== want) detail += '  (' + Math.abs(got - want) +
+                                  (got > want ? ' too many)' : ' missing)');
+      detail += '  |  longest contact that drew ' + longest + 'ms';
+      if (slowest) detail += '  |  ' + slowest + ' went nowhere and still drew';
     } else if (want === -1) {
       /* pen only: every contact that was a mark should have drawn */
       ok = (marks > 0 && drew >= marks);
