@@ -365,15 +365,17 @@ input { font: inherit; }
   z-index: 25; display: none; pointer-events: none;
 }
 #trainTargets.on { display: block; }
-#trainTargets .tgt {
-  position: absolute; width: 27px; height: 27px; margin: -14px 0 0 -14px;
-  color: #E2231A; font-size: 26px; line-height: 27px; text-align: center;
-  font-weight: 300; opacity: 0.85;
+/* Two bars, not a "+" character. A glyph sits wherever its font puts it
+   inside the line box - typically a few px above the middle - so a text
+   crosshair measures the font as much as the stylus, and the first aim
+   run could not tell an 8px hardware bias from an 8px typographic one.
+   Bars crossing at the element's own origin have no such ambiguity. */
+#trainTargets .tgt { position: absolute; width: 0; height: 0; }
+#trainTargets .tgt i, #trainTargets .tgt b {
+  position: absolute; display: block; background: #E2231A; opacity: 0.9;
 }
-#trainTargets .tgt b {
-  position: absolute; left: 12px; top: 12px; width: 3px; height: 3px;
-  background: #E2231A; border-radius: 2px; font-size: 0;
-}
+#trainTargets .tgt i { left: -15px; top: -1px; width: 31px; height: 3px; }
+#trainTargets .tgt b { left: -1px; top: -15px; width: 3px; height: 31px; }
 #backupHint { color: #FFFFFF; font-size: 17px; font-weight: 600; margin-bottom: 4px; }
 #backupInfo { color: #D8DCE2; font-size: 13px; margin-bottom: 10px; min-height: 17px; }
 #backupText {
@@ -4399,7 +4401,7 @@ function drillTargets() {
   for (gy = 0; gy < 3; gy++) {
     for (gx = 0; gx < 3; gx++) {
       out.push([Math.round(wrapRect.left + viewW * (0.18 + 0.32 * gx)),
-                Math.round(wrapRect.top + viewH * (0.18 + 0.32 * gy))]);
+                Math.round(wrapRect.top + (viewH - wrapRect.top) * (0.14 + 0.34 * gy))]);
     }
   }
   return out;
@@ -4416,9 +4418,15 @@ function drillShowTargets(list) {
   for (i = 0; i < list.length; i++) {
     var d = document.createElement('div');
     d.className = 'tgt';
-    d.style.left = (list[i][0] - wrapRect.left) + 'px';
-    d.style.top = (list[i][1] - wrapRect.top) + 'px';
-    d.innerHTML = '+<b>.</b>';
+    /* The layer is a sibling of the overlays, not a child of the canvas
+       wrapper, so its origin is the top-left of the screen and not of the
+       page. Subtracting wrapRect here drew every cross wrapTop pixels
+       above the spot that got recorded as its position - the taps were
+       accurate and the scoreboard called them all misses. Place the cross
+       at the client coordinate it is recorded at, and the two agree. */
+    d.style.left = list[i][0] + 'px';
+    d.style.top = list[i][1] + 'px';
+    d.innerHTML = '<i></i><b></b>';
     box.appendChild(d);
   }
   box.className = 'on';
