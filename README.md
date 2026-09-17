@@ -78,9 +78,30 @@ theme, writing hand, and palm rejection.
 
 | Setting | What it means |
 |---------|---------------|
-| **Max** (default) | Normal. Use this. |
+| **Max** (default) | Normal. Use this when writing bare-handed. |
 | **Strict** | Refuses more of your hand, but also refuses very slow deliberate strokes. Turn it on if your palm marks the page more often than your slow strokes matter. |
-| **Off** | Everything draws. For testing, or with a mouse. |
+| **Glove** | **Use this if you are wearing an artist's glove.** Every contact is the pen, because your hand is not on the glass to be mistaken for one. |
+
+### Glove
+
+This is not a degraded mode — it is the one with no guessing in it, and
+everything the guessing costs comes straight back:
+
+| | Max | Glove |
+|---|---|---|
+| Ink appears | 160–320ms after the pen lands | on the first sample |
+| Small marks kept | 16 of 27 | all of them |
+| Strokes retracted mid-word | sometimes | never |
+| Stray marks from your hand | ~4 per 10 lines | none, because your hand never touches |
+
+Everything that is not rejection still works: two fingers pinch and scroll,
+a two-finger tap undoes, and a tap leaves a dot.
+
+The rejection engine exists only because this iPad reports no pressure, no
+contact size and no stylus id — it has to infer from a moving point what a
+piece of fabric simply prevents. A ~Rs. 300 glove supplies what the hardware
+cannot, and the software gets simpler, faster and more accurate the moment it
+no longer has to guess.
 
 Tap the **Palm** chip in the top bar to cycle between them.
 

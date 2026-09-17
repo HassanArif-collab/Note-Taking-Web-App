@@ -888,8 +888,16 @@ var STORAGE_KEY_V1 = 'mathnotes_v1';
    no veto, no arbitration. It read as partial protection while giving
    essentially none, which is worse than offering nothing, so it is
    gone. Off stays for testing and for a mouse. */
+/* PALM_OFF is "Glove": every contact is the pen, because the hand is not
+   on the glass to be confused with it. It is not a degraded mode - it is
+   the one with no guessing in it, and everything the guessing costs comes
+   straight back: ink from the first sample instead of 160-320ms later,
+   every small mark kept instead of sixteen of twenty-seven, no stroke
+   ever retracted mid-word. The rejection engine exists only because the
+   hardware reports no pressure, no contact size and no stylus id. A
+   300-rupee glove supplies what the hardware cannot. */
 var PALM_OFF = 0, PALM_MED = 1, PALM_MAX = 2, PALM_STRICT = 3;
-var PALM_NAMES = ['Off', 'Med', 'Max', 'Strict'];
+var PALM_NAMES = ['Glove', 'Med', 'Max', 'Strict'];
 
 var PAGE_H   = 1000;   /* document px per page  */
 var GAP_H    = 20;     /* gray gap between pages */
@@ -3177,6 +3185,24 @@ function finalizeInk(st, now) {
   delete inkNow[st.id];
   if (!ink) return;
   var s = ink.stroke;
+
+  /* Two fingers landing together is the undo gesture, and in Glove mode
+     both of them are already inking by the time it is recognised - so
+     each would leave a dot, and the undo that follows would remove one of
+     those dots instead of the stroke the user wanted gone. dotIsCredible
+     refuses a dot for the same reason on every other level; this is the
+     same rule reaching the path Glove mode actually takes. */
+  if (twoTap && settings.palmLevel === PALM_OFF) { requestRender(); return; }
+
+  /* A stroke that never went anywhere is a dot, and a one-point stroke
+     draws nothing at all - there is no segment to render. In Glove mode
+     this is the whole of the dot path, since a tap inks immediately
+     rather than going through the tap-dot queue, and without this a
+     decimal point simply vanished. */
+  if (s.pts.length < 2 || st.pathLen < SC.TAP_PATH) {
+    flushDot({ x: s.pts[0][0], y: s.pts[0][1], t: now });
+    return;
+  }
   var n = activeNote();
   if (!n) return;
   /* shape assist mutates the points before the stroke lands in
@@ -3486,8 +3512,18 @@ function detectGesture(now) {
      diagnosed from these, so each reason is recorded - but only when
      at least two fingers are actually down, or the log would fill
      with ordinary single-touch writing. */
-  if (settings.palmLevel === PALM_OFF) return;
   var live = liveTouchCount();
+
+  /* In Glove mode a single contact is always the pen, so it inks from the
+     first sample and never has to prove anything. That leaves exactly one
+     thing a second contact can mean: a gesture. Nothing else is on the
+     glass to land by accident. So two fingers take the ink back and zoom
+     or scroll, with none of the suspicion machinery in between - which is
+     also why gestures used to be switched off entirely down here, and why
+     Glove mode could not zoom at all. */
+  if (settings.palmLevel === PALM_OFF) {
+    if (live >= 2 && anyInkActive()) discardAllActiveInk(now);
+  }
 
   /* Deliberate two-finger pinch outranks whatever is drawing. The old
      order refused every gesture while a stroke owned the pen, so a palm

@@ -844,6 +844,91 @@ test('a palm that lands and sits is not rescued as a small mark', function (done
   });
 });
 
+
+/* ---------------- Glove mode ----------------
+ * With the hand physically off the glass there is nothing to confuse the
+ * pen with, so every contact is the pen and none of the guessing runs.
+ * Everything the guessing costs comes straight back: ink from the first
+ * sample instead of 160-320ms later, every small mark kept instead of
+ * sixteen of twenty-seven, no stroke retracted mid-word. What must still
+ * work is everything that is NOT rejection - gestures, dots, undo - and
+ * that is what these check, because switching the engine off used to
+ * switch those off with it. */
+
+function freshGlove() {
+  return freshAtLevel(0);
+}
+
+test('Glove: a stroke inks, and so does a mark Max would lose', function (done) {
+  var app = freshGlove();
+  app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 120, y1: PEN.y + 30, speed: 0.30, wobble: 3 });
+  app.tick(150);
+  /* 18px at 0.05 px/ms - below every commit threshold there is */
+  app.stroke({ id: 2, x0: PEN.x + 200, y0: PEN.y, x1: PEN.x + 218, y1: PEN.y + 4, speed: 0.05 });
+  after(300, function () {
+    app.flushFrames();
+    check('Glove inks both, including the slow 18px mark',
+          app.strokes().length === 2, app.strokes().length + ' strokes');
+    done();
+  });
+});
+
+test('Glove: a motionless tap leaves a dot', function (done) {
+  var app = freshGlove();
+  app.down(1, 600, 400);
+  app.tick(200);
+  app.up(1);
+  after(300, function () {
+    app.flushFrames();
+    /* a one-point stroke draws no segment at all, so without the dot path
+       a decimal point simply vanishes */
+    check('a tap leaves a mark', app.strokes().length === 1,
+          app.strokes().length + ' strokes');
+    done();
+  });
+});
+
+test('Glove: two fingers gesture rather than draw', function (done) {
+  var app = freshGlove();
+  var z0 = app.trace().zoom;
+  app.down(10, 380, 300);
+  app.down(11, 560, 300);
+  var i;
+  for (i = 1; i <= 25; i++) {
+    app.tick(16);
+    app.moveTo(10, 380 - i * 5, 300);
+    app.moveTo(11, 560 + i * 5, 300);
+  }
+  app.up(10); app.up(11);
+  after(300, function () {
+    app.flushFrames();
+    check('a pinch zooms in Glove mode', Math.abs(app.trace().zoom - z0) > 0.02,
+          z0 + ' -> ' + app.trace().zoom);
+    check('...and leaves no ink behind', app.strokes().length === 0,
+          app.strokes().length + ' strokes');
+    done();
+  });
+});
+
+test('Glove: a two-finger tap still undoes', function (done) {
+  var app = freshGlove();
+  app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 120, y1: PEN.y + 30, speed: 0.30 });
+  app.tick(150);
+  app.flushFrames();
+  var before = app.strokes().length;
+  app.twoFingerTap(300, 500, 480, 520);
+  after(300, function () {
+    app.flushFrames();
+    /* both tap contacts are already inking by the time the gesture is
+       recognised, so each would leave a dot and the undo would remove one
+       of those instead of the stroke */
+    check('the tap undoes the stroke, not a dot it just made',
+          before === 1 && app.strokes().length === 0,
+          before + ' -> ' + app.strokes().length);
+    done();
+  });
+});
+
 (function run(i) {
   if (i >= tests.length) {
     console.log('\n' + pass + ' passed, ' + fail + ' failed');
