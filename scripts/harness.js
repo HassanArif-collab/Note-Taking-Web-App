@@ -407,8 +407,15 @@ function load(opts) {
     },
     btoa: function (b) { return Buffer.from(b, 'binary').toString('base64'); },
     unescape: unescape, encodeURIComponent: encodeURIComponent,
-    setTimeout: setTimeout, clearTimeout: clearTimeout,
-    setInterval: setInterval, clearInterval: clearInterval,
+    /* The app keeps a repeating timer alive for as long as it runs, which
+       is correct on a tablet and fatal here: a real setInterval holds the
+       node event loop open and every test would hang instead of exiting.
+       unref lets the timer fire while anything else is pending and stops
+       it from being a reason to stay alive. */
+    setTimeout: function (fn, ms) { var t = setTimeout(fn, ms); if (t.unref) t.unref(); return t; },
+    clearTimeout: clearTimeout,
+    setInterval: function (fn, ms) { var t = setInterval(fn, ms); if (t.unref) t.unref(); return t; },
+    clearInterval: clearInterval,
     Date: Date, Math: Math, JSON: JSON, parseInt: parseInt, parseFloat: parseFloat,
     isNaN: isNaN, String: String, Number: Number, Array: Array, Object: Object,
     RegExp: RegExp, Error: Error, Proxy: Proxy,
@@ -417,6 +424,13 @@ function load(opts) {
   sandbox.self = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(js, sandbox, { filename: 'index.html' });
+
+  /* The app posts what it has recorded every 20 seconds and clears the
+     ring, which is right on a tablet and wrong here: a suite that runs
+     longer than that would have the recording it is about to inspect
+     wiped out from under it. Two palm tests failed exactly that way.
+     Tests that want it ask for it. */
+  if (!opts.live && win.__mnDrill && win.__mnDrill.liveSet) win.__mnDrill.liveSet(false);
 
   var app = new App(doc, win, storage, wrap, rafQueue);
   app.els = els;

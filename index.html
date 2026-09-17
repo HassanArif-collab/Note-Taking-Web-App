@@ -4623,7 +4623,9 @@ var DRILLS = [
   { id: 'scroll', s: 20, want: 0,
     what: 'No stylus. Two fingers, drag up and down to scroll the page.' },
   { id: 'aim', s: 40, want: -2, targets: true,
-    what: 'Nine red crosses appear. Tap the exact centre of each one with the stylus, top-left first, going left to right. Take your time.' }
+    what: 'Nine red crosses appear. Tap the exact centre of each one with the stylus, top-left first, going left to right. Take your time.' },
+  { id: 'aim-palm', s: 50, want: -2, targets: true,
+    what: 'Rest your hand on the page as if writing and KEEP IT THERE. Now tap the centre of each cross with the stylus, without lifting your hand.' }
 ];
 
 /* Where the crosses are put, in the same client coordinates the samples
@@ -4671,6 +4673,25 @@ function drillShowTargets(list) {
 
 var DRILL_LEAD = 3;     /* seconds of "get ready" before recording starts, so the
                            tap that launched the drill is never in the data */
+
+/* A drill is a posed photograph. Most of what goes wrong goes wrong while
+   the app is just being used, and none of that was ever reaching the PC.
+   With the test server running, the recorder posts what it has every so
+   often, labelled "live", so ordinary writing becomes evidence too. Off
+   the server this does nothing at all. */
+var LIVE_MS = 20000;
+var liveTimer = null, liveOn = true;
+
+function liveTick() {
+  if (!liveOn || !canUpload() || drillNow) return;    /* a drill owns the ring */
+  if (traceCount < 40) return;                        /* nothing worth sending */
+  var obj;
+  try { obj = buildTrace('live'); } catch (e) { return; }
+  obj.drill = 'live';
+  obj.want = -2;
+  traceReset();
+  traceUpload(obj, function () {});
+}
 
 var drillNow = null, drillTimer = null, drillDone = {}, drillPrep = null;
 var drillPhase = '', drillStrokes0 = 0, drillBlink = false;
@@ -4899,6 +4920,12 @@ function drillShowPrep(d) {
 
 function showTraining() { drillShowList(); }
 
+function liveStart() {
+  if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  if (!canUpload()) return;
+  liveTimer = setInterval(liveTick, LIVE_MS);
+}
+
 /* tooling hook: the harness drives drills without waiting on the timer */
 window.__mnDrill = {
   list: DRILLS,
@@ -4917,7 +4944,9 @@ window.__mnDrill = {
     return false;
   },
   done: function () { return drillDone; },
-  stop: drillStop
+  stop: drillStop,
+  live: liveTick,
+  liveSet: function (v) { liveOn = !!v; }
 };
 
 /* tooling hook: scripts/replay.js and the test harness read the
@@ -5024,6 +5053,9 @@ window.addEventListener('mouseup', function (e) {
 
 /* flush saves when the tab leaves */
 window.addEventListener('pagehide', doSaveNow);
+/* one last push before the page goes away, so the tail of a session is
+   not the part that never arrives */
+window.addEventListener('pagehide', function () { liveTick(); });
 window.addEventListener('beforeunload', doSaveNow);
 window.addEventListener('resize', function () { resizeView(); });
 window.addEventListener('orientationchange', function () { setTimeout(resizeView, 350); });
@@ -5456,6 +5488,13 @@ function buildMoreMenu() {
     { lbl: 'Writing hand', val: HAND_NAMES[settings.hand], act: function () { settings.hand = (settings.hand + 1) % 3; afterSettingChange(); } },
     { lbl: 'Touch guide', val: settings.guideDots ? 'On' : 'Off', act: function () { settings.guideDots = !settings.guideDots; hidePendingDot(); afterSettingChange(); } },
     { lbl: 'Testing drills', val: canUpload() ? 'server' : 'paste', act: showTraining },
+    { lbl: 'Send as I write', val: !canUpload() ? 'no server' : (liveOn ? 'On' : 'Off'),
+      act: function () {
+        if (!canUpload()) { toast('Only on the test server'); return; }
+        liveOn = !liveOn;
+        toast(liveOn ? 'Sending as you write' : 'Stopped sending');
+        afterSettingChange();
+      } },
     { lbl: 'Copy report', val: traceCount ? traceCount + ' pts' : 'empty', act: showTrace },
     { lbl: 'Touch capabilities', val: '', act: function () { window.alert(capsReport()); } },
     { lbl: 'Recording', val: traceOn ? 'On' : 'Off', act: function () { traceOn = !traceOn; afterSettingChange(); } },
@@ -5661,6 +5700,7 @@ function init() {
 }
 
 init();
+liveStart();
 
 })();
 </script>

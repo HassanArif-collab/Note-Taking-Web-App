@@ -60,7 +60,49 @@ var LABEL = {
   'zoom': 0, 'scroll': 0,
   'pen-only': 1, 'pen-small': 1, 'pen-slow': 1, 'aim': 1
 };
-var HELDBACK = { 'pen-palm-10': 1, 'palm-then-pen': 1 };
+var HELDBACK = { 'pen-palm-10': 1, 'palm-then-pen': 1, 'live': 1 };
+
+/* The drill that fixes the flaw which made the first fitted model
+   worthless. Every other labelled drill has EITHER the hand on the glass
+   OR the pen, never both, so "how many contacts are down" separated the
+   classes perfectly and the fit learned that instead of learning anything
+   about a contact. On a real page the hand is always down, so the pen was
+   refused - reported from the iPad as "the pen is not working with the
+   palm on it".
+   aim-palm has both at once and still labels each contact, because the
+   crosses are at known positions: a small contact that lands on one is
+   the stylus, and everything else on the glass at that moment is the
+   hand. Same crowding for both classes, so there is nothing to leak. */
+var PER_CONTACT = { 'aim-palm': 1 };
+var HIT_PX = 55;         /* how close to a cross counts as aimed at it */
+var HIT_PATH = 16;       /* ...and a tap, not a stroke passing through */
+
+function perContactLabels(trace) {
+  if (!trace.targets || !trace.targets.length) return null;
+  var c = {}, i, r;
+  for (i = 0; i < trace.samples.length; i++) {
+    r = trace.samples[i];
+    if (r[0] === 'v' || r[0] === 'g' || r[0] === 'z') continue;
+    var id = r[1];
+    if (r[0] === 0) c[id] = { x0: r[2], y0: r[3], path: 0, lx: r[2], ly: r[3] };
+    else if (c[id]) {
+      c[id].path += Math.sqrt(Math.pow(r[2] - c[id].lx, 2) + Math.pow(r[3] - c[id].ly, 2));
+      c[id].lx = r[2]; c[id].ly = r[3];
+    }
+  }
+  var out = {}, k, t, best;
+  for (k in c) {
+    if (!Object.prototype.hasOwnProperty.call(c, k)) continue;
+    best = 1e9;
+    for (t = 0; t < trace.targets.length; t++) {
+      var d = Math.sqrt(Math.pow(c[k].x0 - trace.targets[t][0], 2) +
+                        Math.pow(c[k].y0 - trace.targets[t][1], 2));
+      if (d < best) best = d;
+    }
+    out[k] = (best <= HIT_PX && c[k].path <= HIT_PATH) ? 1 : 0;
+  }
+  return out;
+}
 
 var MIN_AGE = 50;        /* below this a contact has no history worth reading */
 var MAX_PER_CONTACT = 8; /* so a long contact cannot outvote a short one */
@@ -84,7 +126,9 @@ function gather(file, next) {
   var drill = trace.drill || trace.label || '';
   var label = LABEL[drill];
   var held = !!HELDBACK[drill];
-  if (label === undefined && !held) { next(); return; }
+  var perC = PER_CONTACT[drill] ? perContactLabels(trace) : null;
+  if (perC) held = false;
+  if (label === undefined && !perC && !held) { next(); return; }
 
   var last = {}, taken = {};
 
@@ -103,7 +147,11 @@ function gather(file, next) {
         last[k] = t;
         taken[k] = (taken[k] || 0) + 1;
         if (!NF) NF = e.f.length;
-        (held ? heldRows : rows).push({ x: e.f, y: label, file: file, id: k, drill: drill });
+        var y = perC ? perC[k] : label;
+        /* a held-back recording has no label by design - it is kept to be
+           looked at, not learned from - so it must not be dropped here */
+        if (!held && y === undefined) continue;
+        (held ? heldRows : rows).push({ x: e.f, y: y, file: file, id: k, drill: drill });
       }
     }
   }, function () { next(); });
@@ -188,6 +236,19 @@ function done() {
   console.log('  training on ' + rows.length + ' snapshots  (' + pen + ' pen, ' +
               palm + ' palm)  from ' + NF + ' features');
   console.log('  held back: ' + heldRows.length + ' snapshots from the mixed drills');
+  var apDrills = {}, ap = 0;
+  for (i = 0; i < rows.length; i++) if (rows[i].drill === 'aim-palm') { ap++; apDrills[rows[i].file] = 1; }
+  if (!ap) {
+    console.log('');
+    console.log('  NO aim-palm recordings. Every drill here has either the hand');
+    console.log('  on the glass or the pen, never both, so "how many contacts are');
+    console.log('  down" separates the classes perfectly and the fit will learn');
+    console.log('  that instead of learning anything about a contact. Whatever');
+    console.log('  score it reports will not survive contact with a real page.');
+  } else {
+    console.log('  ' + ap + ' snapshots labelled per-contact from aim-palm ' +
+                '(hand and pen on the glass together)');
+  }
 
   /* leave-one-recording-out, so the reported score is never measured on
      a recording the weights have seen */
