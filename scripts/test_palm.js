@@ -910,6 +910,50 @@ test('Glove: two fingers gesture rather than draw', function (done) {
   });
 });
 
+/* The jump rule lived in appendInk with no palm-level gate, and the note
+ * above it says plainly that a disc tip hops 30-40px between lobes. So in
+ * the one mode that is meant to contain no guessing at all, real strokes
+ * were being thrown away and announced as 'Palm stroke discarded'. */
+test('Glove: a stroke whose centroid hops is still a stroke', function (done) {
+  var app = freshGlove();
+  var i;
+  app.down(1, 300, 300);
+  for (i = 1; i <= 5; i++) { app.tick(16); app.moveTo(1, 300 + i * 8, 300); }
+  app.tick(16); app.moveTo(1, 378, 300);            /* a 38px hop */
+  for (i = 1; i <= 3; i++) { app.tick(16); app.moveTo(1, 378 + i * 8, 300); }
+  app.tick(16); app.moveTo(1, 450, 302);            /* and another */
+  for (i = 1; i <= 5; i++) { app.tick(16); app.moveTo(1, 450 + i * 8, 302); }
+  app.up(1);
+  after(300, function () {
+    app.flushFrames();
+    check('Glove keeps it', app.strokes().length === 1,
+          app.strokes().length + ' strokes');
+    check('...and says nothing about palms',
+          String(app.els.toast.innerHTML || '').indexOf('alm') < 0,
+          JSON.stringify(app.els.toast.innerHTML || ''));
+    done();
+  });
+});
+
+/* ...while Max, which exists to guess, still rejects the same contact */
+test('Max still rejects a hopping contact', function (done) {
+  var app = freshAtLevel(2);
+  var i;
+  app.down(1, 300, 300);
+  for (i = 1; i <= 5; i++) { app.tick(16); app.moveTo(1, 300 + i * 8, 300); }
+  app.tick(16); app.moveTo(1, 378, 300);
+  for (i = 1; i <= 3; i++) { app.tick(16); app.moveTo(1, 378 + i * 8, 300); }
+  app.tick(16); app.moveTo(1, 450, 302);
+  for (i = 1; i <= 5; i++) { app.tick(16); app.moveTo(1, 450 + i * 8, 302); }
+  app.up(1);
+  after(300, function () {
+    app.flushFrames();
+    check('Max rejects it', app.strokes().length === 0,
+          app.strokes().length + ' strokes');
+    done();
+  });
+});
+
 test('Glove: a two-finger tap still undoes', function (done) {
   var app = freshGlove();
   app.stroke({ id: 1, x0: PEN.x, y0: PEN.y, x1: PEN.x + 120, y1: PEN.y + 30, speed: 0.30 });

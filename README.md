@@ -110,7 +110,9 @@ everything the guessing costs comes straight back:
 | Stray marks from your hand | ~4 per 10 lines | none, because your hand never touches |
 
 Everything that is not rejection still works: two fingers pinch and scroll,
-a two-finger tap undoes, and a tap leaves a dot.
+a two-finger tap undoes, and a tap leaves a dot. Nothing can take a stroke
+away in this mode except a pinch — that is enforced in one place rather than
+at each rule, so a rule added later cannot quietly reopen the hole.
 
 The rejection engine exists only because this iPad reports no pressure, no
 contact size and no stylus id — it has to infer from a moving point what a
@@ -220,7 +222,7 @@ dependencies.
 
 ```
 node scripts/check_es5.js     # Safari 9 gate - run before every push
-node scripts/test_palm.js     # palm-rejection behaviour (57 assertions)
+node scripts/test_palm.js     # palm-rejection behaviour (60 assertions)
 node scripts/test_recorder.js # recorder, pinch-zoom, drills (29 assertions)
 node scripts/test_backup.js   # storage and backup (20 assertions)
 node scripts/test_features.js # pages, folders, photos, zoom window (35 assertions)

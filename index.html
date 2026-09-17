@@ -1350,7 +1350,14 @@ var settings = {
   spacing: 38,
   template: TPL_RULED,
   guideDots: true,
-  nibFix: true,
+  /* Off by default. Three aim drills agreed on a -8px vertical bias, and
+     applying it put the ink visibly BELOW the nib in ordinary writing -
+     which says the drill was measuring how the user aims through a
+     transparent disc held at an angle, not where the glass reports the
+     contact. Those are different things and only the second is worth
+     correcting globally. The setting stays because the measurement was
+     real; the default does not, because using it is the better evidence. */
+  nibFix: false,
   paperDark: false,
   paperColor: 0,
   uiDark: false,
@@ -3181,6 +3188,10 @@ function startInkRecord(st, now) {
 }
 
 function verdictPalm(st, now) {
+  /* see discardActiveInk: in Glove mode every contact is the pen, and
+     calling one a palm would also flip it out of the 'ink' state it was
+     born in, which breaks it rather than merely rejecting it */
+  if (settings.palmLevel === PALM_OFF) return;
   if (st.state === 'palm') return;
   st.state = 'palm';
   traceVerdict('palm', st.id, now);
@@ -3453,6 +3464,18 @@ function appendInk(st, pt, now, touch) {
 }
 
 function discardActiveInk(st, now, why) {
+  /* Glove mode means there is no hand on the glass to mistake for the pen,
+     so there is nothing for any of this to be right about. Reported as
+     "the glove system still says palm discarded": the jump rule in
+     appendInk had no palm-level gate at all, and the note above it says
+     plainly that a disc tip hops 30-40px between lobes - so it was
+     throwing away real strokes, in the one mode that is supposed to
+     contain no guessing whatsoever.
+     Gating every call site was the other option. This is the choke point,
+     so it is the honest place: a rule added later cannot quietly reopen
+     the hole. A pinch still takes the ink back, because that is the user
+     asking for it rather than the engine deciding. */
+  if (settings.palmLevel === PALM_OFF && why !== 'pinch') return;
   delete inkNow[st.id];
   st.state = 'palm';
   traceVerdict(why === 'pinch' ? 'pinch-cancel' : (why || 'discarded'), st.id, now);
