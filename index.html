@@ -2436,11 +2436,17 @@ var TIDY_TILT   = 0.21;  /* ~12 degrees. Past this it is not drift, it is a
                             something meant to be at an angle. */
 var TIDY_MIN    = 3;     /* two marks define a line exactly, so a fit
                             through them is not evidence of anything */
-var TIDY_DESC   = 0.34;  /* of the rule spacing: how far below the fitted
-                            baseline a point may sit and still belong to
-                            it. Below that it is a descender - g, y, p, a
-                            subscript, an integral tail - and pulling the
-                            baseline down to meet it tilts the whole word. */
+var TIDY_DESC   = 0.25;  /* of the SYMBOL height: how far below the fitted
+                            baseline a foot may sit and still belong to it.
+                            Below that it is a descender - g, y, p, an
+                            integral tail - and pulling the baseline down to
+                            meet it tilts the whole word.
+                            Measured against the rule spacing at first,
+                            which is the wrong ruler: write small on wide
+                            rules and a descender drops less than a third of
+                            the spacing, so it stayed in the fit and tilted
+                            the line it was supposed to sit on. How far a
+                            letter hangs is a property of the letter. */
 var TIDY_SNAP   = 0.40;  /* of the spacing: the furthest the writing may be
                             moved onto a rule. Anything more would be
                             landing it on a DIFFERENT line from the one it
@@ -2449,6 +2455,37 @@ var TIDY_TALL   = 1.6;   /* taller than this many rules and it is a stacked
                             thing - a fraction, a sum, a matrix. Flatten it,
                             but do not snap it, because there is no single
                             rule it belongs to. */
+
+/* Superscripts and subscripts, for "x^2 + y^2" and "a_1". The literature
+   on handwritten mathematics finds them from two numbers only - where a
+   symbol sits relative to the baseline, and how big it is against its
+   neighbours - and reports around 99.9% from that geometry alone, with no
+   idea which symbol it is looking at. Which is the whole reason this is
+   worth doing here: recognition would need a model this tablet cannot
+   run, and it turns out not to need one. */
+var TIDY_SMALL  = 0.80;  /* of the median symbol height. Bigger than this and
+                            it is ordinary writing, whatever height it is at */
+var TIDY_SUP_AT = 0.55;  /* a superscript's MIDDLE clears the baseline by at
+                            least this much of a symbol height. An equals
+                            sign is centred about 0.25 up and a minus about
+                            0.45, while even a low exponent is centred 0.70
+                            up - so measured at the middle the two
+                            populations are a clear 0.25 apart, where
+                            measured at the foot they overlap outright. */
+var TIDY_SUP_TO = 0.62;  /* ...and is moved to exactly this, so two exponents
+                            written at two different heights end up level */
+var TIDY_SUB_AT = 0.02;  /* and a subscript's middle sits at or below the
+                            baseline. A descender does too, but a g or a y
+                            is TALLER than the median and TIDY_SMALL has
+                            already excluded it. A full stop is centred just
+                            ABOVE the line, which is what this narrow margin
+                            is for. */
+var TIDY_SUB_TO = 0.30;
+var TIDY_SCRIPT_MAX = 0.40;  /* the furthest a script may be moved, as a
+                            fraction of symbol height. Past it the guess was
+                            wrong, and a rule that does nothing when it is
+                            unsure beats one that confidently moves an
+                            exponent halfway across the page. */
 
 var tidyPend = [], tidyTimer = null;
 
@@ -2478,7 +2515,7 @@ function tidyFeet(list) {
 }
 
 /* least squares, and then again without the descenders */
-function tidyFit(feet) {
+function tidyFit(feet, lim) {
   var i, n = feet.length, sx = 0, sy = 0, sxx = 0, sxy = 0, m, b, mx, my;
   if (n < TIDY_MIN) return null;
   for (i = 0; i < n; i++) { sx += feet[i][0]; sy += feet[i][1]; }
@@ -2492,17 +2529,99 @@ function tidyFit(feet) {
   /* one reweight: throw out what sits well BELOW the line and fit again.
      Only below - an ascender or a superscript is above, and was never in
      this set to begin with, since these are the lowest points. */
-  var keep = [], lim = settings.spacing * TIDY_DESC;
+  var keep = [];
   for (i = 0; i < n; i++) {
     if (feet[i][1] - (m * feet[i][0] + b) < lim) keep.push(feet[i]);
   }
-  if (keep.length >= TIDY_MIN && keep.length < n) return tidyFit(keep);
+  if (keep.length >= TIDY_MIN && keep.length < n) return tidyFit(keep, lim);
   return { m: m, b: b };
+}
+
+function tidyApply(items, reverse) {
+  var i, it, b0, b1;
+  for (i = 0; i < items.length; i++) {
+    it = items[i];
+    b0 = strokeBBox(it.s);
+    invalidateRange(b0.y0, b0.y1);
+    /* forward: rotate about (cx,cy) by th, then drop by dy.
+       backwards: take the drop off first, which is what rotating about a
+       centre moved down by dy and then subtracting dy comes to. */
+    if (reverse) rotateStroke(it.s, it.cx, it.cy + it.dy, -it.th, -it.dy);
+    else rotateStroke(it.s, it.cx, it.cy, it.th, it.dy);
+    b1 = strokeBBox(it.s);
+    invalidateRange(b1.y0, b1.y1);
+  }
+  recomputeDoc();
+  requestRender();
+}
+
+function inkBox(list) {
+  var bb = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9, list: list }, i, q, p;
+  for (i = 0; i < list.length; i++) {
+    p = list[i].pts;
+    for (q = 0; q < p.length; q++) {
+      if (p[q][0] < bb.x0) bb.x0 = p[q][0];
+      if (p[q][1] < bb.y0) bb.y0 = p[q][1];
+      if (p[q][0] > bb.x1) bb.x1 = p[q][0];
+      if (p[q][1] > bb.y1) bb.y1 = p[q][1];
+    }
+  }
+  return bb;
+}
+
+/* Strokes that overlap in x are one symbol. That single line is what
+   separates the dot of an i from the 2 of x squared: the dot sits ON its
+   stem and merges with it, the exponent sits to the RIGHT of the x and
+   does not - so an i is never mistaken for a base with a superscript, and
+   it costs nothing to see. Equally, the two bars of an equals sign and
+   the strokes of a plus become one symbol with one height. */
+function tidySymbols(list) {
+  var syms = [], i;
+  for (i = 0; i < list.length; i++) syms.push(inkBox([list[i]]));
+  var merged = true, q, a, b, ov, narrow;
+  while (merged) {
+    merged = false;
+    for (i = 0; i < syms.length && !merged; i++) {
+      for (q = i + 1; q < syms.length; q++) {
+        a = syms[i]; b = syms[q];
+        ov = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+        /* a vertical stroke has no width of its own, so it would swallow
+           anything it touched without a floor under the comparison */
+        narrow = Math.max(Math.min(a.x1 - a.x0, b.x1 - b.x0), 6);
+        if (ov > narrow * 0.5) {
+          a.x0 = Math.min(a.x0, b.x0); a.y0 = Math.min(a.y0, b.y0);
+          a.x1 = Math.max(a.x1, b.x1); a.y1 = Math.max(a.y1, b.y1);
+          a.list = a.list.concat(b.list);
+          syms.splice(q, 1);
+          merged = true;
+          break;
+        }
+      }
+    }
+  }
+  return syms;
 }
 
 function tidyGroup(list) {
   if (list.length < TIDY_MIN) return;
-  var fit = tidyFit(tidyFeet(list));
+  var syms = tidySymbols(list), si;
+  /* the baseline belongs to the full-size symbols. Fitting it through the
+     exponents too would drag it up wherever the writing happens to have
+     one, and tilt the line by however many there are. */
+  var hs = [];
+  for (si = 0; si < syms.length; si++) hs.push(syms[si].y1 - syms[si].y0);
+  hs.sort(function (p, q) { return p - q; });
+  var H = hs[hs.length >> 1] || 1;
+  var main = [];
+  for (si = 0; si < syms.length; si++) {
+    if (syms[si].y1 - syms[si].y0 >= H * 0.6) main.push(syms[si]);
+  }
+  if (main.length < TIDY_MIN) main = syms;
+  var mfeet = [];
+  for (si = 0; si < main.length; si++) {
+    mfeet.push([(main[si].x0 + main[si].x1) / 2, main[si].y1]);
+  }
+  var fit = tidyFit(mfeet, H * TIDY_DESC);
   if (!fit) return;
   var th = Math.atan(fit.m);
   /* the extent of the INK, not of strokeBBox - that one is padded by a
@@ -2536,19 +2655,46 @@ function tidyGroup(list) {
     dy = rule - baseY;
     if (Math.abs(dy) > settings.spacing * TIDY_SNAP) dy = 0;
   }
-  /* nothing worth redrawing the page for */
-  if (Math.abs(th) < 0.004 && Math.abs(dy) < 0.5) return;
-
-  for (i = 0; i < list.length; i++) {
-    var b0 = strokeBBox(list[i]);
-    invalidateRange(b0.y0, b0.y1);
-    rotateStroke(list[i], cx, cy, -th, dy);
-    var b1 = strokeBBox(list[i]);
-    invalidateRange(b1.y0, b1.y1);
+  /* Levelling the scripts. A rotation is rigid, so how far a symbol sits
+     from the baseline is the same before and after - which means it can
+     be measured now, on the writing as the hand left it, and applied as
+     one extra drop per symbol. */
+  var items = [], q, extra, rel, mid, want, lb, sh, moved = false;
+  for (si = 0; si < syms.length; si++) {
+    extra = 0;
+    sh = syms[si].y1 - syms[si].y0;
+    lb = fit.m * ((syms[si].x0 + syms[si].x1) / 2) + fit.b;
+    rel = syms[si].y1 - lb;     /* the foot; below the line is positive */
+    /* Classified on the symbol's MIDDLE, moved by its foot. Judging by
+       the foot alone cannot tell an equals sign from a low exponent -
+       both have a foot above the line - but their middles are nowhere
+       near each other: an equals sign is centred in the x-height band
+       where Samsung's scheme calls it Middle, and an exponent sits
+       clear above it. The foot is still what gets placed, because that
+       is what the eye reads as the height of a superscript. */
+    mid = (syms[si].y0 + syms[si].y1) / 2 - lb;
+    if (sh < H * TIDY_SMALL) {
+      if (mid < -H * TIDY_SUP_AT) want = -H * TIDY_SUP_TO;
+      else if (mid > H * TIDY_SUB_AT) want = H * TIDY_SUB_TO;
+      else want = null;
+      if (want !== null) {
+        extra = want - rel;
+        /* refuse rather than clamp: a rule that does nothing when it is
+           unsure beats one that confidently moves the wrong thing */
+        if (Math.abs(extra) > H * TIDY_SCRIPT_MAX) extra = 0;
+      }
+    }
+    if (extra) moved = true;
+    for (q = 0; q < syms[si].list.length; q++) {
+      items.push({ s: syms[si].list[q], cx: cx, cy: cy, th: -th, dy: dy + extra });
+    }
   }
-  pushUndo({ t: 'tidy', list: list.slice(0), cx: cx, cy: cy, th: -th, dy: dy });
-  recomputeDoc();
-  requestRender();
+
+  /* nothing worth redrawing the page for */
+  if (Math.abs(th) < 0.004 && Math.abs(dy) < 0.5 && !moved) return;
+
+  tidyApply(items, false);
+  pushUndo({ t: 'tidy', items: items });
   saveSoon();
 }
 
@@ -2657,20 +2803,7 @@ function applyOp(op, reverse) {
     recomputeDoc();
     requestRender();
   } else if (op.t === 'tidy') {
-    /* rotate by th about (cx,cy) then shift down by dy. Reversed, the
-       shift comes off first and the angle goes back the other way -
-       which is why the transform is stored instead of a copy of every
-       point: a word can be two thousand of them. */
-    for (i = 0; i < op.list.length; i++) {
-      var bt0 = strokeBBox(op.list[i]);
-      invalidateRange(bt0.y0, bt0.y1);
-      if (reverse) rotateStroke(op.list[i], op.cx, op.cy + op.dy, -op.th, -op.dy);
-      else rotateStroke(op.list[i], op.cx, op.cy, op.th, op.dy);
-      var bt1 = strokeBBox(op.list[i]);
-      invalidateRange(bt1.y0, bt1.y1);
-    }
-    recomputeDoc();
-    requestRender();
+    tidyApply(op.items, reverse);
   } else if (op.t === 'textedit') {
     var bb2 = strokeBBox(op.s);
     invalidateRange(bb2.y0, bb2.y1);

@@ -449,5 +449,116 @@ tdWrite(te, 6, 120, 300, 0.12, 0);
 check('switched off, it does not touch the ink',
       Math.abs(tdSlope(te) - 0.12) < 0.03, "slope " + tdSlope(te).toFixed(4));
 
+
+/* ---------- tidy writing: superscripts and subscripts ----------
+ * Samsung sort every symbol into six levels by where it sits against
+ * the baseline and how big it is - Tall, Basic, Lengthy, Top, Bottom,
+ * Middle - and report that geometry alone gets it right about 99.9% of
+ * the time, with no idea which symbol it is looking at. That is the
+ * only reason any of this can run on a 2012 tablet.
+ *
+ * The two that get moved are Top and Bottom. The three that must NOT be
+ * are Middle (an equals sign floats above the baseline but is not an
+ * exponent), Lengthy (a descender drops below it but is not a
+ * subscript), and the dot of an i (which is above its stem, not beside
+ * it). Each of those is a test below, because each is a way this
+ * feature goes wrong in a way the user notices immediately. */
+
+/* a mark of the given size with its FOOT at y */
+function mdMark(a, id, x, foot, w, h) {
+  a.stroke({ id: id, x0: x, y0: foot - h + TD_TOP, x1: x + w, y1: foot + TD_TOP,
+             speed: 0.25, wobble: 0.4 });
+  a.tick(70);
+}
+
+/* where a stroke sits now, as [left, foot] */
+function mdAt(a, i) {
+  var p = a.strokes()[i].pts, q, my = -1e9, mnx = 1e9;
+  for (q = 0; q < p.length; q++) {
+    if (p[q][1] > my) my = p[q][1];
+    if (p[q][0] < mnx) mnx = p[q][0];
+  }
+  return [mnx, my];
+}
+
+/* "x^2 + y^2", with the two exponents written at two different heights -
+   which is what a hand actually does, and what makes an equation look
+   untidy even when every symbol is well formed */
+var ma = tdApp();
+mdMark(ma, 1, 120, 300, 22, 22);   /* x     base, full height */
+mdMark(ma, 2, 146, 282, 11, 11);   /* 2     exponent, 18 above the foot */
+mdMark(ma, 3, 175, 300, 22, 22);   /* +     (a block, stands in for one) */
+mdMark(ma, 4, 210, 300, 22, 22);   /* y */
+mdMark(ma, 5, 236, 290, 11, 11);   /* 2     exponent, only 10 above */
+ma.tidy();
+var msup1 = mdAt(ma, 1)[1], msup2 = mdAt(ma, 4)[1];
+var mbase1 = mdAt(ma, 0)[1], mbase2 = mdAt(ma, 3)[1];
+check('two exponents written at different heights end up level',
+      Math.abs((mbase1 - msup1) - (mbase2 - msup2)) < 1.5,
+      'clearances ' + Math.round(mbase1 - msup1) + 'px and ' +
+      Math.round(mbase2 - msup2) + 'px (written 18 and 10)');
+check('...and both actually cleared the baseline',
+      (mbase1 - msup1) > 8 && (mbase2 - msup2) > 8,
+      Math.round(mbase1 - msup1) + 'px');
+
+/* an equals sign floats above the baseline too. Samsung call it Middle;
+   if it were read as a Top it would be launched into the air. */
+var mb = tdApp();
+mdMark(mb, 1, 120, 300, 22, 22);
+mdMark(mb, 2, 150, 292, 20, 2);    /* = upper bar */
+mdMark(mb, 3, 150, 300, 20, 2);    /* = lower bar, so the pair spans 10 */
+mdMark(mb, 4, 190, 300, 22, 22);
+mdMark(mb, 5, 220, 300, 22, 22);
+var mbWas = mdAt(mb, 1)[1] - mdAt(mb, 0)[1];   /* against the x beside it */
+mb.tidy();
+var mbNow = mdAt(mb, 1)[1] - mdAt(mb, 0)[1];
+check('an equals sign is not read as an exponent',
+      Math.abs(mbNow - mbWas) < 2.0,
+      'clearance moved ' + Math.round(Math.abs(mbNow - mbWas) * 10) / 10 + 'px');
+
+/* the dot of an i sits ON its stem. The 2 of x squared sits BESIDE the x.
+   That one difference is the whole of telling them apart, and it falls
+   out of grouping strokes that overlap in x. */
+var mc = tdApp();
+mdMark(mc, 1, 120, 300, 22, 22);
+mdMark(mc, 2, 152, 300, 6, 22);    /* the stem of an i */
+mdMark(mc, 3, 152, 282, 6, 5);     /* its dot, directly above */
+mdMark(mc, 4, 175, 300, 22, 22);
+mdMark(mc, 5, 205, 300, 22, 22);
+var mcWas = mdAt(mc, 2)[1] - mdAt(mc, 0)[1];   /* dot against the mark left of it */
+mc.tidy();
+var mcNow = mdAt(mc, 2)[1] - mdAt(mc, 0)[1];
+check('the dot of an i is not lifted like an exponent',
+      Math.abs(mcNow - mcWas) < 2.0,
+      'clearance moved ' + Math.round(Math.abs(mcNow - mcWas) * 10) / 10 + 'px');
+
+/* a subscript drops below the line. So does a descender - but a g is
+   taller than the median symbol and a subscript is smaller, which is the
+   size half of the same two-number test. */
+var mdd = tdApp();
+mdMark(mdd, 1, 120, 300, 22, 22);  /* a */
+mdMark(mdd, 2, 146, 312, 11, 11);  /* subscript 1, 12 below the line */
+mdMark(mdd, 3, 175, 300, 22, 22);
+mdMark(mdd, 4, 205, 300, 22, 22);
+mdMark(mdd, 5, 235, 316, 20, 34);  /* g: drops 16 below, but is TALL */
+var mdgWas = mdAt(mdd, 4)[1] - mdAt(mdd, 0)[1];   /* the g against the a */
+mdd.tidy();
+var mdsub = mdAt(mdd, 1)[1], mdbase = mdAt(mdd, 0)[1];
+check('a subscript is levelled below the baseline',
+      (mdsub - mdbase) > 2 && (mdsub - mdbase) < 14,
+      Math.round(mdsub - mdbase) + 'px below the line');
+var mdgNow = mdAt(mdd, 4)[1] - mdAt(mdd, 0)[1];
+check('...but a descender is left where it was written',
+      Math.abs(mdgNow - mdgWas) < 3.0,
+      'drop moved ' + Math.round(Math.abs(mdgNow - mdgWas) * 10) / 10 + 'px');
+
+/* nothing here may move sideways: horizontal position is spacing, and
+   spacing is the hand that wrote it, not ours */
+var meX = [], mq;
+for (mq = 0; mq < 5; mq++) meX.push(mdAt(ma, mq)[0]);
+check('levelling a script never moves it sideways',
+      Math.abs(meX[1] - meX[0]) > 20,
+      'x still ordered: ' + meX.map(function (v) { return Math.round(v); }).join(', '));
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
