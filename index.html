@@ -2585,8 +2585,12 @@ function tidyMedian(v) {
 }
 
 function tidyApply(items, reverse) {
-  var i, it, b0, b1;
-  for (i = 0; i < items.length; i++) {
+  var i, it, b0, b1, k;
+  /* A stroke can be moved more than once - the page is tidied until it
+     stops changing - so the moves compose, and a composition is undone
+     backwards. Forwards this loop is in order; backwards it is not. */
+  for (k = 0; k < items.length; k++) {
+    i = reverse ? items.length - 1 - k : k;
     it = items[i];
     b0 = strokeBBox(it.s);
     invalidateRange(b0.y0, b0.y1);
@@ -2651,7 +2655,7 @@ function tidySymbols(list) {
 
 var tidyWhy = null;   /* what the last group decided, for the scoreboard */
 
-function tidyGroup(list) {
+function tidyGroup(list, sink) {
   tidyWhy = { n: list ? list.length : 0, syms: 0, H: 0, rms: 0,
               span: 0, deg: 0, why: 'ok' };
   if (!list || !list.length) { tidyWhy.why = 'empty'; return false; }
@@ -2798,8 +2802,9 @@ function tidyGroup(list) {
   }
 
   tidyApply(items, false);
-  pushUndo({ t: 'tidy', items: items });
-  saveSoon();
+  if (sink) {
+    for (si = 0; si < items.length; si++) sink.push(items[si]);
+  }
   return true;
 }
 
@@ -2842,10 +2847,20 @@ function tidyLines(list) {
   if (!big.length) { big = boxes; small = []; }
   big.sort(function (a, b) { return a.foot - b.foot; });
 
-  var lines = [], cur = [big[0]], ref = big[0].foot;
+  /* Single linkage on the feet, with a ceiling on how tall one line may
+     get. Measuring every stroke against the FIRST foot of its line splits
+     a line that drifts - and drifting is the whole reason any of this
+     exists, so that version could not see the lines it was built to fix.
+     Measuring against the previous foot follows the drift; the ceiling
+     stops a chain of evenly spaced marks from swallowing the page. */
+  var lines = [], cur = [big[0]], ref = big[0].foot, top = big[0].foot;
   var tol = Math.max(settings.spacing * 0.6, H * 0.7);
+  var roof = settings.spacing * 1.2;
   for (i = 1; i < big.length; i++) {
-    if (big[i].foot - ref > tol) { lines.push(cur); cur = []; ref = big[i].foot; }
+    if (big[i].foot - ref > tol || big[i].foot - top > roof) {
+      lines.push(cur); cur = []; top = big[i].foot;
+    }
+    ref = big[i].foot;
     cur.push(big[i]);
   }
   lines.push(cur);
@@ -2898,10 +2913,25 @@ function tidyRun() {
     ink.push(n.strokes[i]);
   }
   if (!ink.length) { toast('Nothing to tidy'); return; }
-  var lines = tidyLines(ink), moved = 0, report = [];
-  for (i = 0; i < lines.length; i++) {
-    if (tidyGroup(lines[i])) moved++;
-    report.push(tidyWhy);
+  /* Straightening a line moves its strokes, which moves their feet, which
+     changes the fit a little - so one pass leaves about a degree behind.
+     Three is enough to converge on every recording tried; the loop stops
+     early when a pass changes nothing, which is the usual case by the
+     second. One tap should finish the job. */
+  var all = [], lines, moved = 0, report = [], pass, did;
+  for (pass = 0; pass < 3; pass++) {
+    lines = tidyLines(ink);
+    report = []; did = 0;
+    for (i = 0; i < lines.length; i++) {
+      if (tidyGroup(lines[i], all)) did++;
+      report.push(tidyWhy);
+    }
+    if (pass === 0) moved = did;
+    if (!did) break;
+  }
+  if (all.length) {
+    pushUndo({ t: 'tidy', items: all });
+    saveSoon();
   }
   toast(moved ? (moved === 1 ? '1 line tidied' : moved + ' lines tidied')
               : 'Already tidy');
