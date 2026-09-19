@@ -315,5 +315,139 @@ check('tapping the page moves the box there',
 check('...and leaves no ink where it was tapped', zc.strokes().length === 0,
       zc.strokes().length + ' strokes');
 
+
+/* ---------- tidy writing ----------
+ * Writing drifts off the line. The fix is geometry, not recognition:
+ * fit the baseline the marks actually sit on, rotate it flat, drop it
+ * on the nearest rule. These check the three things that can go wrong -
+ * it does nothing when there is nothing to do, it is not fooled by a
+ * descender, and undo puts the ink back exactly where the hand left it. */
+
+var TD_TOP = 56;
+
+function tdApp() {
+  var a = H.load({ quiet: true, dpr: 2, viewW: 768, viewH: 826,
+    seed: { mathnotes_v4: JSON.stringify({ v: 4,
+      notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
+      notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, strokes: [] } },
+      cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
+  a.flushFrames();
+  a.clickMenu('Tidy writing');
+  a.flushFrames();
+  return a;
+}
+
+/* n little marks climbing uphill at `slope`, each one a short stroke */
+function tdWrite(a, n, x0, y0, slope, dip) {
+  var i, id = 1, x, y;
+  for (i = 0; i < n; i++) {
+    x = x0 + i * 40;
+    y = y0 + i * 40 * slope + ((dip && i === dip) ? 26 : 0);
+    a.stroke({ id: id++, x0: x, y0: y - 18 + TD_TOP, x1: x + 14, y1: y + TD_TOP,
+               speed: 0.25, wobble: 0.5 });
+    a.tick(80);
+  }
+  a.tidy();               /* the 900ms pause, without waiting for it */
+  a.flushFrames();
+}
+
+/* the slope of the line through the bottom of each stroke */
+function tdSlope(a) {
+  var st = a.strokes(), i, q, p, feet = [], my, mx;
+  for (i = 0; i < st.length; i++) {
+    p = st[i].pts; my = -1e9; mx = 0;
+    for (q = 0; q < p.length; q++) { if (p[q][1] > my) { my = p[q][1]; mx = p[q][0]; } }
+    feet.push([mx, my]);
+  }
+  var n = feet.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (i = 0; i < n; i++) { sx += feet[i][0]; sy += feet[i][1]; }
+  for (i = 0; i < n; i++) {
+    sxx += (feet[i][0] - sx / n) * (feet[i][0] - sx / n);
+    sxy += (feet[i][0] - sx / n) * (feet[i][1] - sy / n);
+  }
+  return sxx < 1 ? 0 : sxy / sxx;
+}
+
+var ta = tdApp();
+tdWrite(ta, 6, 120, 300, 0.12, 0);
+var tsl = tdSlope(ta);
+check('a line written uphill comes back flat',
+      ta.strokes().length === 6 && Math.abs(tsl) < 0.02,
+      ta.strokes().length + ' strokes, slope ' + tsl.toFixed(4) + ' (was 0.1200)');
+
+/* it must land ON a rule, not merely level */
+var tfeet = [], tq, tp, tmy;
+for (tq = 0; tq < ta.strokes().length; tq++) {
+  tp = ta.strokes()[tq].pts; tmy = -1e9;
+  for (var tw = 0; tw < tp.length; tw++) if (tp[tw][1] > tmy) tmy = tp[tw][1];
+  tfeet.push(tmy);
+}
+var tavg = 0;
+for (tq = 0; tq < tfeet.length; tq++) tavg += tfeet[tq];
+tavg /= tfeet.length;
+var trule = Math.abs(((tavg - 56) % 38 + 38) % 38);
+if (trule > 19) trule = 38 - trule;
+check('...and sits on a ruled line, not between two',
+      trule < 4.0, Math.round(trule * 10) / 10 + " px off the nearest rule");
+
+/* a descender hangs below the baseline. Fitting through it would tip the
+   whole word, which is the classic way this feature goes wrong. */
+var tb = tdApp();
+tdWrite(tb, 6, 120, 300, 0, 3);      /* flat, but mark 3 dips 26px */
+var tbsl = tdSlope(tb);
+check('a descender does not tilt the word it hangs from',
+      Math.abs(tbsl) < 0.03, "slope " + tbsl.toFixed(4));
+
+/* deliberate angles are not drift */
+var tc = tdApp();
+tdWrite(tc, 6, 120, 300, 0.60, 0);   /* ~31 degrees: an arrow, a bracket */
+var tcsl = tdSlope(tc);
+check('a deliberate diagonal is left alone',
+      tcsl > 0.45, "slope " + tcsl.toFixed(4) + " (drawn at 0.6000)");
+
+/* undo is a rigid transform run backwards, so it has to be exact */
+var td = tdApp();
+td.stroke({ id: 1, x0: 120, y0: 300 + TD_TOP, x1: 134, y1: 318 + TD_TOP, speed: 0.25, wobble: 0.5 });
+td.tick(80);
+td.stroke({ id: 2, x0: 180, y0: 306 + TD_TOP, x1: 194, y1: 324 + TD_TOP, speed: 0.25, wobble: 0.5 });
+td.tick(80);
+td.stroke({ id: 3, x0: 240, y0: 312 + TD_TOP, x1: 254, y1: 330 + TD_TOP, speed: 0.25, wobble: 0.5 });
+td.flushFrames();
+var tdBefore = JSON.stringify(td.strokes().map(function (x) {
+  return x.pts.map(function (p) { return [Math.round(p[0] * 100), Math.round(p[1] * 100)]; });
+}));
+td.tidy();
+var tdMoved = JSON.stringify(td.strokes().map(function (x) {
+  return x.pts.map(function (p) { return [Math.round(p[0] * 100), Math.round(p[1] * 100)]; });
+}));
+check('tidying actually moved the ink', tdBefore !== tdMoved,
+      tdBefore === tdMoved ? 'nothing moved - the test proves nothing' : 'moved');
+td.undo();
+td.flushFrames();
+var tdAfter = td.strokes().map(function (x) {
+  return x.pts.map(function (p) { return [Math.round(p[0] * 100), Math.round(p[1] * 100)]; });
+});
+var tdOrig = JSON.parse(tdBefore), tdWorst = 0, ti, tj;
+for (ti = 0; ti < tdOrig.length; ti++) {
+  for (tj = 0; tj < tdOrig[ti].length; tj++) {
+    tdWorst = Math.max(tdWorst,
+      Math.abs(tdOrig[ti][tj][0] - tdAfter[ti][tj][0]),
+      Math.abs(tdOrig[ti][tj][1] - tdAfter[ti][tj][1]));
+  }
+}
+check('undo puts every point back where the hand left it',
+      tdWorst <= 2, 'worst point off by ' + (tdWorst / 100) + 'px');
+
+/* off by default, and off means off */
+var te = H.load({ quiet: true, dpr: 2, viewW: 768, viewH: 826,
+  seed: { mathnotes_v4: JSON.stringify({ v: 4,
+    notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
+    notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, strokes: [] } },
+    cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
+te.flushFrames();
+tdWrite(te, 6, 120, 300, 0.12, 0);
+check('switched off, it does not touch the ink',
+      Math.abs(tdSlope(te) - 0.12) < 0.03, "slope " + tdSlope(te).toFixed(4));
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

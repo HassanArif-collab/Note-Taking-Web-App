@@ -288,6 +288,8 @@ App.prototype.drillPrep = function (id) { this.win.__mnDrill.prep(id); return th
 App.prototype.drillDone = function () { return this.win.__mnDrill.done(); };
 App.prototype.drillStop = function () { this.win.__mnDrill.stop(); return this; };
 App.prototype.drills = function () { return this.win.__mnDrill.list; };
+App.prototype.tidy = function () { this.win.__mnTidy(); this.flushFrames(); return this; };
+App.prototype.undo = function () { this.els.undoBtn._fire('click', {}); this.flushFrames(); return this; };
 App.prototype.zw = function () { return this.win.__mnZW(); };
 
 /* flush the debounced save and read back what the engine committed */
