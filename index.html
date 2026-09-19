@@ -1008,7 +1008,7 @@ var SC = {
   COMMIT_SPEED:    0.09,   /* smoothed px/ms needed to commit */
   COMMIT_COH:      0.42,   /* window direction coherence 0..1 */
   COMMIT_NET:      6,      /* travel from anchor needed to commit */
-  TOO_FAST:        0.35,   /* Above this a contact is not writing - it is a
+  TOO_FAST:        0.60,   /* Above this a contact is not writing - it is a
                               hand being swept across the glass. Measured over
                               every recording: the pen tops out at 0.38 px/ms
                               and sits at 0.11 median, while a moving hand runs
@@ -1028,9 +1028,20 @@ var SC = {
                               stroke it spikes: two recorded stylus strokes
                               pacing 0.154 px/ms over 587ms were destroyed
                               mid-word by a momentary spike past the
-                              ceiling. Over a whole life the two populations
-                              do not touch - the pen paces 0.15, a swept
-                              hand 0.9 to 1.7. */
+                              ceiling.
+
+                              0.38 was the ceiling of the pen WRITING. Drawing
+                              a straight line is a different motion and runs to
+                              0.42, so a threshold set from writing alone took
+                              three of ten ruled lines away. Swept over the
+                              corpus, everything from 0.60 to 0.90 rejects the
+                              same palm contacts to within one mark, and 0.60
+                              is where the ten-line drill comes back exactly
+                              ten. Above it the palm starts getting through,
+                              below it the pen starts disappearing - and of
+                              those two the second is the one that is
+                              unforgivable, because the user watches it
+                              happen. */
   TOO_FAST_AGE:    140,    /* ...and pace means nothing until a contact has
                               lasted long enough to have one */
   FAST_NET:        12,     /* fast-writer express lane */
@@ -1335,6 +1346,14 @@ var SC = {
                               separation just the same. Measuring it live instead
                               would stop a real pinch the moment the fingers
                               spread past this, which is a thing people do. */
+  PINCH_WINDOW:    250,  /* How long the separation has to change IN. The
+                              baseline used to be taken once when the pair
+                              appeared and then never renewed, so "separation
+                              changed by 45px" was satisfied by a pen simply
+                              writing away from a resting palm - given a
+                              two-second stroke it is not a question of
+                              whether, only when. A pinch is a quick gesture;
+                              drift is not. */
   PINCH_CONVERGE:  20,     /* A pinch is two contacts whose SEPARATION
                               changes. The old test only asked whether they
                               drifted in opposing directions - two contacts
@@ -3876,7 +3895,14 @@ function nonInkProbes() {
   for (k in touchStates) {
     if (!touchStates.hasOwnProperty(k)) continue;
     o = touchStates[k];
-    if (o.kind === 'probe' && o.state !== 'ink') out.push(o);
+    if (o.kind !== 'probe') continue;
+    /* In Glove mode every contact inks from its first sample, so a list of
+       contacts that are NOT inking is always empty and the pinch test could
+       never run at all. That is what forced the sledgehammer below it -
+       "two contacts exist, therefore zoom" - which cancelled 19 strokes in
+       a pen-and-palm recording for 2 gestures the user actually made. */
+    if (o.state === 'ink' && settings.palmLevel !== PALM_OFF) continue;
+    out.push(o);
   }
   return out;
 }
@@ -3906,7 +3932,10 @@ function tryPinch(now) {
   var same = pinchTrack &&
     ((pinchTrack.a === a.id && pinchTrack.b === b.id) ||
      (pinchTrack.a === b.id && pinchTrack.b === a.id));
-  if (!same) { pinchTrack = { a: a.id, b: b.id, d0: d }; return false; }
+  /* re-baseline a stale pair, so the test asks "did the separation change
+     by 45px in the last PINCH_WINDOW", not "ever" */
+  if (same && now - pinchTrack.at > SC.PINCH_WINDOW) same = false;
+  if (!same) { pinchTrack = { a: a.id, b: b.id, d0: d, at: now }; return false; }
 
   /* flickering contacts never qualify */
   if (now - a.t0 < SC.PINCH_MIN_AGE || now - b.t0 < SC.PINCH_MIN_AGE) return false;
@@ -3943,16 +3972,13 @@ function detectGesture(now) {
 
   var live = liveTouchCount();
 
-  /* In Glove mode a single contact is always the pen, so it inks from the
-     first sample and never has to prove anything. That leaves exactly one
-     thing a second contact can mean: a gesture. Nothing else is on the
-     glass to land by accident. So two fingers take the ink back and zoom
-     or scroll, with none of the suspicion machinery in between - which is
-     also why gestures used to be switched off entirely down here, and why
-     Glove mode could not zoom at all. */
-  if (settings.palmLevel === PALM_OFF) {
-    if (live >= 2 && anyInkActive()) discardAllActiveInk(now);
-  }
+  /* Glove mode used to take every stroke back the moment a second contact
+     existed, on the reasoning that nothing but a gesture could be down
+     there. A half-blocking glove disproves it: the resting hand flickers
+     on and off the digitizer, and each flicker is a second contact. In a
+     pen-and-palm recording that destroyed 19 strokes to serve 2 real
+     gestures. tryPinch below now sees inking contacts in this mode, so a
+     pinch still outranks a stroke - it just has to be a pinch first. */
 
   /* Deliberate two-finger pinch outranks whatever is drawing. The old
      order refused every gesture while a stroke owned the pen, so a palm
