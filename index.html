@@ -1008,7 +1008,7 @@ var SC = {
   COMMIT_SPEED:    0.09,   /* smoothed px/ms needed to commit */
   COMMIT_COH:      0.42,   /* window direction coherence 0..1 */
   COMMIT_NET:      6,      /* travel from anchor needed to commit */
-  TOO_FAST:        0.55,   /* Above this a contact is not writing - it is a
+  TOO_FAST:        0.35,   /* Above this a contact is not writing - it is a
                               hand being swept across the glass. Measured over
                               every recording: the pen tops out at 0.38 px/ms
                               and sits at 0.11 median, while a moving hand runs
@@ -1020,7 +1020,19 @@ var SC = {
                               did not merely pass, it went through the express
                               lane meant for fast writers. One recorded contact
                               covered 877px to finish 20px from where it
-                              started, at 1.0 px/ms, and drew. */
+                              started, at 1.0 px/ms, and drew.
+
+                              Judged on the contact's PACE over its whole
+                              life, not on st.vel. st.vel is the median of
+                              the last five samples, and inside an ordinary
+                              stroke it spikes: two recorded stylus strokes
+                              pacing 0.154 px/ms over 587ms were destroyed
+                              mid-word by a momentary spike past the
+                              ceiling. Over a whole life the two populations
+                              do not touch - the pen paces 0.15, a swept
+                              hand 0.9 to 1.7. */
+  TOO_FAST_AGE:    140,    /* ...and pace means nothing until a contact has
+                              lasted long enough to have one */
   FAST_NET:        12,     /* fast-writer express lane */
   FAST_SPEED:      0.16,
   DECISIVE_NET:    40,     /* decisive travel always inks */
@@ -3392,7 +3404,7 @@ function tryCommit(st, now) {
   }
 
   /* nothing writes this fast; this is a hand crossing the glass */
-  if (st.vel > SC.TOO_FAST) {
+  if (age > SC.TOO_FAST_AGE && st.pathLen / age > SC.TOO_FAST) {
     if (age > SC.PALM_AGE) verdictPalm(st, now);
     return;
   }
@@ -3493,9 +3505,11 @@ function appendInk(st, pt, now, touch) {
     ctx.restore();
   }
 
-  /* a stroke that accelerates past writing speed is a hand that started
-     slowly and then swept */
-  if (settings.palmLevel >= PALM_MAX && st.vel > SC.TOO_FAST) {
+  /* a stroke whose whole life has been faster than writing is a hand that
+     started slowly and then swept */
+  var paceAge = now - st.t0;
+  if (settings.palmLevel >= PALM_MAX && paceAge > SC.TOO_FAST_AGE &&
+      st.pathLen / paceAge > SC.TOO_FAST) {
     discardActiveInk(st, now, 'too fast');
     return;
   }
