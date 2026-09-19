@@ -1008,6 +1008,19 @@ var SC = {
   COMMIT_SPEED:    0.09,   /* smoothed px/ms needed to commit */
   COMMIT_COH:      0.42,   /* window direction coherence 0..1 */
   COMMIT_NET:      6,      /* travel from anchor needed to commit */
+  TOO_FAST:        0.55,   /* Above this a contact is not writing - it is a
+                              hand being swept across the glass. Measured over
+                              every recording: the pen tops out at 0.38 px/ms
+                              and sits at 0.11 median, while a moving hand runs
+                              0.91 median and up to 1.69. They do not overlap.
+
+                              Every speed rule in here was a FLOOR - move fast
+                              enough to count as writing - and there was no
+                              ceiling at all, so a hand swept over the screen
+                              did not merely pass, it went through the express
+                              lane meant for fast writers. One recorded contact
+                              covered 877px to finish 20px from where it
+                              started, at 1.0 px/ms, and drew. */
   FAST_NET:        12,     /* fast-writer express lane */
   FAST_SPEED:      0.16,
   DECISIVE_NET:    40,     /* decisive travel always inks */
@@ -1371,6 +1384,7 @@ var settings = {
   spacing: 38,
   template: TPL_RULED,
   guideDots: true,
+  gestures: true,
   /* Off by default. Three aim drills agreed on a -8px vertical bias, and
      applying it put the ink visibly BELOW the nib in ordinary writing -
      which says the drill was measuring how the user aims through a
@@ -1546,6 +1560,7 @@ function applyStoredSettings(set) {
     if (data.set.spacing === 32 || data.set.spacing === 38 || data.set.spacing === 44) settings.spacing = data.set.spacing;
     if (typeof data.set.template === 'number') settings.template = data.set.template;
     if (typeof data.set.guideDots === 'boolean') settings.guideDots = data.set.guideDots;
+    if (typeof data.set.gestures === 'boolean') settings.gestures = data.set.gestures;
     if (typeof data.set.nibFix === 'boolean') settings.nibFix = data.set.nibFix;
     if (typeof data.set.paperColor === 'number' && data.set.paperColor >= 0 && data.set.paperColor < PAPERS.length) {
       settings.paperColor = data.set.paperColor;
@@ -3376,6 +3391,12 @@ function tryCommit(st, now) {
     return;
   }
 
+  /* nothing writes this fast; this is a hand crossing the glass */
+  if (st.vel > SC.TOO_FAST) {
+    if (age > SC.PALM_AGE) verdictPalm(st, now);
+    return;
+  }
+
   if ((age > needAge && st.vel > SC.COMMIT_SPEED * boost &&
        st.coh > SC.COMMIT_COH && st.net > SC.COMMIT_NET * boost) ||
       (st.net > SC.FAST_NET * boost && st.vel > SC.FAST_SPEED * boost) ||
@@ -3470,6 +3491,13 @@ function appendInk(st, pt, now, touch) {
     ctx.lineJoin = 'round';
     drawSmoothSeg(ctx, s, k - 1);
     ctx.restore();
+  }
+
+  /* a stroke that accelerates past writing speed is a hand that started
+     slowly and then swept */
+  if (settings.palmLevel >= PALM_MAX && st.vel > SC.TOO_FAST) {
+    discardActiveInk(st, now, 'too fast');
+    return;
   }
 
   /* mid-stroke palm discard (Max only) */
@@ -3889,6 +3917,16 @@ function detectGesture(now) {
      diagnosed from these, so each reason is recorded - but only when
      at least two fingers are actually down, or the log would fill
      with ordinary single-touch writing. */
+  /* A hand sweeping across the glass and a deliberate two-finger gesture
+     are the same event physically, and nothing separates them: measured,
+     a real scroll runs 0.74 px/ms and a moving hand 0.79, their contacts
+     live 269ms against 149ms, and raising the pinch age gate made the
+     false zoom worse rather than better. So this is offered as a choice
+     instead of a guess. Turned off, the page still zooms and scrolls with
+     the hand tool, and a two-finger tap still undoes - that is decided at
+     the lift, not from motion, so it was never the ambiguous part. */
+  if (!settings.gestures) return;
+
   var live = liveTouchCount();
 
   /* In Glove mode a single contact is always the pen, so it inks from the
@@ -6006,6 +6044,13 @@ function buildMoreMenu() {
         settings.nibFix = !settings.nibFix;
         toast(settings.nibFix ? 'Ink shifted ' + SC.NIB_DY + 'px down'
                               : 'Ink drawn where the glass reports it');
+        afterSettingChange();
+      } },
+    { lbl: 'Two-finger zoom', val: settings.gestures ? 'On' : 'Off',
+      act: function () {
+        settings.gestures = !settings.gestures;
+        toast(settings.gestures ? 'Two fingers zoom and scroll again'
+                                : 'Off - use the hand tool to zoom and scroll');
         afterSettingChange();
       } },
     { lbl: 'Zoom window', val: zw.on ? 'On' : 'Off', act: zwToggle },

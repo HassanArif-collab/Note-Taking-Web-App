@@ -748,13 +748,18 @@ test('a committed stroke that starts hopping between lobes is dropped', function
 
 test('a long stroke with genuine direction changes survives', function (done) {
   var app = fresh();
-  /* writing reverses direction constantly, but never teleports */
+  /* Writing reverses direction constantly, but never teleports - and
+     never moves faster than a hand can. This used to peak at 0.75 px/ms,
+     which is twice the fastest pen contact in any recording (0.38) and
+     well into the range a hand swept across the glass produces (0.91
+     median). It was motion I invented, and it was wrong. Slowed to peak
+     at about 0.36 px/ms, which is the top of what the pen actually does. */
   app.down(1, PEN.x, PEN.y);
   var i, a;
   for (i = 1; i <= 60; i++) {
     app.tick(16);
-    a = i * 0.35;
-    app.moveTo(1, PEN.x + i * 3 + Math.sin(a) * 18, PEN.y + Math.cos(a) * 22);
+    a = i * 0.15;
+    app.moveTo(1, PEN.x + i * 2 + Math.sin(a) * 18, PEN.y + Math.cos(a) * 22);
   }
   app.up(1);
   after(300, function () {
