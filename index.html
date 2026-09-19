@@ -1260,6 +1260,27 @@ var SC = {
   SHORT_MAX_NET:   70,     /* ...and short. Anything longer had every chance to
                               commit normally; if it did not, it was not a pen. */
   SHORT_COH:       0.55,   /* ...going somewhere, not milling about */
+  FLICK_MIN_MS:    60,     /* A comma, an apostrophe, the tick on a 7: short,
+                              quick, and dead straight. These were refused
+                              because an earlier rejected mark nearby had made
+                              the spot suspect - so losing one small mark cost
+                              the next one too, and the errors compounded
+                              along a line of working.
+                              The signature was measured and rejected once
+                              before, because a scrolling finger matches it 27%
+                              of the time. Two things changed. The glove turned
+                              the resting hand into brief flickers that almost
+                              never match: 2 of 184 against 14 of 247 bare. And
+                              requiring that nothing else was on the glass
+                              removes the scrolling finger entirely, because a
+                              scroll is two fingers by definition.
+                                 pen-small  7 of 28 recovered
+                                 gloved hand    1 of 184
+                                 scroll + zoom  0 of 66   (was 18 of 66) */
+  FLICK_MAX_MS:    220,
+  FLICK_SPEED:     0.15,
+  FLICK_STRAIGHT:  0.90,
+  FLICK_NET:       15,
   SHORT_STRAIGHT:  0.5,    /* ...and most of its travel was progress */
   PAN_TO_PINCH:    26,     /* How far the separation must have changed, in
                               total, before a gesture that began as a pan may
@@ -3137,6 +3158,17 @@ function beginTouch(touch, now, burst) {
 
   touchStates[id] = st;
 
+  /* A scroll or a pinch is two fingers by definition, so "was alone the
+     whole time" is what separates a deliberate flick of the pen from a
+     finger sliding during a gesture. Recorded once here rather than
+     sampled at the lift, because by then the other finger may have gone. */
+  if (liveTouchCount() > 1) {
+    var ck;
+    for (ck in touchStates) {
+      if (touchStates.hasOwnProperty(ck)) touchStates[ck].sawCompany = true;
+    }
+  }
+
   if (st.state === 'ink') startInkRecord(st, now);
   else if (st.state === 'probe' && settings.guideDots) showPendingDot(id, pt.x, pt.y);
 }
@@ -3715,8 +3747,28 @@ function endTouch(touch, now, cancelled) {
 /* A probe that never earned ink, judged once it has lifted. Everything
    here is unavailable while the contact is still down, which is why the
    live gate cannot make this call. */
+/* short, quick, dead straight, and alone on the glass */
+function isFlick(st, age) {
+  if (st.sawCompany) return false;
+  if (age < SC.FLICK_MIN_MS || age > SC.FLICK_MAX_MS) return false;
+  /* Measuring reach from the contact's true landing point instead of
+     st.net was tried here - SETTLE_MS discards the first 60ms, which on a
+     78ms flick is most of it - and changed the score by exactly nothing.
+     Four of the seven flicks are still refused for a reason I have not
+     found. Left as st.net rather than carrying a comment claiming a fix
+     that did not happen. */
+  if (st.net < SC.FLICK_NET) return false;
+  if (st.pathLen / Math.max(age, 1) < SC.FLICK_SPEED) return false;
+  return st.net / Math.max(st.pathLen, 1) > SC.FLICK_STRAIGHT;
+}
+
 function shortMark(st, age) {
-  if (st.suspect || st.state === 'palm') return false;
+  if (st.state === 'palm') return false;
+  /* Suspicion is forgiven for a lone flick. It has to be: a rejected mark
+     leaves palm memory behind, which makes the next mark beside it
+     suspect, which refuses it too - so one lost comma quietly took the
+     rest of the line with it. */
+  if (st.suspect && !isFlick(st, age)) return false;
   if (settings.palmLevel === PALM_OFF || settings.palmLevel === PALM_STRICT) return false;
   if (age >= SC.SHORT_MS || st.path.length < 4) return false;
   if (st.net < SC.SHORT_NET || st.net > SC.SHORT_MAX_NET) return false;
