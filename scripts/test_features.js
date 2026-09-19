@@ -332,7 +332,7 @@ function tdApp() {
       notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, strokes: [] } },
       cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
   a.flushFrames();
-  a.clickMenu('Tidy writing');
+  /* tidy is an action now, not a switch */
   a.flushFrames();
   return a;
 }
@@ -347,7 +347,7 @@ function tdWrite(a, n, x0, y0, slope, dip) {
                speed: 0.25, wobble: 0.5 });
     a.tick(80);
   }
-  a.tidy();               /* the 900ms pause, without waiting for it */
+  a.tidy();
   a.flushFrames();
 }
 
@@ -437,18 +437,6 @@ for (ti = 0; ti < tdOrig.length; ti++) {
 }
 check('undo puts every point back where the hand left it',
       tdWorst <= 2, 'worst point off by ' + (tdWorst / 100) + 'px');
-
-/* off by default, and off means off */
-var te = H.load({ quiet: true, dpr: 2, viewW: 768, viewH: 826,
-  seed: { mathnotes_v4: JSON.stringify({ v: 4,
-    notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
-    notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, strokes: [] } },
-    cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
-te.flushFrames();
-tdWrite(te, 6, 120, 300, 0.12, 0);
-check('switched off, it does not touch the ink',
-      Math.abs(tdSlope(te) - 0.12) < 0.03, "slope " + tdSlope(te).toFixed(4));
-
 
 /* ---------- tidy writing: superscripts and subscripts ----------
  * Samsung sort every symbol into six levels by where it sits against

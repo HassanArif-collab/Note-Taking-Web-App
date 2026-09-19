@@ -1429,7 +1429,6 @@ var settings = {
   uiDark: false,
   shapeAssist: SHAPE_OFF,
   margin: true,
-  tidy: false,
   scrollHintShown: false,
   pen: PEN_BALL,
   widthStep: 2,
@@ -1602,7 +1601,6 @@ function applyStoredSettings(set) {
     if (typeof data.set.uiDark === 'boolean') settings.uiDark = data.set.uiDark;
     if (typeof data.set.shapeAssist === 'number') settings.shapeAssist = data.set.shapeAssist;
     if (typeof data.set.margin === 'boolean') settings.margin = data.set.margin;
-    if (typeof data.set.tidy === 'boolean') settings.tidy = data.set.tidy;
     if (typeof data.set.scrollHintShown === 'boolean') settings.scrollHintShown = data.set.scrollHintShown;
     if (typeof data.set.pen === 'number') settings.pen = lim(data.set.pen, 0, PENS.length - 1);
     if (typeof data.set.widthStep === 'number') settings.widthStep = lim(data.set.widthStep, 0, 5);
@@ -2430,7 +2428,6 @@ function openPageMenu() {
  * and it is the one enhancement that needs no idea of what the letters
  * are, so it works the same for "the" and for "x = 3y + 2".
  */
-var TIDY_IDLE   = 900;   /* a pause this long ends a line of writing */
 var TIDY_TILT   = 0.21;  /* ~12 degrees. Past this it is not drift, it is a
                             diagram, an arrow, a long division bracket -
                             something meant to be at an angle. */
@@ -2497,13 +2494,27 @@ var TIDY_WORD_MIN = 4;     /* words. Three gives two gaps, and the median of
 var TIDY_WORD_MAX = 0.80;  /* of a symbol height: the furthest any one word
                               may slide. Past it the line is not prose and
                               the whole correction is abandoned. */
+var TIDY_FIT_RMS = 0.22; /* of a symbol height. Past this the feet are not
+                            on a line and the group is left alone.
+                            This is the guard that was missing, and it is
+                            the one that matters most: recorded writing has
+                            groups fitting to 0.7px and groups fitting to
+                            17px, and until now both got rotated by
+                            whatever angle the least-squares happened to
+                            return. The second kind is where "it gave my
+                            name MORE tilt" comes from - there was no line
+                            there to find, so the answer was noise, and
+                            noise applied to someone's handwriting is
+                            strictly worse than doing nothing. */
+var TIDY_SPAN    = 2.2;  /* ...and a line has to be at least this many
+                            symbol heights wide before an angle through it
+                            means anything. Two marks a centimetre apart
+                            can sit at any angle you like. */
 var TIDY_SCRIPT_MAX = 0.40;  /* the furthest a script may be moved, as a
                             fraction of symbol height. Past it the guess was
                             wrong, and a rule that does nothing when it is
                             unsure beats one that confidently moves an
                             exponent halfway across the page. */
-
-var tidyPend = [], tidyTimer = null;
 
 function rotateStroke(st, cx, cy, th, dx, dy) {
   var c = Math.cos(th), sn = Math.sin(th), p = st.pts, i, x, y;
@@ -2550,7 +2561,17 @@ function tidyFit(feet, lim) {
     if (feet[i][1] - (m * feet[i][0] + b) < lim) keep.push(feet[i]);
   }
   if (keep.length >= TIDY_MIN && keep.length < n) return tidyFit(keep, lim);
-  return { m: m, b: b };
+  /* How far the feet actually are from the line drawn through them. A line
+     of handwriting sits on its baseline to within a pixel or two; a group
+     that is not a line at all can be off by half a letter, and there is no
+     angle that improves it. Measured over the feet the fit kept, so a
+     descender that was deliberately set aside does not count against it. */
+  var rms = 0, e;
+  for (i = 0; i < n; i++) {
+    e = feet[i][1] - (m * feet[i][0] + b);
+    rms += e * e;
+  }
+  return { m: m, b: b, rms: Math.sqrt(rms / n), n: n };
 }
 
 /* The middle value, and the average of the two middles when there is no
@@ -2628,9 +2649,18 @@ function tidySymbols(list) {
   return syms;
 }
 
+var tidyWhy = null;   /* what the last group decided, for the scoreboard */
+
 function tidyGroup(list) {
-  if (list.length < TIDY_MIN) return;
+  tidyWhy = { n: list ? list.length : 0, syms: 0, H: 0, rms: 0,
+              span: 0, deg: 0, why: 'ok' };
+  if (!list || !list.length) { tidyWhy.why = 'empty'; return false; }
   var syms = tidySymbols(list), si;
+  tidyWhy.syms = syms.length;
+  /* counted in SYMBOLS, not strokes. Three strokes can be one letter, and
+     requiring three of them meant a line of math - written slowly, a
+     symbol at a time - never qualified at all. */
+  if (syms.length < TIDY_MIN) { tidyWhy.why = 'too few symbols'; return false; }
   /* the baseline belongs to the full-size symbols. Fitting it through the
      exponents too would drag it up wherever the writing happens to have
      one, and tilt the line by however many there are. */
@@ -2647,7 +2677,11 @@ function tidyGroup(list) {
     mfeet.push([(main[si].x0 + main[si].x1) / 2, main[si].y1]);
   }
   var fit = tidyFit(mfeet, H * TIDY_DESC);
-  if (!fit) return;
+  tidyWhy.H = Math.round(H);
+  if (!fit) { tidyWhy.why = 'no fit'; return false; }
+  tidyWhy.rms = Math.round(fit.rms * 10) / 10;
+  tidyWhy.deg = Math.round(Math.atan(fit.m) * 1800 / Math.PI) / 10;
+  if (fit.rms > H * TIDY_FIT_RMS) { tidyWhy.why = 'not a line'; return false; }
   var th = Math.atan(fit.m);
   /* the extent of the INK, not of strokeBBox - that one is padded by a
      nib width and change on every side, which on an ordinary line of
@@ -2664,7 +2698,15 @@ function tidyGroup(list) {
     }
   }
   var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-  if (Math.abs(th) > TIDY_TILT) th = 0;
+  tidyWhy.span = Math.round((x1 - x0) / H * 10) / 10;
+  if (x1 - x0 < H * TIDY_SPAN) { tidyWhy.why = 'too short'; return false; }
+  /* Over a line of handwriting, 23 degrees does not mean the hand wrote at
+     23 degrees - it means the line was not a line. Refuse the whole thing
+     rather than snap it to a rule on the strength of a fit that says
+     something implausible. (A genuine diagonal - an arrow, a bracket, a
+     division sign - lands here too, and leaving it exactly as drawn is
+     the right answer for it as well.) */
+  if (Math.abs(th) > TIDY_TILT) { tidyWhy.why = 'deliberate angle'; return false; }
 
   /* where the baseline sits once the tilt is out. Rotating about the
      centre leaves the baseline's height AT the centre alone, so this is
@@ -2750,44 +2792,120 @@ function tidyGroup(list) {
   }
 
   /* nothing worth redrawing the page for */
-  if (Math.abs(th) < 0.004 && Math.abs(dy) < 0.5 && !moved) return;
+  if (Math.abs(th) < 0.004 && Math.abs(dy) < 0.5 && !moved) {
+    tidyWhy.why = 'already tidy';
+    return false;
+  }
 
   tidyApply(items, false);
   pushUndo({ t: 'tidy', items: items });
   saveSoon();
+  return true;
 }
 
-function tidyRun() {
-  tidyTimer = null;
-  var list = tidyPend;
-  tidyPend = [];
-  if (!settings.tidy || !list.length) return;
-  /* still writing, or holding a selection - come back later */
-  if (liveTouchCount() || gesture || selection.length) { tidyPend = list; tidyLater(); return; }
-
-  /* split the burst into lines. Written fast enough a pause never falls
-     between two lines, and time alone would flatten both onto one rule. */
-  var line = [list[0]], i, prev = strokeBBox(list[0]);
-  for (i = 1; i < list.length; i++) {
-    var bb = strokeBBox(list[i]);
-    var gap = Math.abs((bb.y0 + bb.y1) / 2 - (prev.y0 + prev.y1) / 2);
-    if (gap > settings.spacing * 0.7) { tidyGroup(line); line = []; }
-    line.push(list[i]);
-    prev = bb;
+/* Which strokes are one line of writing.
+ *
+ * The first version asked whether each stroke sat near the PREVIOUS one,
+ * and cut the line wherever the answer was no. A dot, a cross-bar and a
+ * descender all sit far from their neighbours by design, so an ordinary
+ * name came apart: "hassan" and "arif" became two lines, each got its own
+ * baseline fit, its own rotation and its own snap - and the second name
+ * ended up more crooked than it was written, which is exactly what was
+ * reported. Recorded: 19 strokes cut into 3 groups, 17 into 6.
+ *
+ * A line is not a run of neighbours. It is a baseline with things sitting
+ * on it. So the full-size strokes elect the baselines first, and then
+ * every small mark joins the baseline underneath it - which is where a
+ * dot and a cross-bar belong and where they were going to be measured
+ * against anyway.
+ */
+function tidyLines(list) {
+  var i, q, p, foot, top, hs = [], boxes = [];
+  for (i = 0; i < list.length; i++) {
+    p = list[i].pts;
+    foot = -1e9; top = 1e9;
+    for (q = 0; q < p.length; q++) {
+      if (p[q][1] > foot) foot = p[q][1];
+      if (p[q][1] < top) top = p[q][1];
+    }
+    boxes.push({ s: list[i], foot: foot, top: top, h: foot - top });
+    hs.push(foot - top);
   }
-  tidyGroup(line);
+  var H = tidyMedian(hs) || 1;
+
+  /* the full-size strokes elect the baselines */
+  var big = [], small = [];
+  for (i = 0; i < boxes.length; i++) {
+    if (boxes[i].h >= H * 0.5) big.push(boxes[i]);
+    else small.push(boxes[i]);
+  }
+  if (!big.length) { big = boxes; small = []; }
+  big.sort(function (a, b) { return a.foot - b.foot; });
+
+  var lines = [], cur = [big[0]], ref = big[0].foot;
+  var tol = Math.max(settings.spacing * 0.6, H * 0.7);
+  for (i = 1; i < big.length; i++) {
+    if (big[i].foot - ref > tol) { lines.push(cur); cur = []; ref = big[i].foot; }
+    cur.push(big[i]);
+  }
+  lines.push(cur);
+
+  /* ...and every small mark joins the baseline below it. A dot hangs
+     above its own line, never below it, so "the nearest baseline that is
+     not above me" is the whole rule. */
+  var bases = [], k;
+  for (k = 0; k < lines.length; k++) {
+    var fs2 = [];
+    for (i = 0; i < lines[k].length; i++) fs2.push(lines[k][i].foot);
+    bases.push(tidyMedian(fs2));
+  }
+  for (i = 0; i < small.length; i++) {
+    var best = -1, bestD = 1e9, d;
+    for (k = 0; k < bases.length; k++) {
+      d = bases[k] - small[i].foot;          /* baseline below the mark */
+      if (d < -H * 0.6) continue;            /* that line is above it */
+      if (d < bestD) { bestD = d; best = k; }
+    }
+    if (best < 0) best = bases.length - 1;
+    lines[best].push(small[i]);
+  }
+
+  var out = [];
+  for (k = 0; k < lines.length; k++) {
+    var one = [];
+    for (i = 0; i < lines[k].length; i++) one.push(lines[k][i].s);
+    out.push(one);
+  }
+  return out;
 }
 
-function tidyLater() {
-  if (tidyTimer) clearTimeout(tidyTimer);
-  tidyTimer = setTimeout(tidyRun, TIDY_IDLE);
-}
-
-function tidyNote(st) {
-  if (!settings.tidy) return;
-  if (st.pen === PEN_TEXT || st.pen === PEN_IMG) return;
-  tidyPend.push(st);
-  tidyLater();
+/* Tidy the whole note, when asked.
+ *
+ * It used to run itself 900ms after the last stroke. 900ms is a thinking
+ * pause, not the end of a line, so it rewrote half a line while the hand
+ * was still on it - and the redraw landed exactly as the pen came back
+ * down. Samsung and OneNote both put this behind a button, and they are
+ * right: it moves ink that is already written, so it should be asked for.
+ */
+function tidyRun() {
+  var n = activeNote();
+  if (!n || !n.strokes.length) { toast('Nothing to tidy'); return; }
+  if (liveTouchCount() || gesture) return;
+  clearSelection();
+  var ink = [], i;
+  for (i = 0; i < n.strokes.length; i++) {
+    if (n.strokes[i].pen === PEN_TEXT || n.strokes[i].pen === PEN_IMG) continue;
+    ink.push(n.strokes[i]);
+  }
+  if (!ink.length) { toast('Nothing to tidy'); return; }
+  var lines = tidyLines(ink), moved = 0, report = [];
+  for (i = 0; i < lines.length; i++) {
+    if (tidyGroup(lines[i])) moved++;
+    report.push(tidyWhy);
+  }
+  toast(moved ? (moved === 1 ? '1 line tidied' : moved + ' lines tidied')
+              : 'Already tidy');
+  return { lines: lines.length, moved: moved, sizes: report };
 }
 
 /* ---------- history ---------- */
@@ -3986,7 +4104,6 @@ function finalizeInk(st, now) {
   }
   n.strokes.push(s);
   pushUndo({ t: 'add', s: s });
-  tidyNote(s);
   var lp = s.pts[s.pts.length - 1];
   lastInkPt = { x: lp[0], y: lp[1], t: now };
   if (st.viaZW && zw.on) {
@@ -5920,7 +6037,7 @@ window.__mnWidthAt = strokeWidthAt;
 /* Tidy runs on a 900ms idle timer, and the test harness advances a
    fake clock rather than a real one - so without a way to say "the pause
    has happened" the feature would be untestable. */
-window.__mnTidy = function () { tidyRun(); };
+window.__mnTidy = function () { return tidyRun(); };
 window.__mnZW = function () { var g = zwGeom(); return { on: zw.on, x: zw.x, y: zw.y, bw: g.bw, bh: g.bh, top: g.top }; };
 
 /* ---------- event wiring ---------- */
@@ -6472,8 +6589,7 @@ function buildMoreMenu() {
         afterSettingChange();
       } },
     { lbl: 'Zoom window', val: zw.on ? 'On' : 'Off', act: zwToggle },
-    { lbl: 'Tidy writing', val: settings.tidy ? 'On' : 'Off',
-      act: function () { settings.tidy = !settings.tidy; afterSettingChange(); } },
+    { lbl: 'Tidy handwriting', val: '', act: function () { closePanels(); tidyRun(); } },
     { lbl: 'Margin line', val: settings.margin ? 'On' : 'Off',
       act: function () { settings.margin = !settings.margin; invalidateAll(); afterSettingChange(); } },
     { lbl: 'Testing drills', val: canUpload() ? 'server' : 'paste', act: showTraining },
