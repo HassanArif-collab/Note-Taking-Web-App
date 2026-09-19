@@ -560,5 +560,107 @@ check('levelling a script never moves it sideways',
       Math.abs(meX[1] - meX[0]) > 20,
       'x still ordered: ' + meX.map(function (v) { return Math.round(v); }).join(', '));
 
+
+/* ---------- tidy writing: the gaps between words ----------
+ * The gaps a hand leaves are not random, but they are not even either,
+ * and across a page the unevenness is most of what makes writing look
+ * hurried. Evening them is the only part of tidying that moves ink
+ * SIDEWAYS, which is why it is also the part with the most ways to be
+ * wrong - so the rule only touches gaps that are already about the usual
+ * size, and abandons the whole line rather than slide any word far. */
+
+/* a line of `n` two-mark words at the given gaps */
+function swLine(a, x, gapList) {
+  var i, id = 1, k;
+  for (i = 0; i < gapList.length + 1; i++) {
+    mdMark(a, id++, x, 300, 16, 22);
+    mdMark(a, id++, x + 20, 300, 16, 22);
+    if (i < gapList.length) x += 36 + gapList[i];
+  }
+  return a;
+}
+
+/* the gaps as they stand now, measured from the ink */
+function swGaps(a) {
+  var st = a.strokes(), boxes = [], i, q, p, b;
+  for (i = 0; i < st.length; i++) {
+    p = st[i].pts; b = { x0: 1e9, x1: -1e9 };
+    for (q = 0; q < p.length; q++) {
+      if (p[q][0] < b.x0) b.x0 = p[q][0];
+      if (p[q][0] > b.x1) b.x1 = p[q][0];
+    }
+    boxes.push(b);
+  }
+  boxes.sort(function (u, v) { return u.x0 - v.x0; });
+  var out = [];
+  for (i = 1; i < boxes.length; i++) {
+    if (boxes[i].x0 - boxes[i - 1].x1 > 12) out.push(boxes[i].x0 - boxes[i - 1].x1);
+  }
+  return out;
+}
+
+/* five words at 16, 34, 20, 30 - ordinary hurried spacing */
+var sa = tdApp();
+swLine(sa, 100, [16, 34, 20, 30]);
+var saWas = swGaps(sa);
+sa.tidy();
+var saNow = swGaps(sa);
+function swSpread(g) {
+  var i, lo = 1e9, hi = -1e9;
+  for (i = 0; i < g.length; i++) { if (g[i] < lo) lo = g[i]; if (g[i] > hi) hi = g[i]; }
+  return hi - lo;
+}
+check('uneven word gaps are evened out',
+      saWas.length === 4 && saNow.length === 4 &&
+      swSpread(saNow) < swSpread(saWas) / 2,
+      'spread ' + Math.round(swSpread(saWas)) + 'px -> ' + Math.round(swSpread(saNow)) + 'px');
+
+/* a gap three times the others is a column, a margin, the space before a
+   working. It was meant, and squashing it would destroy the layout. */
+var sb = tdApp();
+swLine(sb, 100, [20, 22, 90, 18]);
+var sbWas = swGaps(sb);
+sb.tidy();
+var sbNow = swGaps(sb);
+check('a deliberate wide gap is left exactly as it was',
+      sbNow.length === 4 && Math.abs(sbNow[2] - sbWas[2]) < 2.0,
+      'the 90px gap is now ' + Math.round(sbNow[2]) + 'px');
+check('...while the ordinary gaps around it still even out',
+      Math.abs(sbNow[0] - sbNow[1]) < Math.abs(sbWas[0] - sbWas[1]) + 0.1,
+      'first two gaps ' + Math.round(sbNow[0]) + ', ' + Math.round(sbNow[1]));
+
+/* two gaps have no median worth the name */
+var sc = tdApp();
+swLine(sc, 100, [16, 40]);
+var scWas = swGaps(sc);
+sc.tidy();
+var scNow = swGaps(sc);
+check('three words are too few to say what the usual gap is',
+      scNow.length === 2 &&
+      Math.abs(scNow[0] - scWas[0]) < 1.0 && Math.abs(scNow[1] - scWas[1]) < 1.0,
+      scWas.map(Math.round).join(', ') + ' -> ' + scNow.map(Math.round).join(', '));
+
+/* and undo still has to be exact now that the transform moves sideways */
+var sd = tdApp();
+swLine(sd, 100, [16, 34, 20, 30]);
+var sdBefore = JSON.stringify(sd.strokes().map(function (x) {
+  return x.pts.map(function (p) { return [Math.round(p[0] * 100), Math.round(p[1] * 100)]; });
+}));
+sd.tidy();
+sd.undo();
+var sdAfter = sd.strokes().map(function (x) {
+  return x.pts.map(function (p) { return [Math.round(p[0] * 100), Math.round(p[1] * 100)]; });
+});
+var sdOrig = JSON.parse(sdBefore), sdWorst = 0, sq, sr;
+for (sq = 0; sq < sdOrig.length; sq++) {
+  for (sr = 0; sr < sdOrig[sq].length; sr++) {
+    sdWorst = Math.max(sdWorst,
+      Math.abs(sdOrig[sq][sr][0] - sdAfter[sq][sr][0]),
+      Math.abs(sdOrig[sq][sr][1] - sdAfter[sq][sr][1]));
+  }
+}
+check('undo is still exact once words move sideways too',
+      sdWorst <= 2, 'worst point off by ' + (sdWorst / 100) + 'px');
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

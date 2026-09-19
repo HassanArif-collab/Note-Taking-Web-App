@@ -2481,6 +2481,22 @@ var TIDY_SUB_AT = 0.02;  /* and a subscript's middle sits at or below the
                             ABOVE the line, which is what this narrow margin
                             is for. */
 var TIDY_SUB_TO = 0.30;
+/* Evening out the gaps between words - Samsung's third toggle. The gaps a
+   hand leaves are not random but they are not even either, and on a page
+   the unevenness is most of what makes writing look hurried.
+   Only gaps that are already ROUGHLY the usual size are touched. A gap
+   three times the others is a column, a margin, the space before a
+   working - meant, and left alone. */
+var TIDY_WORD_AT  = 0.55;  /* of a symbol height: wider than this and the
+                              gap is between words rather than inside one */
+var TIDY_WORD_LO  = 0.55;  /* a gap is only evened out if it falls between */
+var TIDY_WORD_HI  = 2.00;  /* these multiples of the line's own median gap */
+var TIDY_WORD_MIN = 4;     /* words. Three gives two gaps, and the median of
+                              two numbers is their average, which is not a
+                              measure of anything. */
+var TIDY_WORD_MAX = 0.80;  /* of a symbol height: the furthest any one word
+                              may slide. Past it the line is not prose and
+                              the whole correction is abandoned. */
 var TIDY_SCRIPT_MAX = 0.40;  /* the furthest a script may be moved, as a
                             fraction of symbol height. Past it the guess was
                             wrong, and a rule that does nothing when it is
@@ -2489,11 +2505,11 @@ var TIDY_SCRIPT_MAX = 0.40;  /* the furthest a script may be moved, as a
 
 var tidyPend = [], tidyTimer = null;
 
-function rotateStroke(st, cx, cy, th, dy) {
+function rotateStroke(st, cx, cy, th, dx, dy) {
   var c = Math.cos(th), sn = Math.sin(th), p = st.pts, i, x, y;
   for (i = 0; i < p.length; i++) {
     x = p[i][0] - cx; y = p[i][1] - cy;
-    p[i][0] = cx + x * c - y * sn;
+    p[i][0] = cx + x * c - y * sn + dx;
     p[i][1] = cy + x * sn + y * c + dy;
   }
   st.bb = null;
@@ -2537,6 +2553,16 @@ function tidyFit(feet, lim) {
   return { m: m, b: b };
 }
 
+/* The middle value, and the average of the two middles when there is no
+   single one. Taking v[n>>1] of an even list is the UPPER middle, which
+   for the gaps 16 20 30 34 answers 30 - and then 16 falls outside the
+   window of gaps near the usual size and never gets evened out at all. */
+function tidyMedian(v) {
+  var w = v.slice(0).sort(function (p, q) { return p - q; }), n = w.length;
+  if (!n) return 0;
+  return n % 2 ? w[n >> 1] : (w[n / 2 - 1] + w[n / 2]) / 2;
+}
+
 function tidyApply(items, reverse) {
   var i, it, b0, b1;
   for (i = 0; i < items.length; i++) {
@@ -2546,8 +2572,8 @@ function tidyApply(items, reverse) {
     /* forward: rotate about (cx,cy) by th, then drop by dy.
        backwards: take the drop off first, which is what rotating about a
        centre moved down by dy and then subtracting dy comes to. */
-    if (reverse) rotateStroke(it.s, it.cx, it.cy + it.dy, -it.th, -it.dy);
-    else rotateStroke(it.s, it.cx, it.cy, it.th, it.dy);
+    if (reverse) rotateStroke(it.s, it.cx + it.dx, it.cy + it.dy, -it.th, -it.dx, -it.dy);
+    else rotateStroke(it.s, it.cx, it.cy, it.th, it.dx, it.dy);
     b1 = strokeBBox(it.s);
     invalidateRange(b1.y0, b1.y1);
   }
@@ -2610,8 +2636,7 @@ function tidyGroup(list) {
      one, and tilt the line by however many there are. */
   var hs = [];
   for (si = 0; si < syms.length; si++) hs.push(syms[si].y1 - syms[si].y0);
-  hs.sort(function (p, q) { return p - q; });
-  var H = hs[hs.length >> 1] || 1;
+  var H = tidyMedian(hs) || 1;
   var main = [];
   for (si = 0; si < syms.length; si++) {
     if (syms[si].y1 - syms[si].y0 >= H * 0.6) main.push(syms[si]);
@@ -2686,8 +2711,42 @@ function tidyGroup(list) {
     }
     if (extra) moved = true;
     for (q = 0; q < syms[si].list.length; q++) {
-      items.push({ s: syms[si].list[q], cx: cx, cy: cy, th: -th, dy: dy + extra });
+      items.push({ s: syms[si].list[q], sym: syms[si],
+                   cx: cx, cy: cy, th: -th, dx: 0, dy: dy + extra });
     }
+  }
+
+  /* --- even out the gaps between words --- */
+  var byX = syms.slice(0).sort(function (p, r) { return p.x0 - r.x0; });
+  var words = [], cur = [byX[0]], gaps = [], g;
+  for (si = 1; si < byX.length; si++) {
+    g = byX[si].x0 - byX[si - 1].x1;
+    if (g > H * TIDY_WORD_AT) { words.push(cur); cur = []; gaps.push(g); }
+    cur.push(byX[si]);
+  }
+  words.push(cur);
+  if (words.length >= TIDY_WORD_MIN) {
+    var med = tidyMedian(gaps);
+    var shift = 0, shifts = [0], ok = true;
+    for (si = 0; si < gaps.length; si++) {
+      /* a gap far from the usual one was meant, so it is kept exactly and
+         everything after it simply carries the shift already accumulated */
+      if (gaps[si] > med * TIDY_WORD_LO && gaps[si] < med * TIDY_WORD_HI) {
+        shift += med - gaps[si];
+      }
+      if (Math.abs(shift) > H * TIDY_WORD_MAX) ok = false;
+      shifts.push(shift);
+    }
+    if (ok) {
+      for (si = 0; si < words.length; si++) {
+        if (Math.abs(shifts[si]) < 0.5) continue;
+        for (q = 0; q < words[si].length; q++) words[si][q].dx = shifts[si];
+      }
+      if (Math.abs(shifts[shifts.length - 1]) >= 0.5) moved = true;
+    }
+  }
+  for (si = 0; si < items.length; si++) {
+    if (items[si].sym.dx) { items[si].dx = items[si].sym.dx; moved = true; }
   }
 
   /* nothing worth redrawing the page for */
