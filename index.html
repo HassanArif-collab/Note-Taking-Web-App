@@ -1910,6 +1910,40 @@ function strokeWidthAt(s, i) {
 
 /* one quadratic segment: vertex at point i, between the midpoints
  * of its neighbours (classic midpoint smoothing). */
+/* Every segment is a quadratic through the midpoints of its neighbours,
+ * with the sample itself as the control point. Which is why re-encoding
+ * the ink as Bezier curves - Google's Gboard recogniser does this, and
+ * the stated reason, "a consistent representation across devices with
+ * different sampling rates and accuracies", is a fair description of a
+ * passive capacitive disc - was measured and then NOT built.
+ *
+ * It was going to buy two things. Neither survived being measured against
+ * the recordings:
+ *
+ *   ACCURATE FEET AND TOPS, on the theory that erratic sampling misses
+ *   the true extreme of a letter and so spoils the baseline. Fitting a
+ *   spline through the samples and evaluating it densely moves the foot
+ *   of a stroke by 0.08px at the median and 0.83px at the worst, against
+ *   a baseline tolerance of about eight. There is nothing there. Strokes
+ *   slow down as the pen reverses, so the samples crowd around the
+ *   extremes already.
+ *
+ *   SMOOTH INK WHERE SAMPLES ARE MISSING. 5% of segments are longer than
+ *   12px and the worst is 74px, which sounds like a page full of straight
+ *   cuts across curves - but this function already draws every one of
+ *   them as a quadratic. They are not faceted. Where the data is missing
+ *   the curve is a guess either way, and a Bezier fit would be a
+ *   different guess, not a better-informed one.
+ *
+ * And the sampling turned out not to be erratic in the way it looked.
+ * 9.1% of samples arrive 32ms or later and the worst gap is 351ms, but
+ * of the gaps over 60ms, the large majority are before the first
+ * touchmove of a stroke - which is not latency at all, it is the pen
+ * resting on the glass before the hand starts moving, and no touchmove
+ * fires because nothing moved. Of the gaps in the MIDDLE of a stroke, 18
+ * of 26 have the pen travelling under 6px, so those are pauses too. Real
+ * dropouts: 8 in the whole corpus, 0.27% of segments, worst 28px.
+ */
 function drawSmoothSeg(c, s, i) {
   var p = s.pts, n = p.length;
   var m0x, m0y, m1x, m1y;
