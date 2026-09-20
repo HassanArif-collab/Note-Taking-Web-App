@@ -139,7 +139,7 @@ var nbs0 = fd.state().notebooks;
 check('new notebooks are created', nbs0.length >= 3, nbs0.length + ' notebooks');
 
 fd.answer('1');
-fd.els.nbMoveBtn._fire('click', {});
+fd.nb().move();
 var nbs = fd.state().notebooks;
 var nested = 0, q;
 for (q = 0; q < nbs.length; q++) { if (nbs[q].parent) nested++; }
@@ -149,7 +149,7 @@ check('a notebook can be nested inside another', nested === 1, nested + ' nested
 var childIdx = -1;
 for (q = 0; q < nbs.length; q++) { if (nbs[q].parent) childIdx = q; }
 fd.answer(String(childIdx + 1));
-fd.els.nbMoveBtn._fire('click', {});
+fd.nb().move();
 var after = fd.state().notebooks, loops = 0;
 for (q = 0; q < after.length; q++) {
   var seen = 0, cur2 = after[q], r;
@@ -847,6 +847,87 @@ svb.down(9, 400, 300 + 56);      /* pen still down as the tab goes away */
 svb.fire('pagehide');
 check('leaving the page saves even with the pen down',
       svStored(svb) >= 1, svStored(svb) + " strokes in storage");
+
+
+/* ---------- deleting a notebook keeps everything inside it ----------
+ * There was no way to delete a notebook at all, and rename and move sat
+ * in the drawer header acting on whichever notebook you happened to be
+ * in - so to rename one you first had to open it, and nothing on screen
+ * said which one the buttons meant.
+ *
+ * Delete is the dangerous one. A notebook holds notes and can hold other
+ * notebooks, and none of that is what the user asked to delete. The
+ * notes move up to the folder above and the sub-folders take its place
+ * there; the only thing that disappears is the notebook. */
+
+var nd = fresh();
+nd.confirmAll(true);
+(function () {
+  var mk = nd.els.newNbBtn;
+  nd.answer('Physics'); mk._fire('click', {});
+  /* two notes in it */
+  nd.els.fabNew._fire('click', {});
+  nd.flushFrames();
+  nd.els.backBtn._fire('click', {});
+  nd.flushFrames();
+  nd.els.fabNew._fire('click', {});
+  nd.flushFrames();
+  nd.els.backBtn._fire('click', {});
+  nd.flushFrames();
+})();
+
+var ndBefore = nd.state().notebooks;
+var ndIdx = -1, ndq;
+for (ndq = 0; ndq < ndBefore.length; ndq++) {
+  if (ndBefore[ndq].title === 'Physics') ndIdx = ndq;
+}
+var ndNotesInside = ndIdx >= 0 ? ndBefore[ndIdx].notes.length : -1;
+check('a notebook can hold notes', ndNotesInside >= 2,
+      ndNotesInside + " notes in it");
+
+var ndTotalBefore = 0;
+for (ndq = 0; ndq < ndBefore.length; ndq++) ndTotalBefore += ndBefore[ndq].notes.length;
+nd.nb().del(ndIdx);
+nd.flushFrames();
+var ndAfter = nd.state().notebooks, ndTotalAfter = 0;
+for (ndq = 0; ndq < ndAfter.length; ndq++) ndTotalAfter += ndAfter[ndq].notes.length;
+
+check('deleting a notebook removes the notebook',
+      ndAfter.length === ndBefore.length - 1,
+      ndBefore.length + " -> " + ndAfter.length + " notebooks");
+check('...and not one note inside it', ndTotalAfter === ndTotalBefore,
+      ndTotalBefore + " notes before, " + ndTotalAfter + " after");
+
+/* the last notebook is the floor - deleting it would leave nowhere to put
+   a note */
+var nl = fresh();
+nl.confirmAll(true);
+(function () {
+  var st = nl.state().notebooks, i;
+  for (i = st.length - 1; i > 0; i--) nl.nb().del(i);
+  nl.nb().del(0);
+})();
+check('the last notebook cannot be deleted',
+      nl.state().notebooks.length >= 1,
+      nl.state().notebooks.length + " notebooks left");
+
+/* renaming acts on the notebook you picked, not the one you are in */
+var nr = fresh();
+(function () {
+  nr.answer('Physics'); nr.els.newNbBtn._fire('click', {});
+  nr.answer('Chemistry'); nr.els.newNbBtn._fire('click', {});
+})();
+(function () {
+  var st = nr.state().notebooks, i, target = -1;
+  for (i = 0; i < st.length; i++) if (st[i].title === 'Physics') target = i;
+  var cur = nr.state().cur ? nr.state().cur.nb : -1;
+  nr.answer('Maths');
+  nr.nb().rename(target);
+  var st2 = nr.state().notebooks;
+  check('rename acts on the row you tapped, not the notebook you are in',
+        st2[target].title === "Maths" && target !== cur,
+        "renamed index " + target + ", current is " + cur);
+})();
 
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

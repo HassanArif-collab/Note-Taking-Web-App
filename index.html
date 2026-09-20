@@ -151,6 +151,41 @@ input { font: inherit; }
   min-width: 12px; text-align: center;
 }
 body.dark .nb-row .ct { color: #A8ADB5; background: #2B2F36; }
+/* Rename and Move used to live in the drawer header and act on the
+ * CURRENT notebook - so to rename one you first had to open it, and
+ * nothing on screen said which one the buttons meant. The actions belong
+ * on the row they act on.
+ *
+ * Above the drawer at 40, and its own scrim above that again, because the
+ * panel scrim sits at 19 for the page and would be underneath all of
+ * this. */
+.nb-item { display: -webkit-box; display: -webkit-flex; display: flex;
+           -webkit-align-items: center; align-items: center; }
+.nb-item .nb-row { -webkit-flex: 1; flex: 1; }
+.nb-more {
+  width: 38px; height: 44px; border: 0; background: none; color: #9AA0A8;
+  font-size: 19px; font-weight: 700; line-height: 1; padding: 0 12px 0 0;
+}
+.nb-more:active { color: #0381FE; }
+#nbActions {
+  position: fixed; z-index: 44; display: none; min-width: 190px;
+  background: #FFFFFF; border-radius: 12px; padding: 6px 0;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+}
+#nbActions.on { display: block; }
+#nbActions button {
+  display: block; width: 100%; text-align: left; border: 0; background: none;
+  font-size: 15px; color: #1A1A1A; padding: 12px 18px;
+  -webkit-box-sizing: border-box; box-sizing: border-box;
+}
+#nbActions button.warn { color: #B3261E; }
+#nbActions .who {
+  font-size: 12px; font-weight: 700; color: #8A9099; padding: 6px 18px 8px 18px;
+  letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#panelScrim.hi { z-index: 43; }
+body.dark #nbActions { background: #23272E; }
+body.dark #nbActions button { color: #F2F3F5; }
 #newNbBtn { height: 52px; color: #0381FE; font-size: 15px; font-weight: 600; text-align: left; padding: 0 18px; }
 
 /* ---------- editor canvas ---------- */
@@ -724,21 +759,11 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
       </svg>
     </button>
     <div class="lbl">Notebooks</div>
-    <button id="nbMoveBtn" class="ibtn" style="width:36px;height:36px" aria-label="Move notebook into a folder">
-      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 6.5 h6 l1.8 2.2 H21 V19 a1.4 1.4 0 0 1 -1.4 1.4 H4.4 A1.4 1.4 0 0 1 3 19 z"/>
-        <path d="M12 12.5 v5"/><path d="M9.6 14.9 L12 12.5 l2.4 2.4"/>
-      </svg>
-    </button>
-    <button id="nbRenameBtn" class="ibtn" style="width:36px;height:36px"
-            aria-label="Rename this notebook" title="Rename this notebook">
-      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
-        <path d="M4 20 l1-4.5 L16.5 4 a2 2 0 0 1 3.5 3.5 L8.5 19 z"/>
-      </svg>
-    </button>
+    <div style="width:36px"></div>
   </div>
   <div id="nbList"></div>
   <button id="newNbBtn">+ New notebook</button>
+  <div id="nbActions"></div>
 </div>
 
 <!-- ============ EDITOR ============ -->
@@ -6858,6 +6883,10 @@ window.__mnRef = {
   on: function () { return refOn; },
   take: function () { var d = refCurrent(); return d ? d.ref : null; }
 };
+window.__mnNb = {
+  move: moveNotebook, rename: renameNotebook, del: deleteNotebook,
+  actions: openNbActions, close: closeNbActions
+};
 window.__mnSave = function () { saveTick(); };
 window.__mnTidy = function () { return tidyRun(); };
 window.__mnZW = function () { var g = zwGeom(); return { on: zw.on, x: zw.x, y: zw.y, bw: g.bw, bh: g.bh, top: g.top }; };
@@ -7172,6 +7201,8 @@ function isDescendantOf(childIdx, ancestorId) {
 
 function drawerRow(i, depth) {
   var nb = notebooks[i];
+  var item = document.createElement('div');
+  item.className = 'nb-item';
   var row = document.createElement('button');
   row.className = 'nb-row' + (i === curNotebook ? ' on' : '');
   row.style.paddingLeft = (18 + depth * 20) + 'px';
@@ -7187,7 +7218,100 @@ function drawerRow(i, depth) {
       saveSoon();
     });
   })(i);
-  nbList.appendChild(row);
+  var more = document.createElement('button');
+  more.className = 'nb-more';
+  more.innerHTML = '&#8942;';
+  more.setAttribute('aria-label', 'Actions for ' + nb.title);
+  (function (idx, anchor) {
+    more.addEventListener('click', function (ev) {
+      if (ev && ev.stopPropagation) ev.stopPropagation();
+      openNbActions(idx, anchor);
+    });
+  })(i, more);
+  item.appendChild(row);
+  item.appendChild(more);
+  nbList.appendChild(item);
+}
+
+function closeNbActions() {
+  byId('nbActions').className = '';
+  byId('panelScrim').className = '';
+}
+
+function openNbActions(i, anchor) {
+  var nb = notebooks[i];
+  if (!nb) return;
+  var box = byId('nbActions');
+  box.innerHTML = '';
+  var who = document.createElement('div');
+  who.className = 'who';
+  who.innerHTML = escapeHtml(nb.title.toUpperCase());
+  box.appendChild(who);
+  var defs = [
+    { lbl: 'Rename', act: function () { renameNotebook(i); } },
+    { lbl: 'Move to folder', act: function () { moveNotebook(i); } },
+    { lbl: 'Delete', warn: true, act: function () { deleteNotebook(i); } }
+  ];
+  var k;
+  for (k = 0; k < defs.length; k++) {
+    (function (d) {
+      var b = document.createElement('button');
+      if (d.warn) b.className = 'warn';
+      b.innerHTML = d.lbl;
+      b.addEventListener('click', function () { closeNbActions(); d.act(); });
+      box.appendChild(b);
+    })(defs[k]);
+  }
+  var r = anchor.getBoundingClientRect();
+  box.className = 'on';
+  var h = box.offsetHeight || 170;
+  var top = r.bottom + 4;
+  if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 4);
+  box.style.top = Math.round(top) + 'px';
+  box.style.left = Math.round(Math.max(8, r.left - 150)) + 'px';
+  byId('panelScrim').className = 'on hi';
+}
+
+function renameNotebook(i) {
+  var nb = notebooks[i];
+  if (!nb) return;
+  var name = window.prompt('Notebook name', nb.title);
+  if (name === null || name === '') return;
+  nb.title = name;
+  renderDrawer();
+  renderHome();
+  saveSoon();
+}
+
+/* Deleting a notebook must not delete anything inside it. Its notes move
+   to the folder above it and its sub-folders take its place there, so the
+   only thing that disappears is the notebook itself. */
+function deleteNotebook(i) {
+  var nb = notebooks[i];
+  if (!nb) return;
+  if (notebooks.length < 2) { toast('This is the only notebook'); return; }
+  var pIdx = nb.parent ? notebookIndexById(nb.parent) : -1;
+  if (pIdx < 0) pIdx = (i === 0 ? 1 : 0);
+  var into = notebooks[pIdx];
+  var msg = 'Delete "' + nb.title + '"?';
+  if (nb.notes.length) {
+    msg += String.fromCharCode(10) + String.fromCharCode(10) +
+           (nb.notes.length === 1 ? 'Its 1 note moves' : 'Its ' + nb.notes.length +
+            ' notes move') + ' to "' + into.title + '". Nothing is lost.';
+  }
+  if (!window.confirm(msg)) return;
+  var q;
+  for (q = 0; q < nb.notes.length; q++) into.notes.push(nb.notes[q]);
+  for (q = 0; q < notebooks.length; q++) {
+    if (notebooks[q].parent === nb.id) notebooks[q].parent = nb.parent || null;
+  }
+  notebooks.splice(i, 1);
+  if (curNotebook >= notebooks.length) curNotebook = notebooks.length - 1;
+  else if (curNotebook === i) curNotebook = Math.max(0, notebookIndexById(into.id));
+  renderDrawer();
+  renderHome();
+  saveSoon();
+  toast('Deleted "' + nb.title + '"');
 }
 
 function renderDrawerLevel(parentId, depth) {
@@ -7211,12 +7335,13 @@ function renderDrawer() {
 }
 
 /* move the current notebook under another one, or back to the top */
-function moveNotebook() {
-  var nb = notebooks[curNotebook];
+function moveNotebook(which) {
+  var cur = typeof which === 'number' ? which : curNotebook;
+  var nb = notebooks[cur];
   if (!nb) return;
   var list = [], i;
   for (i = 0; i < notebooks.length; i++) {
-    if (i === curNotebook) continue;
+    if (i === cur) continue;
     if (isDescendantOf(i, nb.id)) continue;     /* no loops */
     list.push((i + 1) + ' = ' + notebooks[i].title);
   }
@@ -7231,7 +7356,7 @@ function moveNotebook() {
   if (v === 0) { nb.parent = null; }
   else {
     var t = v - 1;
-    if (t < 0 || t >= notebooks.length || t === curNotebook) return;
+    if (t < 0 || t >= notebooks.length || t === cur) return;
     if (isDescendantOf(t, nb.id)) { toast('That would make a loop'); return; }
     nb.parent = notebooks[t].id;
   }
@@ -7526,18 +7651,7 @@ byId('newNbBtn').addEventListener('click', function () {
     saveSoon();
   }
 });
-byId('nbMoveBtn').addEventListener('click', moveNotebook);
-byId('nbRenameBtn').addEventListener('click', function () {
-  var nb = notebooks[curNotebook];
-  if (!nb) return;
-  var name = window.prompt('Notebook name', nb.title);
-  if (name !== null && name !== '') {
-    nb.title = name;
-    renderDrawer();
-    renderHome();
-    saveSoon();
-  }
-});
+
 /* The dismissing tap is consumed here and goes no further, which is the
    whole point: on the page it used to land as a dot, so the only way out
    of the colour picker was to mark your own notes. */
@@ -7547,6 +7661,7 @@ byId('nbRenameBtn').addEventListener('click', function () {
     if (e && e.preventDefault) e.preventDefault();
     if (e && e.stopPropagation) e.stopPropagation();
     closePanels();
+    closeNbActions();
   }
   sc.addEventListener('touchstart', eat);
   sc.addEventListener('click', eat);
