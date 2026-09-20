@@ -2433,17 +2433,9 @@ var TIDY_TILT   = 0.21;  /* ~12 degrees. Past this it is not drift, it is a
                             something meant to be at an angle. */
 var TIDY_MIN    = 3;     /* two marks define a line exactly, so a fit
                             through them is not evidence of anything */
-var TIDY_DESC   = 0.25;  /* of the SYMBOL height: how far below the fitted
-                            baseline a foot may sit and still belong to it.
-                            Below that it is a descender - g, y, p, an
-                            integral tail - and pulling the baseline down to
-                            meet it tilts the whole word.
-                            Measured against the rule spacing at first,
-                            which is the wrong ruler: write small on wide
-                            rules and a descender drops less than a third of
-                            the spacing, so it stayed in the fit and tilted
-                            the line it was supposed to sit on. How far a
-                            letter hangs is a property of the letter. */
+/* TIDY_DESC is gone. It existed to hunt descenders out of a least-squares
+   fit before they could tilt it; Theil-Sen is not moved by them, so there
+   is nothing left to hunt. */
 var TIDY_SNAP   = 0.40;  /* of the spacing: the furthest the writing may be
                             moved onto a rule. Anything more would be
                             landing it on a DIFFERENT line from the one it
@@ -2494,18 +2486,22 @@ var TIDY_WORD_MIN = 4;     /* words. Three gives two gaps, and the median of
 var TIDY_WORD_MAX = 0.80;  /* of a symbol height: the furthest any one word
                               may slide. Past it the line is not prose and
                               the whole correction is abandoned. */
-var TIDY_FIT_RMS = 0.22; /* of a symbol height. Past this the feet are not
-                            on a line and the group is left alone.
-                            This is the guard that was missing, and it is
-                            the one that matters most: recorded writing has
-                            groups fitting to 0.7px and groups fitting to
-                            17px, and until now both got rotated by
-                            whatever angle the least-squares happened to
-                            return. The second kind is where "it gave my
-                            name MORE tilt" comes from - there was no line
-                            there to find, so the answer was noise, and
-                            noise applied to someone's handwriting is
-                            strictly worse than doing nothing. */
+var TIDY_ON_LINE = 0.30; /* of the x-height: how close a foot has to be to
+                            the fitted baseline to count as sitting on it */
+var TIDY_INLIERS = 0.60; /* ...and this fraction of the feet have to.
+                            The guard that was missing, and the one that
+                            matters most: recorded writing has groups whose
+                            feet sit on a line to a fraction of a pixel and
+                            groups that miss by half a letter, and both
+                            used to be rotated by whatever angle came back.
+                            The second kind is where "it gave my name MORE
+                            tilt" came from - there was no line there, so
+                            the answer was noise, and noise applied to
+                            someone's handwriting is strictly worse than
+                            doing nothing.
+                            Counted rather than averaged, because an
+                            average error is itself dragged about by the
+                            outliers it is supposed to be reporting. */
 var TIDY_SPAN    = 2.2;  /* ...and a line has to be at least this many
                             symbol heights wide before an angle through it
                             means anything. Two marks a centimetre apart
@@ -2541,37 +2537,57 @@ function tidyFeet(list) {
   return out;
 }
 
-/* least squares, and then again without the descenders */
-function tidyFit(feet, lim) {
-  var i, n = feet.length, sx = 0, sy = 0, sxx = 0, sxy = 0, m, b, mx, my;
+/* The baseline, by Theil-Sen: the median of the slopes of every pair of
+ * feet, and then the median of the intercepts that slope implies.
+ *
+ * Least squares was the wrong tool and it was the wrong tool from the
+ * start. Its breakdown point is ZERO - a single foot in the wrong place
+ * moves the line, and a long enough lever moves it a long way, which is
+ * why a descender had to be hunted down and thrown out by hand before the
+ * fit could be trusted. Theil-Sen has a breakdown point near 29%: a third
+ * of the feet can be descenders, dropped marks, the tail of a g or an
+ * integral, and the answer does not move at all. The hand-written
+ * descender pass is gone with it.
+ *
+ * Cost is one slope per pair, so it is quadratic - which sounds bad and
+ * is not: a line of writing is twenty symbols, so 190 divisions, once,
+ * when the user asks. Production handwriting systems have estimated
+ * baselines this way for years.
+ */
+function tidyTheilSen(pts) {
+  var n = pts.length, i, q, dx, slopes = [], ints = [];
   if (n < TIDY_MIN) return null;
-  for (i = 0; i < n; i++) { sx += feet[i][0]; sy += feet[i][1]; }
-  mx = sx / n; my = sy / n;
   for (i = 0; i < n; i++) {
-    sxx += (feet[i][0] - mx) * (feet[i][0] - mx);
-    sxy += (feet[i][0] - mx) * (feet[i][1] - my);
+    for (q = i + 1; q < n; q++) {
+      dx = pts[q][0] - pts[i][0];
+      /* two marks in the same column say nothing about a slope */
+      if (dx > -1 && dx < 1) continue;
+      slopes.push((pts[q][1] - pts[i][1]) / dx);
+    }
   }
-  if (sxx < 1) return null;              /* every mark at the same x */
-  m = sxy / sxx; b = my - m * mx;
-  /* one reweight: throw out what sits well BELOW the line and fit again.
-     Only below - an ascender or a superscript is above, and was never in
-     this set to begin with, since these are the lowest points. */
-  var keep = [];
+  if (!slopes.length) return null;
+  var m = tidyMedian(slopes);
+  for (i = 0; i < n; i++) ints.push(pts[i][1] - m * pts[i][0]);
+  var b = tidyMedian(ints);
+
+  /* How many feet actually sit on the line, rather than how far the worst
+     one is from it. A mean-square error is itself pulled about by the
+     outliers it is meant to be reporting on; counting inliers is not, and
+     "eleven of thirteen marks are on this line" is a sentence that can be
+     checked against a picture. */
+  var devs = [], e;
   for (i = 0; i < n; i++) {
-    if (feet[i][1] - (m * feet[i][0] + b) < lim) keep.push(feet[i]);
+    e = pts[i][1] - (m * pts[i][0] + b);
+    devs.push(e < 0 ? -e : e);
   }
-  if (keep.length >= TIDY_MIN && keep.length < n) return tidyFit(keep, lim);
-  /* How far the feet actually are from the line drawn through them. A line
-     of handwriting sits on its baseline to within a pixel or two; a group
-     that is not a line at all can be off by half a letter, and there is no
-     angle that improves it. Measured over the feet the fit kept, so a
-     descender that was deliberately set aside does not count against it. */
-  var rms = 0, e;
-  for (i = 0; i < n; i++) {
-    e = feet[i][1] - (m * feet[i][0] + b);
-    rms += e * e;
-  }
-  return { m: m, b: b, rms: Math.sqrt(rms / n), n: n };
+  return { m: m, b: b, mad: tidyMedian(devs), devs: devs, n: n, pts: pts };
+}
+
+/* how many of the feet lie within tol of the line */
+function tidyInliers(fit, tol) {
+  var k = 0, i;
+  for (i = 0; i < fit.devs.length; i++) if (fit.devs[i] <= tol) k++;
+  return k / fit.devs.length;
 }
 
 /* The middle value, and the average of the two middles when there is no
@@ -2582,6 +2598,38 @@ function tidyMedian(v) {
   var w = v.slice(0).sort(function (p, q) { return p - q; }), n = w.length;
   if (!n) return 0;
   return n % 2 ? w[n >> 1] : (w[n / 2 - 1] + w[n / 2]) / 2;
+}
+
+/* The middle of the densest band of width 2*tol - which for a set of foot
+ * residuals is the baseline, by definition and without any assumption
+ * about what fraction of the letters are descenders.
+ *
+ * A median assumes the contamination is balanced and "happy" breaks it:
+ * three descenders in five letters puts the middle value among the tails.
+ * A low quantile survives that but buys it by sitting deliberately to one
+ * side of the cluster - which then scores badly against the very inlier
+ * test that decides whether this is a line at all, and straight rows of
+ * writing started coming back refused.
+ *
+ * The densest band has neither problem. It lands in the pile wherever the
+ * pile is, it maximises the inlier count by construction, and with no
+ * descenders at all every residual is in one band and it returns their
+ * mean. Quadratic in the number of symbols, which is twenty.
+ */
+function tidyDensest(v, tol) {
+  var n = v.length, i, q, best = 0, bestN = -1, sum, k;
+  if (!n) return 0;
+  for (i = 0; i < n; i++) {
+    sum = 0; k = 0;
+    for (q = 0; q < n; q++) {
+      if (v[q] >= v[i] - tol && v[q] <= v[i] + tol) { sum += v[q]; k++; }
+    }
+    /* ties go to the band that sits higher up the page, because a tie
+       between a letter band and a descender band is a tie between the
+       line and the tails hanging off it */
+    if (k > bestN || (k === bestN && sum / k < best)) { bestN = k; best = sum / k; }
+  }
+  return best;
 }
 
 function tidyApply(items, reverse) {
@@ -2665,27 +2713,101 @@ function tidyGroup(list, sink) {
      requiring three of them meant a line of math - written slowly, a
      symbol at a time - never qualified at all. */
   if (syms.length < TIDY_MIN) { tidyWhy.why = 'too few symbols'; return false; }
-  /* the baseline belongs to the full-size symbols. Fitting it through the
-     exponents too would drag it up wherever the writing happens to have
-     one, and tilt the line by however many there are. */
+  /* THE CORE REGION.
+   *
+   * Everything below is measured against the x-height - the band between
+   * the baseline a line of writing sits on and the waistline the small
+   * letters reach. That band is what a reader's eye actually uses, and it
+   * is what Samsung's six levels are defined against.
+   *
+   * The ruler until now was the median SYMBOL height, which is a different
+   * quantity and a worse one: it mixes in ascenders, descenders and any
+   * exponent that happens to be present, so the same handwriting measured
+   * differently depending on which letters it contained. The x-height does
+   * not move when a word happens to have a g in it.
+   *
+   * Bootstrapped, because the baseline needs a scale and the scale needs a
+   * baseline. A rough median height picks the full-size symbols, those
+   * give the baseline, and the baseline gives the x-height properly. One
+   * pass is enough - the rough scale only has to be right to a factor of
+   * two for the filter to pick the right symbols.
+   */
   var hs = [];
   for (si = 0; si < syms.length; si++) hs.push(syms[si].y1 - syms[si].y0);
-  var H = tidyMedian(hs) || 1;
+  var H0 = tidyMedian(hs) || 1;
   var main = [];
   for (si = 0; si < syms.length; si++) {
-    if (syms[si].y1 - syms[si].y0 >= H * 0.6) main.push(syms[si]);
+    if (syms[si].y1 - syms[si].y0 >= H0 * 0.6) main.push(syms[si]);
   }
   if (main.length < TIDY_MIN) main = syms;
-  var mfeet = [];
+  /* THE SLOPE COMES FROM WHICHEVER EDGE OF THE WRITING IS CLEANER.
+   *
+   * A line of writing has two parallel edges - the baseline the letters
+   * sit on and the waistline the small ones reach. Descenders spoil the
+   * first; ascenders spoil the second; and which is worse depends
+   * entirely on the word. "happy" is three descenders in five letters,
+   * all bunched at the right-hand end, every one pulling the same way on
+   * the longest arm - past what any robust estimator will absorb. But
+   * FOUR of its five tops are on the waistline, because a p and a y reach
+   * down, not up. The other way round for "hulk".
+   *
+   * So fit both and keep the one more of its own points agree with. That
+   * is not a heuristic about letters, it is the estimator reporting on
+   * itself, and it costs one extra fit of twenty points. */
+  var mfeet = [], mtops = [], mcx;
   for (si = 0; si < main.length; si++) {
-    mfeet.push([(main[si].x0 + main[si].x1) / 2, main[si].y1]);
+    mcx = (main[si].x0 + main[si].x1) / 2;
+    mfeet.push([mcx, main[si].y1]);
+    mtops.push([mcx, main[si].y0]);
   }
-  var fit = tidyFit(mfeet, H * TIDY_DESC);
+  var fitF = tidyTheilSen(mfeet), fitT = tidyTheilSen(mtops);
+  if (!fitF && !fitT) { tidyWhy.why = 'no fit'; return false; }
+  var tol = H0 * TIDY_ON_LINE;
+  var inF = fitF ? tidyInliers(fitF, tol) : -1;
+  var inT = fitT ? tidyInliers(fitT, tol) : -1;
+  var m = (inT > inF ? fitT : fitF).m;
+  tidyWhy.edge = inT > inF ? 'waist' : 'base';
+  tidyWhy.inF = Math.round(inF*100)/100; tidyWhy.inT = Math.round(inT*100)/100;
+
+  /* Where the baseline sits, given that slope: in the middle of the
+     densest band of feet. Every letter that is not a descender has its
+     foot ON the baseline, so those residuals pile up at one value while
+     the descenders trail below - and the pile is the line, whether it is
+     90% of the letters or 40% of them. */
+  var rs = [], i2;
+  for (i2 = 0; i2 < mfeet.length; i2++) rs.push(mfeet[i2][1] - m * mfeet[i2][0]);
+  var b = tidyDensest(rs, H0 * TIDY_ON_LINE);
+  var devs = [], e3;
+  for (i2 = 0; i2 < mfeet.length; i2++) {
+    e3 = mfeet[i2][1] - (m * mfeet[i2][0] + b);
+    devs.push(e3 < 0 ? -e3 : e3);
+  }
+  var fit = { m: m, b: b, devs: devs, n: mfeet.length };
+
+  /* the x-height: how far the tops reach above that baseline. Ascenders
+     go higher, but they are the minority among tops in a way descenders
+     are not among feet - a p and a y have their tops on the waistline
+     like everything else - so here a median is the right statistic. */
+  var tops = [], tb;
+  for (si = 0; si < main.length; si++) {
+    tb = m * ((main[si].x0 + main[si].x1) / 2) + b;
+    tops.push(tb - main[si].y0);
+  }
+  var H = tidyMedian(tops);
+  /* A group of near-horizontal marks - a fraction bar, a dash, a row of
+     minus signs - has almost no height above its own baseline, so the
+     x-height comes back as a pixel and every tolerance measured in
+     x-heights collapses with it: nothing is within 0.3px of anything, so
+     a perfectly straight row of dashes was reported as "not a line".
+     The x-height cannot sensibly be a small fraction of the symbols it is
+     measured from; when it is, the symbols are degenerate and their
+     median height is the safer ruler. */
+  if (!(H > H0 * 0.4)) H = H0;
   tidyWhy.H = Math.round(H);
-  if (!fit) { tidyWhy.why = 'no fit'; return false; }
-  tidyWhy.rms = Math.round(fit.rms * 10) / 10;
   tidyWhy.deg = Math.round(Math.atan(fit.m) * 1800 / Math.PI) / 10;
-  if (fit.rms > H * TIDY_FIT_RMS) { tidyWhy.why = 'not a line'; return false; }
+  var onLine = tidyInliers(fit, H * TIDY_ON_LINE);
+  tidyWhy.rms = Math.round(onLine * 100) / 100;
+  if (onLine < TIDY_INLIERS) { tidyWhy.why = 'not a line'; return false; }
   var th = Math.atan(fit.m);
   /* the extent of the INK, not of strokeBBox - that one is padded by a
      nib width and change on every side, which on an ordinary line of

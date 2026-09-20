@@ -650,5 +650,40 @@ for (sq = 0; sq < sdOrig.length; sq++) {
 check('undo is still exact once words move sideways too',
       sdWorst <= 2, 'worst point off by ' + (sdWorst / 100) + 'px');
 
-console.log('\n' + pass + ' passed, ' + fail + ' failed');
+
+/* ---------- the baseline is fitted robustly ----------
+ * Least squares has a breakdown point of ZERO: one foot in the wrong
+ * place moves the line, and a long lever moves it a long way. A word
+ * ending in -ppy puts three descenders at the right-hand end, which is
+ * the worst case there is - every one pulls the same way, on the longest
+ * arm. Theil-Sen takes the median of the pairwise slopes, so a quarter of
+ * the feet can be anywhere at all and the line does not move. This test
+ * says which of the two is running. */
+
+var rba = tdApp();
+(function () {
+  var i, foot, hh;
+  for (i = 0; i < 8; i++) {
+    foot = 300 + (i >= 5 ? 20 : 0);      /* last three hang below */
+    hh = 22 + (i >= 5 ? 20 : 0);
+    mdMark(rba, i + 1, 120 + i * 34, foot, 20, hh);
+  }
+})();
+/* marks 0 and 4 both sit ON the baseline, so whatever the line did, they
+   have to stay level with each other */
+var rbWas = mdAt(rba, 4)[1] - mdAt(rba, 0)[1];
+rba.tidy();
+var rbNow = mdAt(rba, 4)[1] - mdAt(rba, 0)[1];
+check('three descenders at one end do not tilt the line',
+      Math.abs(rbNow - rbWas) < 2.0,
+      "level marks drifted " + (Math.round(Math.abs(rbNow - rbWas) * 10) / 10) + "px apart");
+
+check('...and the descenders still hang below it',
+      mdAt(rba, 7)[1] - mdAt(rba, 0)[1] > 10,
+      Math.round(mdAt(rba, 7)[1] - mdAt(rba, 0)[1]) + "px below the baseline");
+
+
+
+
+console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
