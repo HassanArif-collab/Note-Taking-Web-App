@@ -723,5 +723,73 @@ check('...while the rest of the line is untouched',
       "two baseline marks drifted " +
       (Math.round(Math.abs(mdAt(bta, 4)[1] - mdAt(bta, 5)[1]) * 10) / 10) + "px apart");
 
+
+/* ---------- lifting the pen costs the same on line 10 as on line 1 ----
+ * Finishing a stroke used to invalidate the tile it landed in, and the
+ * next frame rebuilt that tile by allocating a fresh screen-wide canvas
+ * and re-rendering every stroke in the band. Measured: 80 curves
+ * rasterised per pen-up on the first line, 480 on the tenth, and a new
+ * million-pixel canvas each time.
+ *
+ * The page was not getting slower because there was more ink on screen.
+ * It was getting slower because every pen-up redrew all of it. */
+
+function tcApp() {
+  var a = H.load({ quiet: true, dpr: 2, viewW: 768, viewH: 826,
+    seed: { mathnotes_v4: JSON.stringify({ v: 4,
+      notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
+      notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, strokes: [] } },
+      cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
+  /* hooked BEFORE the first frame: tiles built during start-up would
+     otherwise never be counted */
+  a._made = 0;
+  var od = a.doc.createElement;
+  a.doc.createElement = function (tag) {
+    if (String(tag).toLowerCase() === 'canvas') a._made++;
+    return od.call(a.doc, tag);
+  };
+  a.flushFrames();
+  return a;
+}
+
+var tca = tcApp();
+(function () {
+  var id = 1, line, k, first = -1, last = -1;
+  for (line = 0; line < 10; line++) {
+    for (k = 0; k < 8; k++) {
+      tca.stroke({ id: id++, x0: 80 + k * 70, y0: 96 + line * 40 + 56,
+                   x1: 120 + k * 70, y1: 120 + line * 40 + 56,
+                   speed: 0.22, wobble: 1 });
+      tca.tick(40);
+      var made = tca._made;
+      tca.flushFrames();
+      made = tca._made - made;
+      if (line === 0 && k === 7) first = made;
+      if (line === 9 && k === 7) last = made;
+    }
+  }
+  check('a pen-up on line 10 allocates no more than one on line 1',
+        last <= first, "line 1 made " + first + " canvases, line 10 made " + last);
+  check('...and a pen-up allocates no canvas at all',
+        last === 0, last + " canvases allocated on the last pen-up");
+})();
+
+check('all eighty strokes are still on the page', tca.strokes().length === 80,
+      tca.strokes().length + " strokes");
+
+/* the fast path only applies to ink that belongs on top. Undo puts a
+   stroke back in the middle of the order, so it has to go the slow way
+   or it would be painted over its own neighbours. */
+var tcb = tcApp();
+tcb.stroke({ id: 1, x0: 100, y0: 150 + 56, x1: 200, y1: 170 + 56, speed: 0.25, wobble: 1 });
+tcb.tick(40);
+tcb.stroke({ id: 2, x0: 120, y0: 155 + 56, x1: 220, y1: 175 + 56, speed: 0.25, wobble: 1 });
+tcb.tick(40);
+tcb.flushFrames();
+tcb.undo();
+tcb.flushFrames();
+check('undo still removes the stroke it was asked to',
+      tcb.strokes().length === 1, tcb.strokes().length + " strokes left");
+
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

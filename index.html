@@ -2022,6 +2022,47 @@ function strokeBBox(s) {
   return s.bb;
 }
 
+/* Paint one stroke into the tiles that already hold its band, instead of
+ * throwing those tiles away.
+ *
+ * Finishing a stroke used to invalidate its tile, and the next frame
+ * rebuilt that tile by allocating a fresh canvas the width of the screen
+ * and re-rendering EVERY stroke in the band. So the cost of lifting the
+ * pen grew with how much was already on the page:
+ *
+ *     line 1   8 strokes re-rendered per pen-up
+ *     line 10  48 strokes re-rendered per pen-up
+ *
+ * plus a new million-pixel canvas each time, on a tablet whose GPU was
+ * considered marginal for its own display when it was new. That is what
+ * "the fifth line was a very bad experience to write" is, measured: the
+ * page does not get slower because there is more ink on screen, it gets
+ * slower because every pen-up redraws all of it.
+ *
+ * A stroke that has just been drawn belongs on top of everything already
+ * in the tile, so it can simply be painted over the cached bitmap. That
+ * is only safe while it IS the newest stroke - ord counts up and never
+ * repeats, so the test is exact and costs nothing. Undo, redo, erase and
+ * anything that moves existing ink all still go the old way, because
+ * there the new ink does not belong on top.
+ */
+function paintStrokeIntoTiles(s) {
+  if (!s || s.ord !== strokeSeq - 1) return false;
+  if (s.pen === PEN_IMG) return false;      /* an image may not have loaded */
+  if (selHidden[s.id]) return false;
+  var bb = strokeBBox(s);
+  var i0 = Math.floor(bb.y0 / TILE_H), i1 = Math.floor(bb.y1 / TILE_H), i, c, tc;
+  for (i = i0; i <= i1; i++) {
+    c = tiles[i];
+    if (!c) continue;     /* not cached: it will be built with this stroke in it */
+    tc = c.getContext('2d');
+    if (!tc) { delete tiles[i]; continue; }
+    tc.setTransform(dpr, 0, 0, dpr, 0, -i * TILE_H * dpr);
+    renderStrokeFull(tc, s);
+  }
+  return true;
+}
+
 function invalidateRange(y0, y1) {
   var i0 = Math.floor(y0 / TILE_H), i1 = Math.floor(y1 / TILE_H);
   for (var i = i0; i <= i1; i++) delete tiles[i];
@@ -4375,7 +4416,7 @@ function finalizeInk(st, now) {
     zwAdvance(mx);
   }
   var bb = strokeBBox(s);
-  invalidateRange(bb.y0, bb.y1);
+  if (!paintStrokeIntoTiles(s)) invalidateRange(bb.y0, bb.y1);
   recomputeDoc();
   saveSoon();
   requestRender();
