@@ -1730,11 +1730,39 @@ function dropNoteKey(id) {
   try { localStorage.removeItem(NOTE_KEY + id); } catch (e) {}
   delete dirtyNotes[id];
 }
+/* Writing the note out means JSON.stringify of every stroke followed by a
+ * SYNCHRONOUS localStorage write - the main thread does nothing else
+ * until both have finished. Measured on a laptop, and the iPad 3 is
+ * roughly 15 to 30 times slower at it:
+ *
+ *      40 strokes    34 KB    0.3ms
+ *     400 strokes   336 KB    2.9ms
+ *    1000 strokes   841 KB    6.9ms
+ *
+ * so a few pages of notes is something like a tenth of a second of
+ * stringify on the tablet, plus the write on top of that.
+ *
+ * The timer fires 700ms after the last stroke was finished. 700ms is a
+ * thinking pause, not the end of writing - so the freeze landed exactly
+ * as the hand came back down, which is the same shape of bug as the
+ * tidy-on-idle one: the right work at precisely the wrong moment.
+ *
+ * So the save waits for the glass to be clear. Nothing is lost by
+ * waiting: the note is already in memory, the dirty flag is already set,
+ * and leaving the page saves immediately whatever is happening. */
+var SAVE_RETRY = 250;
+
+function saveTick() {
+  saveTimer = null;
+  if (liveTouchCount() || gesture) { saveTimer = setTimeout(saveTick, SAVE_RETRY); return; }
+  doSaveNow();
+}
+
 function saveSoon() {
   if (!storageOk) return;
   markDirty(curNoteId);
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(doSaveNow, 700);
+  saveTimer = setTimeout(saveTick, 700);
 }
 
 /* ============================================================
@@ -6341,6 +6369,7 @@ window.__mnWidthAt = strokeWidthAt;
 /* Tidy runs on a 900ms idle timer, and the test harness advances a
    fake clock rather than a real one - so without a way to say "the pause
    has happened" the feature would be untestable. */
+window.__mnSave = function () { saveTick(); };
 window.__mnTidy = function () { return tidyRun(); };
 window.__mnZW = function () { var g = zwGeom(); return { on: zw.on, x: zw.x, y: zw.y, bw: g.bw, bh: g.bh, top: g.top }; };
 

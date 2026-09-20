@@ -791,5 +791,62 @@ tcb.flushFrames();
 check('undo still removes the stroke it was asked to',
       tcb.strokes().length === 1, tcb.strokes().length + " strokes left");
 
+
+/* ---------- the note is never written out under the pen ----------
+ * Saving means JSON.stringify of every stroke plus a SYNCHRONOUS
+ * localStorage write - the main thread does nothing else until both
+ * finish, and on the tablet a few pages of notes is roughly a tenth of a
+ * second of it. The timer fired 700ms after the last stroke, which is a
+ * thinking pause and not the end of writing, so the freeze landed
+ * exactly as the hand came back down. */
+
+function svApp() {
+  return H.load({ quiet: true, dpr: 2, viewW: 768, viewH: 826,
+    seed: { mathnotes_v4: JSON.stringify({ v: 4,
+      notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
+      notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, strokes: [] } },
+      cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
+}
+
+/* how many strokes the SAVED copy knows about */
+function svStored(a) {
+  var raw = a.storage.getItem('mathnotes_v5_n_n1');
+  if (!raw) return -1;
+  try { return (JSON.parse(raw).strokes || []).length; } catch (e) { return -2; }
+}
+
+var sva = svApp();
+sva.flushFrames();
+sva.stroke({ id: 1, x0: 100, y0: 200 + 56, x1: 180, y1: 224 + 56, speed: 0.25, wobble: 1 });
+sva.tick(40); sva.flushFrames();
+sva.save();
+check('a finished stroke is saved once the pen is up', svStored(sva) === 1,
+      svStored(sva) + " strokes in storage");
+
+/* second stroke, then the pen comes back down before the timer fires */
+sva.stroke({ id: 2, x0: 200, y0: 200 + 56, x1: 280, y1: 224 + 56, speed: 0.25, wobble: 1 });
+sva.tick(40); sva.flushFrames();
+sva.down(9, 320, 200 + 56);      /* writing again */
+sva.save();
+check('the save is held off while the pen is on the glass',
+      svStored(sva) === 1, svStored(sva) + " strokes in storage (should still be 1)");
+
+sva.up(9);
+sva.tick(40); sva.flushFrames();
+sva.save();
+check('...and goes through the moment the glass is clear',
+      svStored(sva) >= 2, svStored(sva) + " strokes in storage");
+
+/* leaving the page must save whatever is happening - a deferral that
+   could swallow the tail of a session would be worse than the freeze */
+var svb = svApp();
+svb.flushFrames();
+svb.stroke({ id: 1, x0: 100, y0: 300 + 56, x1: 180, y1: 324 + 56, speed: 0.25, wobble: 1 });
+svb.tick(40); svb.flushFrames();
+svb.down(9, 400, 300 + 56);      /* pen still down as the tab goes away */
+svb.fire('pagehide');
+check('leaving the page saves even with the pen down',
+      svStored(svb) >= 1, svStored(svb) + " strokes in storage");
+
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

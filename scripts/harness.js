@@ -288,6 +288,13 @@ App.prototype.drillPrep = function (id) { this.win.__mnDrill.prep(id); return th
 App.prototype.drillDone = function () { return this.win.__mnDrill.done(); };
 App.prototype.drillStop = function () { this.win.__mnDrill.stop(); return this; };
 App.prototype.drills = function () { return this.win.__mnDrill.list; };
+App.prototype.save = function () { this.win.__mnSave(); return this; };
+/* fire a window event the app listens for, such as pagehide */
+App.prototype.fire = function (type) {
+  var hs = this.win._h[type] || [], i;
+  for (i = 0; i < hs.length; i++) { try { hs[i]({ type: type }); } catch (e) {} }
+  return this;
+};
 App.prototype.tidy = function () { var r = this.win.__mnTidy(); this.flushFrames(); return r; };
 App.prototype.undo = function () { this.els.undoBtn._fire('click', {}); this.flushFrames(); return this; };
 App.prototype.zw = function () { return this.win.__mnZW(); };
