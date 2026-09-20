@@ -422,6 +422,108 @@ check('...and its own geometry, so a bad take is caught on the tablet',
         bad + " takes do not show their own text");
 })();
 
+
+/* ---------- the reference session ----------
+ * The corpus is twenty takes. Reached through a menu - three dots,
+ * scroll, choose, countdown, write, back out, repeat - that is twelve
+ * minutes of navigation wrapped around twelve minutes of writing, and it
+ * was never going to get finished. And a forty-five second cut-off is
+ * right for "rest your palm" and wrong for "write this phrase", because
+ * being stopped mid-word wastes the take and the minute.
+ *
+ * So: one screen, no timer, no countdown. Write, tap Done, the next
+ * phrase appears. These check it behaves that way. */
+
+function ssApp() {
+  var a = H.load({ quiet: true, dpr: 2, viewW: 768, viewH: 826, live: true,
+    seed: { mathnotes_v4: JSON.stringify({ v: 4,
+      notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
+      notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, strokes: [] } },
+      cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
+  a.flushFrames();
+  return a;
+}
+
+function ssWrite(a, n, base) {
+  var i, x;
+  for (i = 0; i < n; i++) {
+    x = 120 + i * 50;
+    a.stroke({ id: base + i, x0: x, y0: 300 + 56, x1: x + 30, y1: 324 + 56,
+               speed: 0.22, wobble: 1 });
+    a.tick(100);
+  }
+  a.flushFrames();
+}
+
+var ssa = ssApp();
+var R = ssa.ref();
+R.start();
+ssa.flushFrames();
+check('the session opens on the first take', R.on() === true && R.at() === 0,
+      "on=" + R.on() + " at=" + R.at());
+check('...and says which phrase and which mode',
+      !!R.take() && R.take().item === "E1" && R.take().mode === "neat",
+      R.take() ? JSON.stringify(R.take()) : "-");
+
+/* no timer: a long pause must not end the take */
+ssWrite(ssa, 5, 1);
+ssa.tick(90000);
+ssa.flushFrames();
+check('a minute and a half of thinking does not end the take',
+      R.on() === true && R.at() === 0, "at=" + R.at());
+
+/* Done records it and moves on, with no trip through a menu */
+var ssBefore = ssa.requests().length;
+R.done();
+ssa.flushFrames();
+check('Done records the take and advances', R.at() === 1,
+      "at=" + R.at());
+check('...and sends it to the PC', ssa.requests().length > ssBefore,
+      (ssa.requests().length - ssBefore) + " requests");
+
+(function () {
+  var reqs = ssa.requests(), b = null, i;
+  for (i = reqs.length - 1; i >= 0; i--) {
+    try { var o = JSON.parse(reqs[i].body); if (o.ref) { b = o; break; } } catch (e) {}
+  }
+  check('...carrying the writing and the pairing',
+        !!b && b.ink && b.ink.length === 5 && b.ref.item === "E1",
+        b ? b.ink.length + " strokes, " + JSON.stringify(b.ref) : "nothing sent");
+})();
+
+/* the second take starts from a clean slate: its recording must not
+   contain the first one */
+ssWrite(ssa, 3, 20);
+R.done();
+ssa.flushFrames();
+(function () {
+  var reqs = ssa.requests(), b = null, i;
+  for (i = reqs.length - 1; i >= 0; i--) {
+    try { var o = JSON.parse(reqs[i].body); if (o.ref) { b = o; break; } } catch (e) {}
+  }
+  check('the next take records only its own writing',
+        !!b && b.ink && b.ink.length === 3,
+        b && b.ink ? b.ink.length + " strokes (should be 3)" : "-");
+})();
+
+/* Redo throws this take away and stays put */
+var ssCount = ssa.strokes().length;
+ssWrite(ssa, 4, 40);
+var ssAt = R.at();
+R.redo();
+ssa.flushFrames();
+check('Redo removes the take and stays on the same phrase',
+      ssa.strokes().length === ssCount && R.at() === ssAt,
+      ssa.strokes().length + " strokes, at=" + R.at());
+
+/* Exit leaves cleanly, and coming back resumes rather than restarting */
+R.exit();
+check('Exit closes the session', R.on() === false, String(R.on()));
+R.start();
+ssa.flushFrames();
+check('...and starting again picks up where it left off', R.at() === 2,
+      "at=" + R.at() + " (two takes were recorded)");
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
 }, 4200);

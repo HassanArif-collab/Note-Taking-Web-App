@@ -397,6 +397,43 @@ body.dark .pg-cell canvas { border-color: #3A414A; }
   margin-top: 14px; color: #FFFFFF; font-size: 15px; font-weight: 600;
   background: rgba(255,255,255,0.16); border-radius: 18px; padding: 10px 26px; border: 0;
 }
+/* The session is a BAR, not an overlay. Twenty takes through a menu -
+   three dots, scroll, choose, countdown, write, back out, repeat - is
+   twelve minutes of navigation wrapped around twelve minutes of writing,
+   and it was never going to get finished. Here the prompt sits above the
+   page and the controls below it, the canvas stays live in between, and
+   the only thing between two takes is one tap on Done. */
+#refBar {
+  /* below the toolbar, not over it - the pen, the colours and undo all
+     have to stay reachable while the session is running */
+  position: absolute; top: 102px; left: 0; right: 0; z-index: 42; display: none;
+  background: rgba(18,18,18,0.94); color: #FFFFFF;
+  padding: 7px 14px 9px 14px; text-align: center;
+}
+#refBar.on { display: block; }
+#refCount {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.10em;
+  color: rgba(255,255,255,0.55);
+}
+#refPhrase {
+  font-size: 27px; font-weight: 700; line-height: 1.15; margin: 3px 0 2px 0;
+}
+#refMode { font-size: 13px; font-weight: 600; }
+#refMode .neat { color: #7FD48C; }
+#refMode .norm { color: #FFC66B; }
+#refFoot {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 42; display: none;
+  background: rgba(18,18,18,0.94); padding: 8px 12px; text-align: right;
+}
+#refFoot.on { display: block; }
+#refFoot button {
+  font-size: 16px; font-weight: 600; color: #FFFFFF; border: 0;
+  background: rgba(255,255,255,0.14); border-radius: 20px;
+  padding: 10px 20px; margin-left: 8px;
+}
+#refFoot button.go { background: #0381FE; padding: 10px 30px; }
+#refFoot #refExitBtn { float: left; margin-left: 0; background: none;
+  color: rgba(255,255,255,0.55); padding-left: 4px; }
 #trainBanner {
   position: absolute; top: 0; left: 0; right: 0; z-index: 40; display: none;
   color: #FFFFFF; font-size: 15px; font-weight: 700;
@@ -868,6 +905,19 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
     </div>
     <button id="trainCloseBtn">Close</button>
   </div>
+  <!-- reference session: one screen you stay in for the whole corpus -->
+  <div id="refBar">
+    <div id="refCount"></div>
+    <div id="refPhrase"></div>
+    <div id="refMode"></div>
+  </div>
+  <div id="refFoot">
+    <button id="refRedoBtn">Redo</button>
+    <button id="refSkipBtn">Skip</button>
+    <button id="refExitBtn">Exit</button>
+    <button id="refNextBtn" class="go">Done &#9656;</button>
+  </div>
+
   <div id="trainBanner"></div>
   <div id="trainTargets"></div>
 
@@ -2388,6 +2438,10 @@ function drawZoomWindow(c) {
 function resizeView() {
   var w = canvasWrap.clientWidth || canvasWrap.offsetWidth || 768;
   var h = canvasWrap.clientHeight || canvasWrap.offsetHeight || 968;
+  /* the session bars sit over the canvas, so the paper has to start below
+     the prompt and end above the buttons - otherwise the first line is
+     written underneath the words telling you what to write */
+  if (refOn) h = Math.max(h - REF_BAR_H - REF_FOOT_H, 120);
   if (w < 60) w = 768;
   if (h < 60) h = 968;
   viewW = w; viewH = h;
@@ -2397,6 +2451,8 @@ function resizeView() {
   cvs.style.height = viewH + 'px';
   invalidateAll();
   wrapRect = canvasWrap.getBoundingClientRect();
+  if (refOn) wrapRect = { left: wrapRect.left, top: wrapRect.top + REF_BAR_H,
+                          width: wrapRect.width, height: wrapRect.height };
   clampScroll();
   positionSelBar();
   requestRender();
@@ -6429,6 +6485,153 @@ function refDoneCount() {
   return c;
 }
 
+/* ============================================================
+ * REFERENCE SESSION
+ *
+ * Twenty takes, one screen. No countdown and NO TIME LIMIT - a drill
+ * that stops after forty-five seconds is right for "rest your palm" and
+ * wrong for "write this phrase", because writing takes as long as it
+ * takes and being cut off mid-word wastes the take and the minute.
+ *
+ * Each take records the strokes laid down since it started, sends them,
+ * and scrolls down a line so the next take has clean paper. The writing
+ * stays on the page: twenty lines is most of one sheet, and being able
+ * to see what you have already done is worth more than a blank screen.
+ * ============================================================ */
+var refOn = false, refIdx = 0, refFrom = 0, refSent = {};
+var REF_BAR_H = 92, REF_FOOT_H = 58;
+
+function refCurrent() { return REF_DRILLS[refIdx] || null; }
+
+function refPaint() {
+  var d = refCurrent();
+  if (!d) return;
+  byId('refCount').innerHTML = 'TAKE ' + (refIdx + 1) + ' OF ' + REF_DRILLS.length +
+    ' &nbsp;&middot;&nbsp; ' + d.ref.item +
+    (refSent[d.id] ? ' &nbsp;&middot;&nbsp; RECORDED' : '');
+  byId('refPhrase').innerHTML = d.ref.text;
+  byId('refMode').innerHTML = d.ref.mode === 'neat'
+    ? '<span class="neat">SLOWLY, as neatly as you can</span>'
+    : '<span class="norm">your NORMAL speed - do not be careful</span>';
+}
+
+function refBegin() {
+  var d = refCurrent();
+  if (!d) { refExit(); toast('Reference corpus finished - thank you'); return; }
+  traceOn = true;
+  traceReset();
+  refFrom = noteStrokeCount();
+  refPaint();
+}
+
+function refStart() {
+  closePanels();
+  byId('trainOverlay').className = 'overlay';
+  refOn = true;
+  byId('refBar').className = 'on';
+  byId('refFoot').className = 'on';
+  cvs.style.marginTop = REF_BAR_H + 'px';
+  resizeView();
+  /* find the first take still missing, so a session can be resumed */
+  refIdx = 0;
+  while (refIdx < REF_DRILLS.length && refSent[REF_DRILLS[refIdx].id]) refIdx++;
+  if (refIdx >= REF_DRILLS.length) refIdx = 0;
+  refBegin();
+}
+
+function refExit() {
+  refOn = false;
+  byId('refBar').className = '';
+  byId('refFoot').className = '';
+  cvs.style.marginTop = '0px';
+  resizeView();
+  drillBanner(null);
+}
+
+/* throw away this take and stay where we are */
+function refRedo() {
+  var n = activeNote(), i;
+  if (n) {
+    for (i = n.strokes.length - 1; i >= refFrom; i--) {
+      pushUndo({ t: 'add', s: n.strokes[i] });
+      n.strokes.splice(i, 1);
+    }
+    undoStack.length = 0; redoStack.length = 0; updateUndoButtons();
+    invalidateAll(); recomputeDoc(); requestRender();
+  }
+  refBegin();
+}
+
+function refSkip() { refIdx++; refAdvance(); }
+
+function refAdvance() {
+  /* down one line, so the next take starts on clean paper */
+  scrollY = Math.min(scrollY + settings.spacing * 2, Math.max(docH - viewH, 0));
+  clampScroll();
+  requestRender();
+  refBegin();
+}
+
+function refDone() {
+  var d = refCurrent();
+  if (!d) return;
+  var ink = drillInk(refFrom);
+  /* One stroke is enough to be a take. Three was the threshold the
+     geometry needs to fit a baseline, which is a different question - and
+     joined-up writing can put a whole word in a single stroke, so a real
+     phrase written in cursive was being refused as 'nothing written'.
+     Record it and let the scoreboard decide whether it can be used. */
+  if (!ink.length) { toast('Nothing written yet'); return; }
+
+  var obj;
+  try { obj = buildTrace(d.id); }
+  catch (e) { toast('Could not build the recording'); return; }
+  obj.drill = d.id;
+  obj.want = d.want;
+  obj.marks = ink.length;
+  obj.ref = d.ref;
+  obj.ink = [];
+  var q;
+  for (q = 0; q < ink.length; q++) {
+    obj.ink.push({ pen: ink[q].pen, w: ink[q].w, ord: ink[q].ord, pts: ink[q].pts });
+  }
+  obj.report = refReport(ink);
+
+  var rec = { marks: ink.length, samples: obj.samples.length, ok: true,
+              text: '', sent: false, report: obj.report };
+  rec.text = obj.report.n + ' strokes &middot; tilt ' + obj.report.deg +
+             '&deg; &middot; letters ' + obj.report.xh + 'px &plusmn;' +
+             obj.report.cv + '%';
+  var other = drillDone['ref-' + d.ref.item + '-' +
+              (d.ref.mode === 'neat' ? 'norm' : 'neat') + '-' + d.ref.take];
+  var alike = false;
+  if (other && other.report) {
+    var na = d.ref.mode === 'neat' ? obj.report : other.report;
+    var nb = d.ref.mode === 'neat' ? other.report : obj.report;
+    alike = (Math.abs(nb.deg - na.deg) + Math.abs(nb.cv - na.cv) / 10) < 1;
+  }
+  drillDone[d.id] = rec;
+  refSent[d.id] = true;
+
+  drillBanner((alike ? '&#9888; ' : '&#10003; ') + 'take ' + (refIdx + 1) +
+              ' &nbsp;&middot;&nbsp; ' + rec.text +
+              '<span class="what">' +
+              (alike ? 'this take looks the same as its pair - tap Redo and slow down'
+                     : 'sending to the PC') + '</span>',
+              alike ? 'fail' : 'pass');
+  setTimeout(function () { if (refOn) drillBanner(null); }, alike ? 5000 : 2200);
+
+  if (canUpload()) {
+    traceUpload(obj, function (ok) { rec.sent = ok; });
+  } else {
+    showTraceText(JSON.stringify(obj));
+  }
+
+  if (alike) return;      /* stay put so Redo is one tap away */
+  refIdx++;
+  refAdvance();
+}
+
 function drillById(id) {
   var i;
   for (i = 0; i < DRILLS.length; i++) if (DRILLS[i].id === id) return DRILLS[i];
@@ -6470,25 +6673,21 @@ function drillShowList() {
   var head = document.createElement('div');
   head.className = 'refhead';
   head.innerHTML = 'HANDWRITING REFERENCE <span class="n">&nbsp;&middot;&nbsp; ' +
-    refDoneCount() + ' of ' + REF_DRILLS.length + ' &middot; the same words twice, ' +
-    'neat then normal, so improvement can be measured instead of described</span>';
+    refDoneCount() + ' of ' + REF_DRILLS.length + ' recorded</span>';
   list.appendChild(head);
-  for (i = 0; i < REF_DRILLS.length; i++) {
-    (function (d) {
-      var rec = drillDone[d.id];
-      var b = document.createElement('button');
-      b.className = rec ? 'pass' : '';
-      b.innerHTML = d.ref.item + ' &middot; ' +
-        (d.ref.mode === 'neat' ? 'NEAT' : 'normal') + ' &middot; take ' + d.ref.take +
-        '  (' + d.s + 's)' +
-        '<span class="sub">' + d.ref.text + '</span>' +
-        (rec ? '<span class="res">&#10003; ' + rec.text +
-               ' &middot; ' + (rec.sent ? 'sent' : 'not sent') +
-               ' &middot; tap to redo</span>' : '');
-      b.addEventListener('click', function () { drillShowPrep(d); });
-      list.appendChild(b);
-    })(REF_DRILLS[i]);
-  }
+  var rb = document.createElement('button');
+  rb.className = refDoneCount() >= REF_DRILLS.length ? 'pass' : '';
+  rb.innerHTML = (refDoneCount() ? 'Carry on with the reference session'
+                                 : 'Start the reference session') +
+    '<span class="sub">Five phrases, each written twice slowly and twice at ' +
+    'normal speed. One screen, no timer, no countdown - write, tap Done, ' +
+    'the next one appears. About twelve minutes, and it only has to be done ' +
+    'once.<br><br>It is what lets the app be judged on a number instead of ' +
+    'on what you can remember about how it looked.</span>' +
+    (refDoneCount() ? '<span class="res">&#10003; ' + refDoneCount() + ' of ' +
+       REF_DRILLS.length + ' done &middot; picks up where you left off</span>' : '');
+  rb.addEventListener('click', refStart);
+  list.appendChild(rb);
 
   byId('trainProgress').innerHTML = drillDoneCount() + ' of ' +
     (DRILLS.length + REF_DRILLS.length) +
@@ -6599,6 +6798,13 @@ window.__mnLoadInk = function (list) {
   strokeSeq = nn.strokes.length + 1;
   invalidateAll(); recomputeDoc(); requestRender();
   return nn.strokes.length;
+};
+window.__mnRef = {
+  start: refStart, done: refDone, redo: refRedo,
+  skip: refSkip, exit: refExit,
+  at: function () { return refIdx; },
+  on: function () { return refOn; },
+  take: function () { var d = refCurrent(); return d ? d.ref : null; }
 };
 window.__mnSave = function () { saveTick(); };
 window.__mnTidy = function () { return tidyRun(); };
@@ -7341,6 +7547,10 @@ byId('pagesDeleteBtn').addEventListener('click', function () {
   byId('pagesOverlay').className = 'overlay';
   deletePageAt(currentPage());
 });
+byId('refNextBtn').addEventListener('click', refDone);
+byId('refRedoBtn').addEventListener('click', refRedo);
+byId('refSkipBtn').addEventListener('click', refSkip);
+byId('refExitBtn').addEventListener('click', refExit);
 byId('trainCloseBtn').addEventListener('click', function () {
   byId('trainOverlay').className = 'overlay';
 });
