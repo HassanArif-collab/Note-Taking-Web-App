@@ -7364,13 +7364,13 @@ var moreRowDefs = null;
 function buildMoreMenu() {
   moreMenu.innerHTML = '';
   moreRowDefs = [
-    { lbl: 'Pages', val: currentPage() + ' / ' + pageCount(), act: openPageMenu },
-    { lbl: 'Insert photo', val: '', act: function () {
+    { leave: true, lbl: 'Pages', val: currentPage() + ' / ' + pageCount(), act: openPageMenu },
+    { leave: true, lbl: 'Insert photo', val: '', act: function () {
         try { photoInput.value = ''; photoInput.click(); }
         catch (e) { toast('Photos are not supported on this device'); }
       } },
-    { lbl: 'Backup and restore', val: countNotes() + ' notes', act: openBackup },
-    { lbl: 'Export PNG', val: '', act: exportPNG },
+    { leave: true, lbl: 'Backup and restore', val: countNotes() + ' notes', act: openBackup },
+    { leave: true, lbl: 'Export PNG', val: '', act: exportPNG },
     { lbl: 'Template', val: TPL_NAMES[settings.template], act: function () { settings.template = (settings.template + 1) % 4; afterSettingChange(); } },
     { lbl: 'Line spacing', val: settings.spacing + ' px', act: function () { settings.spacing = settings.spacing === 32 ? 38 : (settings.spacing === 38 ? 44 : 32); afterSettingChange(); } },
     { lbl: 'Paper color', val: (PAPERS[settings.paperColor] || PAPERS[0]).name, act: function () { settings.paperColor = (settings.paperColor + 1) % PAPERS.length; afterSettingChange(); } },
@@ -7400,10 +7400,10 @@ function buildMoreMenu() {
         afterSettingChange();
       } },
     { lbl: 'Zoom window', val: zw.on ? 'On' : 'Off', act: zwToggle },
-    { lbl: 'Tidy handwriting', val: '', act: function () { closePanels(); tidyRun(); } },
+    { leave: true, lbl: 'Tidy handwriting', val: '', act: function () { closePanels(); tidyRun(); } },
     { lbl: 'Margin line', val: settings.margin ? 'On' : 'Off',
       act: function () { settings.margin = !settings.margin; invalidateAll(); afterSettingChange(); } },
-    { lbl: 'Testing drills', val: canUpload() ? 'server' : 'paste', act: showTraining },
+    { leave: true, lbl: 'Testing drills', val: canUpload() ? 'server' : 'paste', act: showTraining },
     { lbl: 'Send as I write', val: !canUpload() ? 'no server' : (liveOn ? 'On' : 'Off'),
       act: function () {
         if (!canUpload()) { toast('Only on the test server'); return; }
@@ -7411,12 +7411,12 @@ function buildMoreMenu() {
         toast(liveOn ? 'Sending as you write' : 'Stopped sending');
         afterSettingChange();
       } },
-    { lbl: 'Copy report', val: traceCount ? traceCount + ' pts' : 'empty', act: showTrace },
-    { lbl: 'Touch capabilities', val: '', act: function () { window.alert(capsReport()); } },
-    { lbl: 'Recording', val: traceOn ? 'On' : 'Off', act: function () { traceOn = !traceOn; afterSettingChange(); } },
-    { lbl: 'Clear note', val: '', warn: true, act: clearNote },
-    { lbl: 'Delete note', val: '', warn: true, act: deleteCurrentNote },
-    { lbl: 'About', val: '', act: function () { window.alert('MathNotes v5.1 (S-Class 5)\n\nSamsung-notes style handwriting for iPad 3.\nWorks offline. Notes are saved in this browser.\n\nHand tool: finger scrolls, pen writes.\nTwo-finger pinch zooms. Lasso tool selects ink.\nDrag the corner handle or tap - / + to resize\nthe selection. Double-tap with the hand tool\nresets zoom.'); } }
+    { leave: true, lbl: 'Copy report', val: traceCount ? traceCount + ' pts' : 'empty', act: showTrace },
+    { leave: true, lbl: 'Touch capabilities', val: '', act: function () { window.alert(capsReport()); } },
+    { leave: true, lbl: 'Recording', val: traceOn ? 'On' : 'Off', act: function () { traceOn = !traceOn; afterSettingChange(); } },
+    { leave: true, lbl: 'Clear note', val: '', warn: true, act: clearNote },
+    { leave: true, lbl: 'Delete note', val: '', warn: true, act: deleteCurrentNote },
+    { leave: true, lbl: 'About', val: '', act: function () { window.alert('MathNotes v5.1 (S-Class 5)\n\nSamsung-notes style handwriting for iPad 3.\nWorks offline. Notes are saved in this browser.\n\nHand tool: finger scrolls, pen writes.\nTwo-finger pinch zooms. Lasso tool selects ink.\nDrag the corner handle or tap - / + to resize\nthe selection. Double-tap with the hand tool\nresets zoom.'); } }
   ];
   for (var i = 0; i < moreRowDefs.length; i++) {
     var d = moreRowDefs[i];
@@ -7425,7 +7425,15 @@ function buildMoreMenu() {
     row.innerHTML = '<span class="lbl">' + d.lbl + '</span>' + (d.val ? '<span class="val">' + d.val + '</span>' : '');
     (function (def) {
       row.addEventListener('click', function () {
-        if (moreMenu.style.display === 'block') moreMenu.style.display = 'none';
+        /* Most of these rows only cycle a value - Paper color, Template,
+           Theme, Line spacing. Closing the menu after each tap meant that
+           trying three paper colours was: three dots, scroll, tap, look,
+           three dots, scroll, tap, look. The menu stays open for those
+           and the row updates under your finger; only rows that actually
+           take you somewhere else close it. */
+        if (def.leave && moreMenu.style.display === 'block') {
+          moreMenu.style.display = 'none';
+        }
         def.act();
       });
     })(d);
@@ -7433,7 +7441,12 @@ function buildMoreMenu() {
   }
 }
 function afterSettingChange() {
+  /* buildMoreMenu throws the rows away and makes them again, which sends
+     the list back to the top - so changing the second-to-last setting
+     scrolled the menu out from under you. */
+  var keep = moreMenu.scrollTop;
   buildMoreMenu();
+  moreMenu.scrollTop = keep;
   requestRender();
   saveSoon();
 }
