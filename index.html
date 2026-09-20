@@ -6499,6 +6499,17 @@ function refDoneCount() {
  * to see what you have already done is worth more than a blank screen.
  * ============================================================ */
 var refOn = false, refIdx = 0, refFrom = 0, refSent = {};
+var REF_KEY = 'mathnotes_ref_done';
+/* Which takes are already recorded has to outlive a reload. It did not,
+   so the session restarted at take one - and four takes of one phrase
+   were recorded under the name of another, because the prompt said one
+   thing and the writer had been asked for something else. The data was
+   fine; the label was wrong, which is worse, because a wrong label is
+   believed. */
+try { refSent = JSON.parse(localStorage.getItem(REF_KEY) || '{}') || {}; } catch (e) { refSent = {}; }
+function refRemember() {
+  try { localStorage.setItem(REF_KEY, JSON.stringify(refSent)); } catch (e) {}
+}
 var REF_BAR_H = 92, REF_FOOT_H = 58;
 
 function refCurrent() { return REF_DRILLS[refIdx] || null; }
@@ -6627,6 +6638,12 @@ function refDone() {
     showTraceText(JSON.stringify(obj));
   }
 
+  refRemember();
+  /* Whether we move on or not, this ink has been recorded - so the next
+     take starts after it. Without this, staying put on a TOO ALIKE
+     warning meant a second tap on Done sent the very same strokes again,
+     and three identical copies of one take turned up on the PC. */
+  refFrom = noteStrokeCount();
   if (alike) return;      /* stay put so Redo is one tap away */
   refIdx++;
   refAdvance();

@@ -108,7 +108,15 @@ function slants(ink) {
       len = Math.sqrt(dx * dx + dy * dy);
       if (len < 6) continue;
       if (Math.abs(dy) < Math.abs(dx)) continue;   /* not a vertical part */
-      out.push(Math.atan2(dx, -dy) * 180 / Math.PI);
+      /* Fold into (-90, 90]. atan2 gives the angle from vertical over the
+         whole circle, so an UPstroke and a DOWNstroke of the same slant
+         come out 180 degrees apart - and a printed letter is full of
+         both. Unfolded, the spread of a perfectly consistent hand reads
+         as about 145 degrees, which is what this was reporting. */
+      var ang = Math.atan2(dx, -dy) * 180 / Math.PI;
+      while (ang <= -90) ang += 180;
+      while (ang > 90) ang -= 180;
+      out.push(ang);
     }
   }
   return out;
@@ -245,39 +253,81 @@ console.log('\nHandwriting reference' + (htmlPath ? '  [' + htmlPath + ']' : '')
 
 var totGap = 0, totClosed = 0, usable = 0, rows = [];
 
+/* Use EVERY take, not one of each.
+ *
+ * Scoring one neat take against one normal take makes the answer hostage
+ * to whichever pair happened to be recorded. On the printed samples the
+ * shake of the two normal takes came out 3.05 and 2.07 against neat takes
+ * of 2.31 and 2.23 - so one normal take is shakier than both neat ones
+ * and the other is smoother than both. Picking the first reports a large
+ * defect; picking the second reports none. Neither is true.
+ *
+ * So the target is the middle of the neat takes, each normal take is
+ * scored against it, and the answers are averaged. The floor is still the
+ * distance between the neat takes, which is the only estimate of noise
+ * there is. */
 function doItem(idx) {
   if (idx >= names.length) { finish(); return; }
   var name = names[idx], it = items[name], t = it.takes;
-  var neat1 = t.neat1, neat2 = t.neat2, norm = t.norm1 || t.norm2;
-
-  if (!neat1 || !norm) {
-    rows.push({ item: name, skip: (!neat1 ? 'no neat take' : 'no normal take') });
+  var neats = [], norms = [], kk;
+  for (kk in t) {
+    if (!Object.prototype.hasOwnProperty.call(t, kk)) continue;
+    if (kk.indexOf('neat') === 0) neats.push(measure(t[kk].ink));
+    else norms.push(t[kk]);
+  }
+  if (!neats.length || !norms.length) {
+    rows.push({ item: name, skip: (!neats.length ? 'no neat take' : 'no normal take') });
     doItem(idx + 1);
     return;
   }
 
-  var mN1 = measure(neat1.ink);
-  var mN2 = neat2 ? measure(neat2.ink) : null;
-  var mIn = measure(norm.ink);
+  var target = {}, i, k;
+  for (i = 0; i < METRICS.length; i++) {
+    k = METRICS[i].k;
+    target[k] = median(neats.map(function (m) { return m[k]; }));
+  }
+  var floor = {};
+  for (i = 0; i < METRICS.length; i++) {
+    k = METRICS[i].k;
+    floor[k] = neats.length > 1
+      ? Math.abs(Math.max.apply(null, neats.map(function (m) { return m[k]; })) -
+                 Math.min.apply(null, neats.map(function (m) { return m[k]; })))
+      : null;
+  }
 
-  tidied(norm.ink, function (out) {
-    var mOut = measure(out);
-    var lines = [], i, k, floor, gap, after, closed;
-    for (i = 0; i < METRICS.length; i++) {
-      k = METRICS[i].k;
-      floor = mN2 ? Math.abs(mN1[k] - mN2[k]) : null;
-      gap = Math.abs(mIn[k] - mN1[k]);
-      after = Math.abs(mOut[k] - mN1[k]);
+  var befores = [], afters = [], nSym = 0;
+  function doTake(j) {
+    if (j >= norms.length) { report(); return; }
+    var mIn = measure(norms[j].ink);
+    nSym = Math.max(nSym, mIn.n);
+    tidied(norms[j].ink, function (out) {
+      befores.push(mIn);
+      afters.push(measure(out));
+      doTake(j + 1);
+    });
+  }
+  function mean(v) {
+    var q, sum = 0;
+    for (q = 0; q < v.length; q++) sum += v[q];
+    return v.length ? sum / v.length : 0;
+  }
+  function report() {
+    var lines = [], i2, k2, gap, after, closed, real;
+    for (i2 = 0; i2 < METRICS.length; i2++) {
+      k2 = METRICS[i2].k;
+      gap = mean(befores.map(function (m) { return Math.abs(m[k2] - target[k2]); }));
+      after = mean(afters.map(function (m) { return Math.abs(m[k2] - target[k2]); }));
       closed = gap > 1e-9 ? (gap - after) / gap : 0;
-      var real = gap > METRICS[i].min && (floor === null || gap > floor * 2);
-      lines.push({ m: METRICS[i], floor: floor, gap: gap, after: after,
+      real = gap > METRICS[i2].min && (floor[k2] === null || gap > floor[k2] * 2);
+      lines.push({ m: METRICS[i2], floor: floor[k2], gap: gap, after: after,
                    closed: closed, real: real });
       if (real) { totGap += gap; totClosed += (gap - after); usable++; }
     }
-    rows.push({ item: name, text: it.text, lines: lines,
-                nSym: mIn.n, hasFloor: !!mN2 });
+    rows.push({ item: name, text: it.text, lines: lines, nSym: nSym,
+                hasFloor: neats.length > 1, takes: neats.length + '+' + norms.length });
     doItem(idx + 1);
-  });
+  }
+  doTake(0);
 }
 
 function finish() {
@@ -288,8 +338,9 @@ function finish() {
       console.log('  ' + pad(r.item, 5) + '--  ' + r.skip);
       continue;
     }
-    console.log('  ' + r.item + '  "' + r.text + '"   ' + r.nSym + ' symbols' +
-                (r.hasFloor ? '' : '   (only one neat take: no noise floor)'));
+    console.log('  ' + r.item + '  "' + r.text + '"   ' + r.nSym + ' symbols   ' +
+                r.takes + ' takes (neat+normal)' +
+                (r.hasFloor ? '' : '   NO NOISE FLOOR - only one neat take'));
     console.log('        ' + pad('', 18) + pad('floor', 9) + pad('gap', 9) +
                 pad('after', 9) + 'closed');
     for (q = 0; q < r.lines.length; q++) {
