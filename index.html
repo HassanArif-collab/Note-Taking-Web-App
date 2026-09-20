@@ -198,6 +198,23 @@ body.dark .nb-row .ct { color: #A8ADB5; background: #2B2F36; }
 }
 
 /* ---------- pen palette ---------- */
+/* Every panel - the pen colours, the eraser, the menu - could only be
+ * closed by pressing the button that opened it. Tapping anywhere else
+ * either did nothing or, on the page, left a dot: the only way out of the
+ * colour picker was to mark your own notes.
+ *
+ * Tap-anywhere-else-to-dismiss is what every drawing app does, and the
+ * part that matters is that the tap is SWALLOWED rather than passed
+ * through. Hence a scrim rather than a document-level listener.
+ *
+ * It sits at 19: under the toolbar at 20, so tapping a different tool
+ * still switches to it in ONE tap rather than one to close and one to
+ * choose, and over the page, so the dismissing tap cannot draw. */
+#panelScrim {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 19; display: none; background: transparent;
+}
+#panelScrim.on { display: block; }
 #penPalette {
   position: absolute; top: 108px; left: 50%; margin-left: -150px;
   width: 300px; background: #FFFFFF; border-radius: 24px;
@@ -801,6 +818,9 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
   </div>
 
   <!-- pen palette -->
+  <!-- catches the tap that dismisses a panel, so it never reaches the page -->
+  <div id="panelScrim"></div>
+
   <div id="penPalette">
     <div id="penChips"></div>
     <div id="thickRow">
@@ -7479,6 +7499,17 @@ function closePanels() {
   penPalette.style.display = 'none';
   eraserPanel.style.display = 'none';
   moreMenu.style.display = 'none';
+  byId('panelScrim').className = '';
+}
+
+/* any panel being visible is the same question as whether the scrim
+   should be up, so it is asked in one place rather than at each of the
+   places that open one */
+function syncScrim() {
+  var open = penPalette.style.display === 'block' ||
+             eraserPanel.style.display === 'block' ||
+             moreMenu.style.display === 'block';
+  byId('panelScrim').className = open ? 'on' : '';
 }
 
 /* ---------- button wiring ---------- */
@@ -7507,6 +7538,19 @@ byId('nbRenameBtn').addEventListener('click', function () {
     saveSoon();
   }
 });
+/* The dismissing tap is consumed here and goes no further, which is the
+   whole point: on the page it used to land as a dot, so the only way out
+   of the colour picker was to mark your own notes. */
+(function () {
+  var sc = byId('panelScrim');
+  function eat(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
+    closePanels();
+  }
+  sc.addEventListener('touchstart', eat);
+  sc.addEventListener('click', eat);
+})();
 byId('fabNew').addEventListener('click', newNote);
 byId('backBtn').addEventListener('click', goHome);
 noteTitleBtn.addEventListener('click', renameCurrentNote);
@@ -7514,6 +7558,7 @@ palmBtn.addEventListener('click', cyclePalm);
 byId('moreBtn').addEventListener('click', function () {
   if (moreMenu.style.display === 'block') moreMenu.style.display = 'none';
   else { buildMoreMenu(); moreMenu.style.display = 'block'; penPalette.style.display = 'none'; eraserPanel.style.display = 'none'; }
+  syncScrim();
 });
 
 penBtn.addEventListener('click', function () {
@@ -7524,6 +7569,7 @@ penBtn.addEventListener('click', function () {
   setTool('pen');
   applyPenUI();
   penPalette.style.display = 'block';
+  syncScrim();
 });
 selectBtn.addEventListener('click', function () { setTool('select'); });
 textBtn.addEventListener('click', function () { setTool('text'); });
@@ -7536,6 +7582,7 @@ eraserBtn.addEventListener('click', function () {
   setTool('eraser');
   applyEraserUI();
   eraserPanel.style.display = 'block';
+  syncScrim();
 });
 
 function setTool(t) {
