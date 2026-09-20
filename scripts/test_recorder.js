@@ -330,6 +330,98 @@ setTimeout(function () {
   check('the get-ready countdown is not in the recording',
         !lids[7] && !!lids[8], 'contacts: ' + Object.keys(lids).join(','));
 
-  console.log('\n' + pass + ' passed, ' + fail + ' failed');
+  
+/* ---------- the handwriting reference corpus ----------
+ * Every other drill knows its answer in advance - draw ten lines, want
+ * ten. Handwriting quality has no such answer, which is why every
+ * judgement about it so far has come from the user describing what they
+ * saw. The corpus fixes that by having the same words written twice,
+ * neat and normal, so "is this better" becomes "is it closer to the neat
+ * one".
+ *
+ * These check the recording carries what the scoring will need. A corpus
+ * that turns out to be missing the ink, or the pairing, is a wasted
+ * session on the tablet that cannot be redone from here. */
+
+function rfApp() {
+  var a = H.load({ quiet: true, dpr: 2, viewW: 768, viewH: 826, live: true,
+    seed: { mathnotes_v4: JSON.stringify({ v: 4,
+      notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
+      notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, strokes: [] } },
+      cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
+  a.flushFrames();
+  return a;
+}
+
+var rfa = rfApp();
+var rfList = rfa.win.__mnDrill.ref;
+check('there are twenty reference takes', rfList.length === 20,
+      rfList.length + " takes");
+
+(function () {
+  var items = {}, modes = {}, i;
+  for (i = 0; i < rfList.length; i++) {
+    items[rfList[i].ref.item] = true;
+    modes[rfList[i].ref.mode + rfList[i].ref.take] = true;
+  }
+  check('five items, each neat and normal, each twice',
+        Object.keys(items).length === 5 && Object.keys(modes).length === 4,
+        Object.keys(items).join(",") + " / " + Object.keys(modes).join(","));
+})();
+
+/* record one take and look at what would be sent */
+rfa.win.__mnDrill.start("ref-E1-neat-1", true);
+(function () {
+  var i, x;
+  for (i = 0; i < 6; i++) {
+    x = 120 + i * 60;
+    rfa.stroke({ id: i + 1, x0: x, y0: 300 + 56, x1: x + 34, y1: 322 + 56,
+                 speed: 0.22, wobble: 1 });
+    rfa.tick(120);
+  }
+  rfa.flushFrames();
+})();
+rfa.win.__mnDrill.stop();
+rfa.flushFrames();
+
+var rfSent = rfa.requests();
+var rfBody = null;
+(function () {
+  var i;
+  for (i = rfSent.length - 1; i >= 0; i--) {
+    try {
+      var b = JSON.parse(rfSent[i].body);
+      if (b.ref) { rfBody = b; break; }
+    } catch (e) {}
+  }
+})();
+
+check('the recording is sent to the PC', !!rfBody,
+      rfSent.length + " requests made");
+check('...and says which item, mode and take it is',
+      !!rfBody && rfBody.ref.item === "E1" && rfBody.ref.mode === "neat" &&
+      rfBody.ref.take === 1,
+      rfBody ? JSON.stringify(rfBody.ref) : "-");
+check('...and carries the WRITING, not just the touch events',
+      !!rfBody && rfBody.ink && rfBody.ink.length === 6 &&
+      rfBody.ink[0].pts && rfBody.ink[0].pts.length > 2,
+      rfBody && rfBody.ink ? rfBody.ink.length + " strokes" : "no ink");
+check('...and its own geometry, so a bad take is caught on the tablet',
+      !!rfBody && rfBody.report && rfBody.report.n === 6 &&
+      typeof rfBody.report.deg === "number" && rfBody.report.xh > 0,
+      rfBody ? JSON.stringify(rfBody.report) : "-");
+
+/* the words to copy have to survive into the prompt, or the session
+   records the wrong content and nothing pairs up */
+(function () {
+  var i, bad = 0;
+  for (i = 0; i < rfList.length; i++) {
+    if (rfList[i].what.indexOf(rfList[i].ref.text) < 0) bad++;
+  }
+  check('every take shows the words it wants written', bad === 0,
+        bad + " takes do not show their own text");
+})();
+
+console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
 }, 4200);

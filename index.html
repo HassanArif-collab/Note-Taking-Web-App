@@ -371,6 +371,18 @@ body.dark .pg-cell canvas { border-color: #3A414A; }
 #trainPrep { display: none; }
 #trainPrep.on { display: block; }
 #trainPrepName { font-size: 13px; font-weight: 700; color: #5A6270; letter-spacing: 0.04em; }
+.reftext {
+  display: block; font-size: 26px; font-weight: 700; color: #1A1A1A;
+  margin: 8px 0 4px 0; letter-spacing: 0.01em;
+}
+#trainBanner .reftext { font-size: 22px; color: #FFFFFF; }
+.reftext + i { display: block; font-style: normal; font-size: 12px; color: #6A7178; }
+#trainBanner .reftext + i { color: rgba(255,255,255,0.75); }
+.refhead {
+  font-size: 13px; font-weight: 700; color: #5A6270; letter-spacing: 0.04em;
+  margin: 14px 0 6px 0; border-top: 1px solid #ECEFF2; padding-top: 12px;
+}
+.refhead .n { font-weight: 400; color: #8A9099; letter-spacing: 0; }
 #trainPrepWhat { font-size: 20px; line-height: 1.35; color: #1A1A1A; margin: 6px 0 10px 0; }
 #trainPrepNote { font-size: 12px; color: #6A6A6A; line-height: 1.4; margin-bottom: 12px; }
 #trainStartBtn {
@@ -6009,6 +6021,71 @@ function showTrace() {
  *       0 means any mark at all is a failure; -1 means unknown, so
  *       just count what happened.
  * ============================================================ */
+/* THE REFERENCE CORPUS.
+ *
+ * Every drill above knows its answer in advance - draw ten lines, want
+ * ten - which is what made palm rejection measurable. Handwriting quality
+ * has no such answer, and that is why every judgement about it so far has
+ * come from the user describing what they saw. That is slow, lossy, and
+ * it puts the one person who cannot read the code in charge of grading.
+ *
+ * So: write the same words TWICE. Once slowly and as carefully as
+ * possible - that take is the target. Once at normal speed - that take is
+ * the input. "Did this change improve the writing" then becomes "did the
+ * normal take move closer to the neat take", which is a number.
+ *
+ * The target is the user's own careful hand, not an ideal. That is the
+ * right goal anyway: hurried writing should come out looking like the
+ * same person's careful writing, not like a font.
+ *
+ * TWO neat takes, not one, and this is the part that makes it honest.
+ * Neat against neat measures how much a hand varies when it is trying its
+ * hardest - the noise floor. Without it there is no way to tell a real 4%
+ * gain from the same person writing differently that minute, and this
+ * project has produced enough measurements that turned out to mean
+ * nothing already.
+ *
+ *     neat 1 vs neat 2    how small a change is meaningless
+ *     neat   vs normal    the gap to be closed
+ *     neat   vs tidied    how much of it actually closed
+ */
+var REF_ITEMS = [
+  { id: 'E1', text: 'the quick brown fox',
+    why: 'ordinary letters, ascenders, one descender' },
+  { id: 'E2', text: 'jumps over lazy dog',
+    why: 'four descenders - the case that tilts a baseline' },
+  { id: 'E3', text: 'viva wax kicked',
+    why: 'corners: v w x k, to see whether smoothing eats them' },
+  { id: 'M1', text: 'x2 + y2 = z2',
+    why: 'the 2s written small and HIGH, as exponents' },
+  { id: 'M2', text: 'a1 + a2 = 10',
+    why: 'the 1 and 2 written small and LOW, as subscripts' }
+];
+
+function refDrills() {
+  var out = [], i, m, t, item, mode, id;
+  for (i = 0; i < REF_ITEMS.length; i++) {
+    item = REF_ITEMS[i];
+    for (m = 0; m < 2; m++) {
+      mode = m === 0 ? 'neat' : 'norm';
+      for (t = 1; t <= 2; t++) {
+        id = 'ref-' + item.id + '-' + mode + '-' + t;
+        out.push({
+          id: id, s: mode === 'neat' ? 45 : 30, want: -2,
+          ref: { item: item.id, mode: mode, take: t, text: item.text },
+          what: (mode === 'neat'
+                  ? 'SLOWLY and as neatly as you can, write:'
+                  : 'At your NORMAL speed, write:') +
+                '<b class="reftext">' + item.text + '</b>' +
+                '<i>' + item.why + ' &middot; leave a clear line of space</i>'
+        });
+      }
+    }
+  }
+  return out;
+}
+var REF_DRILLS = refDrills();
+
 var DRILLS = [
   { id: 'palm-rest', s: 20, want: 0,
     what: 'Rest the side of your hand on the page, as if about to write. Keep the stylus AWAY from the glass. Hold still.' },
@@ -6235,11 +6312,44 @@ function drillStop() {
   obj.drill = d.id;
   obj.want = d.want;
   obj.marks = marks;
+  if (d.ref) {
+    /* The corpus is the WRITING, not the touch events that produced it.
+       Replaying the events would put the answer at the mercy of whatever
+       the palm engine is set to on the day, and this has to still mean
+       the same thing in six months. */
+    var ink = drillInk(drillStrokes0), q;
+    obj.ref = d.ref;
+    obj.ink = [];
+    for (q = 0; q < ink.length; q++) {
+      obj.ink.push({ pen: ink[q].pen, w: ink[q].w, ord: ink[q].ord,
+                     pts: ink[q].pts });
+    }
+    obj.report = refReport(ink);
+  }
   if (drillTargetList) obj.targets = drillTargetList;
   drillTargetList = null;
   drillShowTargets(null);
 
   var rec = { marks: marks, samples: obj.samples.length, ok: v.ok, text: v.text, sent: false };
+  if (d.ref) {
+    rec.report = obj.report;
+    rec.ok = obj.report.n >= 3;
+    rec.text = obj.report.n + ' strokes &middot; tilt ' + obj.report.deg +
+               '&deg; &middot; letters ' + obj.report.xh + 'px &plusmn;' +
+               obj.report.cv + '%';
+    /* the other mode of the same item, if it has been recorded, so a neat
+       take that came out no neater than the normal one is caught now */
+    var other = drillDone['ref-' + d.ref.item + '-' +
+                (d.ref.mode === 'neat' ? 'norm' : 'neat') + '-' + d.ref.take];
+    if (other && other.report) {
+      var a = d.ref.mode === 'neat' ? obj.report : other.report;
+      var b = d.ref.mode === 'neat' ? other.report : obj.report;
+      var gap = Math.abs(b.deg - a.deg) + Math.abs(b.cv - a.cv) / 10;
+      rec.text += ' &middot; neat ' + a.deg + '&deg;/&plusmn;' + a.cv +
+                  '% vs normal ' + b.deg + '&deg;/&plusmn;' + b.cv + '%' +
+                  (gap < 1 ? ' &middot; TOO ALIKE, redo the neat one slower' : '');
+    }
+  }
   drillDone[d.id] = rec;
 
   function show() {
@@ -6249,6 +6359,14 @@ function drillStop() {
                 ' &nbsp;&middot;&nbsp; ' + drillDoneCount() + ' of ' + DRILLS.length +
                 ' recorded</span>', rec.ok ? 'pass' : 'fail');
     setTimeout(function () { if (!drillNow) drillBanner(null); }, 6000);
+    /* a twenty-line session should be a sequence of taps, not twenty
+       trips back through a list */
+    if (d.ref) {
+      var nx = refNext();
+      if (nx) setTimeout(function () {
+        if (!drillNow) { drillShowPrep(nx); byId('trainOverlay').className = 'overlay on'; }
+      }, 1400);
+    }
   }
 
   if (!canUpload()) { show(); showTraceText(JSON.stringify(obj)); return; }
@@ -6258,6 +6376,64 @@ function drillStop() {
     show();
     if (!ok) showTraceText(JSON.stringify(obj));
   });
+}
+
+/* The geometry of one recorded take, so a neat take that was not
+   actually neat can be spotted and redone on the spot rather than
+   quietly poisoning the corpus weeks later. */
+function refReport(ink) {
+  var out = { n: ink.length, deg: 0, xh: 0, cv: 0 };
+  if (ink.length < 3) return out;
+  var syms = tidySymbols(ink), i, feet = [], hs = [], cx;
+  for (i = 0; i < syms.length; i++) {
+    cx = (syms[i].x0 + syms[i].x1) / 2;
+    feet.push([cx, syms[i].y1]);
+    hs.push(syms[i].y1 - syms[i].y0);
+  }
+  var fit = tidyTheilSen(feet);
+  if (fit) out.deg = Math.round(Math.atan(fit.m) * 1800 / Math.PI) / 10;
+  var med = tidyMedian(hs);
+  out.xh = Math.round(med);
+  if (med > 0) {
+    var dev = [];
+    for (i = 0; i < hs.length; i++) dev.push(Math.abs(hs[i] - med));
+    out.cv = Math.round(100 * tidyMedian(dev) / med);
+  }
+  return out;
+}
+
+/* the strokes this drill actually put on the page */
+function drillInk(from) {
+  var nn = activeNote(), out = [], i;
+  if (!nn) return out;
+  for (i = from; i < nn.strokes.length; i++) {
+    if (nn.strokes[i].pen === PEN_TEXT || nn.strokes[i].pen === PEN_IMG) continue;
+    out.push(nn.strokes[i]);
+  }
+  return out;
+}
+
+/* the next take still to be recorded, so the session is a sequence of
+   taps rather than twenty trips through a list */
+function refNext() {
+  var i;
+  for (i = 0; i < REF_DRILLS.length; i++) {
+    if (!drillDone[REF_DRILLS[i].id]) return REF_DRILLS[i];
+  }
+  return null;
+}
+
+function refDoneCount() {
+  var c = 0, i;
+  for (i = 0; i < REF_DRILLS.length; i++) if (drillDone[REF_DRILLS[i].id]) c++;
+  return c;
+}
+
+function drillById(id) {
+  var i;
+  for (i = 0; i < DRILLS.length; i++) if (DRILLS[i].id === id) return DRILLS[i];
+  for (i = 0; i < REF_DRILLS.length; i++) if (REF_DRILLS[i].id === id) return REF_DRILLS[i];
+  return null;
 }
 
 function drillDoneCount() {
@@ -6291,7 +6467,31 @@ function drillShowList() {
     })(DRILLS[i], i);
   }
 
-  byId('trainProgress').innerHTML = drillDoneCount() + ' of ' + DRILLS.length +
+  var head = document.createElement('div');
+  head.className = 'refhead';
+  head.innerHTML = 'HANDWRITING REFERENCE <span class="n">&nbsp;&middot;&nbsp; ' +
+    refDoneCount() + ' of ' + REF_DRILLS.length + ' &middot; the same words twice, ' +
+    'neat then normal, so improvement can be measured instead of described</span>';
+  list.appendChild(head);
+  for (i = 0; i < REF_DRILLS.length; i++) {
+    (function (d) {
+      var rec = drillDone[d.id];
+      var b = document.createElement('button');
+      b.className = rec ? 'pass' : '';
+      b.innerHTML = d.ref.item + ' &middot; ' +
+        (d.ref.mode === 'neat' ? 'NEAT' : 'normal') + ' &middot; take ' + d.ref.take +
+        '  (' + d.s + 's)' +
+        '<span class="sub">' + d.ref.text + '</span>' +
+        (rec ? '<span class="res">&#10003; ' + rec.text +
+               ' &middot; ' + (rec.sent ? 'sent' : 'not sent') +
+               ' &middot; tap to redo</span>' : '');
+      b.addEventListener('click', function () { drillShowPrep(d); });
+      list.appendChild(b);
+    })(REF_DRILLS[i]);
+  }
+
+  byId('trainProgress').innerHTML = drillDoneCount() + ' of ' +
+    (DRILLS.length + REF_DRILLS.length) +
     ' recorded &nbsp;&middot;&nbsp; ' +
     (canUpload() ? 'connected to the PC' : 'NOT on the test server');
 
@@ -6320,10 +6520,22 @@ function drillShowPrep(d) {
   byId('trainPrepName').innerHTML = 'DRILL &nbsp;' + d.id.toUpperCase() +
                                     ' &nbsp;&middot;&nbsp; ' + d.s + ' SECONDS';
   byId('trainPrepWhat').innerHTML = d.what;
-  byId('trainProgress').innerHTML = d.want === 0
-    ? 'Any mark at all during this drill is a failure.'
-    : (d.want > 0 ? 'Exactly ' + d.want + ' marks should exist at the end.'
-                  : 'Only the pen is on the glass, so every mark should appear.');
+  if (d.ref) {
+    byId('trainPrepName').innerHTML = 'REFERENCE &nbsp;' + d.ref.item +
+      ' &nbsp;&middot;&nbsp; ' + (d.ref.mode === 'neat' ? 'NEAT' : 'NORMAL') +
+      ' &nbsp;&middot;&nbsp; TAKE ' + d.ref.take +
+      ' &nbsp;&middot;&nbsp; ' + d.s + ' SECONDS';
+    byId('trainProgress').innerHTML = d.ref.mode === 'neat'
+      ? 'This take is the TARGET. Slow down. It only helps if it is clearly ' +
+        'better than how you normally write.'
+      : 'This take is the INPUT. Write the way you actually write - do not ' +
+        'be careful, or there is nothing to improve.';
+  } else {
+    byId('trainProgress').innerHTML = d.want === 0
+      ? 'Any mark at all during this drill is a failure.'
+      : (d.want > 0 ? 'Exactly ' + d.want + ' marks should exist at the end.'
+                    : 'Only the pen is on the glass, so every mark should appear.');
+  }
 }
 
 function showTraining() { drillShowList(); }
@@ -6338,19 +6550,18 @@ function liveStart() {
 window.__mnDrill = {
   list: DRILLS,
   start: function (id, noLead) {
-    var i;
-    for (i = 0; i < DRILLS.length; i++) {
-      if (DRILLS[i].id === id) { drillStart(DRILLS[i], noLead); return true; }
-    }
-    return false;
+    var d = drillById(id);
+    if (!d) return false;
+    drillStart(d, noLead);
+    return true;
   },
   prep: function (id) {
-    var i;
-    for (i = 0; i < DRILLS.length; i++) {
-      if (DRILLS[i].id === id) { drillShowPrep(DRILLS[i]); return true; }
-    }
-    return false;
+    var d = drillById(id);
+    if (!d) return false;
+    drillShowPrep(d);
+    return true;
   },
+  ref: REF_DRILLS,
   done: function () { return drillDone; },
   stop: drillStop,
   live: liveTick,
@@ -6369,6 +6580,26 @@ window.__mnWidthAt = strokeWidthAt;
 /* Tidy runs on a 900ms idle timer, and the test harness advances a
    fake clock rather than a real one - so without a way to say "the pause
    has happened" the feature would be untestable. */
+/* Put a recorded page of ink back on the canvas. The reference corpus
+   stores the WRITING rather than the touch events that made it, so the
+   scorer needs a way to load it without replaying it through a palm
+   engine whose settings may have moved on since. */
+window.__mnLoadInk = function (list) {
+  var nn = activeNote(), i, s;
+  if (!nn) return 0;
+  nn.strokes = [];
+  for (i = 0; i < list.length; i++) {
+    s = list[i];
+    nn.strokes.push({ id: genId(), pen: s.pen || 0, w: s.w || 3,
+                      color: s.color || '#000000',
+                      a: typeof s.a === 'number' ? s.a : 1,
+                      ord: typeof s.ord === 'number' ? s.ord : i,
+                      pts: s.pts });
+  }
+  strokeSeq = nn.strokes.length + 1;
+  invalidateAll(); recomputeDoc(); requestRender();
+  return nn.strokes.length;
+};
 window.__mnSave = function () { saveTick(); };
 window.__mnTidy = function () { return tidyRun(); };
 window.__mnZW = function () { var g = zwGeom(); return { on: zw.on, x: zw.x, y: zw.y, bw: g.bw, bh: g.bh, top: g.top }; };

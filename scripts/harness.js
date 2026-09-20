@@ -288,6 +288,7 @@ App.prototype.drillPrep = function (id) { this.win.__mnDrill.prep(id); return th
 App.prototype.drillDone = function () { return this.win.__mnDrill.done(); };
 App.prototype.drillStop = function () { this.win.__mnDrill.stop(); return this; };
 App.prototype.drills = function () { return this.win.__mnDrill.list; };
+App.prototype.loadInk = function (list) { var n = this.win.__mnLoadInk(list); this.flushFrames(); return n; };
 App.prototype.save = function () { this.win.__mnSave(); return this; };
 /* fire a window event the app listens for, such as pagehide */
 App.prototype.fire = function (type) {
