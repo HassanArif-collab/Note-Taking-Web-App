@@ -23,11 +23,15 @@ function check(name, ok, detail) {
   else { fail++; console.log('  FAIL ' + name + (detail ? '  (' + detail + ')' : '')); }
 }
 
-/* the widest stretch of ink that the engine calls one line */
+/* the widest stretch of ink that the engine calls one line, as judged on
+   the FIRST pass - that is the decision made about the writing as the
+   hand left it, and the one the user sees the result of. Later passes are
+   refining an angle on ink that has already been moved. */
 function widest(rep) {
+  var rows = rep.first && rep.first.length ? rep.first : rep.sizes;
   var best = null, i;
-  for (i = 0; i < rep.sizes.length; i++) {
-    if (!best || rep.sizes[i].n > best.n) best = rep.sizes[i];
+  for (i = 0; i < rows.length; i++) {
+    if (!best || rows[i].n > best.n) best = rows[i];
   }
   return best || { n: 0, syms: 0, span: 0, why: '-' };
 }
@@ -74,8 +78,8 @@ withTrace('live-20260920-033756.json', function (r, rep) {
  */
   withTrace('live-20260920-033636.json', function (r, rep) {
     var refused = 0, acted = 0, i, L;
-    for (i = 0; i < rep.sizes.length; i++) {
-      L = rep.sizes[i];
+    for (i = 0; i < rep.first.length; i++) {
+      L = rep.first[i];
       if (L.why === 'not a line') refused++;
       if (L.why === 'ok') acted++;
     }

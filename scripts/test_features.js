@@ -685,5 +685,43 @@ check('...and the descenders still hang below it',
 
 
 
+
+/* ---------- the baseline structure tree ----------
+ * "x to the tenth" is not a line with two marks set high. It is a
+ * dominant baseline with ONE region hanging off the x, and that region
+ * has an internal shape of its own - the 1 and the 0 sit at whatever
+ * heights the hand gave them, relative to each other.
+ *
+ * Levelling each of them against the main baseline separately would put
+ * both feet on the same canonical height and flatten that shape out. The
+ * whole point of the tree is that the region moves as ONE thing: lifted
+ * to where an exponent belongs, and otherwise left exactly as written. */
+
+var bta = tdApp();
+mdMark(bta, 1, 120, 300, 22, 22);   /* x */
+mdMark(bta, 2, 146, 288, 10, 10);   /* 1, written low */
+mdMark(bta, 3, 160, 282, 10, 10);   /* 0, written 6px higher than the 1 */
+mdMark(bta, 4, 190, 300, 22, 22);   /* + */
+mdMark(bta, 5, 222, 300, 22, 22);   /* y */
+mdMark(bta, 6, 254, 300, 22, 22);
+var btWas = mdAt(bta, 1)[1] - mdAt(bta, 2)[1];   /* 1 against 0 */
+bta.tidy();
+var btNow = mdAt(bta, 1)[1] - mdAt(bta, 2)[1];
+check('a two-digit exponent keeps its own internal shape',
+      Math.abs(btNow - btWas) < 1.5,
+      "the gap inside the exponent went " + Math.round(btWas) + "px -> " + Math.round(btNow) + "px");
+
+/* and it still ends up where an exponent belongs */
+var btClear = mdAt(bta, 0)[1] - mdAt(bta, 1)[1];
+check('...and the region as a whole is lifted clear of the baseline',
+      btClear > 6, Math.round(btClear) + "px above the baseline");
+
+/* a script belongs to the symbol it sits beside, so the writing on the
+   far side of the line is not dragged with it */
+check('...while the rest of the line is untouched',
+      Math.abs(mdAt(bta, 4)[1] - mdAt(bta, 5)[1]) < 1.5,
+      "two baseline marks drifted " +
+      (Math.round(Math.abs(mdAt(bta, 4)[1] - mdAt(bta, 5)[1]) * 10) / 10) + "px apart");
+
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

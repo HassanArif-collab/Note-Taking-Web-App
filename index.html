@@ -2677,6 +2677,7 @@ function inkBox(list) {
 function tidySymbols(list) {
   var syms = [], i;
   for (i = 0; i < list.length; i++) syms.push(inkBox([list[i]]));
+  for (i = 0; i < syms.length; i++) syms[i].key = 'k' + i;
   var merged = true, q, a, b, ov, narrow;
   while (merged) {
     merged = false;
@@ -2699,6 +2700,60 @@ function tidySymbols(list) {
     }
   }
   return syms;
+}
+
+/* THE BASELINE STRUCTURE TREE.
+ *
+ * "x squared plus y squared" is not a line of writing with some marks set
+ * high. It is a DOMINANT baseline - x, +, y - with two child baselines
+ * hanging off it, one above the x and one above the y. Zanibbi and
+ * Blostein called this the Baseline Structure Tree thirty years ago and
+ * every serious maths recogniser has used it since, because the
+ * alternative - one baseline per line - is not an approximation of
+ * mathematical layout, it is simply the wrong shape.
+ *
+ * What it buys here, concretely:
+ *   - the baseline is fitted through the symbols that are ON it, so a
+ *     line with three exponents no longer has three marks dragging its
+ *     angle around
+ *   - a multi-symbol exponent moves as ONE thing. Levelling each of the
+ *     1 and the 0 of x-to-the-tenth against the main baseline separately
+ *     flattens the exponent's own internal shape; levelling the region
+ *     keeps it
+ *   - and it says which symbol each script BELONGS to, which is the
+ *     difference between "this mark is high up" and "this is the
+ *     exponent of that x"
+ *
+ * One level deep. An exponent of an exponent is rare enough in a page of
+ * working that the second level can wait for someone to miss it.
+ */
+function tidyTree(syms, m, b, band) {
+  var line = [], loose = [], si, cxs, foot;
+  for (si = 0; si < syms.length; si++) {
+    cxs = (syms[si].x0 + syms[si].x1) / 2;
+    foot = syms[si].y1 - (m * cxs + b);
+    if (foot > -band && foot < band) line.push(syms[si]);
+    else loose.push(syms[si]);
+  }
+  /* a script belongs to the nearest symbol of the dominant line at or
+     before it - the x that the 2 is the exponent OF */
+  var regions = [], i, q, host, bestD, d, kind, key, map = {}, r;
+  for (i = 0; i < loose.length; i++) {
+    host = null; bestD = 1e9;
+    for (q = 0; q < line.length; q++) {
+      d = loose[i].x0 - line[q].x1;
+      if (d < -(loose[i].x1 - loose[i].x0)) continue;   /* wholly to its left */
+      if (d < bestD) { bestD = d; host = q; }
+    }
+    if (host === null) continue;      /* nothing to hang it on */
+    cxs = (loose[i].x0 + loose[i].x1) / 2;
+    kind = ((loose[i].y0 + loose[i].y1) / 2 - (m * cxs + b)) < 0 ? 'sup' : 'sub';
+    key = host + ':' + kind;
+    r = map[key];
+    if (!r) { r = map[key] = { host: line[host], kind: kind, syms: [] }; regions.push(r); }
+    r.syms.push(loose[i]);
+  }
+  return { line: line, regions: regions };
 }
 
 var tidyWhy = null;   /* what the last group decided, for the scoreboard */
@@ -2848,36 +2903,52 @@ function tidyGroup(list, sink) {
     dy = rule - baseY;
     if (Math.abs(dy) > settings.spacing * TIDY_SNAP) dy = 0;
   }
-  /* Levelling the scripts. A rotation is rigid, so how far a symbol sits
-     from the baseline is the same before and after - which means it can
-     be measured now, on the writing as the hand left it, and applied as
-     one extra drop per symbol. */
-  var items = [], q, extra, rel, mid, want, lb, sh, moved = false;
-  for (si = 0; si < syms.length; si++) {
-    extra = 0;
-    sh = syms[si].y1 - syms[si].y0;
-    lb = fit.m * ((syms[si].x0 + syms[si].x1) / 2) + fit.b;
-    rel = syms[si].y1 - lb;     /* the foot; below the line is positive */
-    /* Classified on the symbol's MIDDLE, moved by its foot. Judging by
-       the foot alone cannot tell an equals sign from a low exponent -
-       both have a foot above the line - but their middles are nowhere
-       near each other: an equals sign is centred in the x-height band
-       where Samsung's scheme calls it Middle, and an exponent sits
-       clear above it. The foot is still what gets placed, because that
-       is what the eye reads as the height of a superscript. */
-    mid = (syms[si].y0 + syms[si].y1) / 2 - lb;
-    if (sh < H * TIDY_SMALL) {
-      if (mid < -H * TIDY_SUP_AT) want = -H * TIDY_SUP_TO;
-      else if (mid > H * TIDY_SUB_AT) want = H * TIDY_SUB_TO;
-      else want = null;
-      if (want !== null) {
-        extra = want - rel;
-        /* refuse rather than clamp: a rule that does nothing when it is
-           unsure beats one that confidently moves the wrong thing */
-        if (Math.abs(extra) > H * TIDY_SCRIPT_MAX) extra = 0;
-      }
+  /* Levelling the scripts, by region rather than by symbol. A rotation is
+     rigid, so how far a thing sits from the baseline is the same before
+     and after - which means it can all be measured now, on the writing as
+     the hand left it, and applied as one extra drop per symbol. */
+  var tree = tidyTree(syms, fit.m, fit.b, H * TIDY_ON_LINE);
+  var items = [], q, extra, moved = false, drop = {}, rg, rq, rfeet, rbase, want;
+  for (rg = 0; rg < tree.regions.length; rg++) {
+    var reg = tree.regions[rg];
+    /* an exponent is levelled by ITS OWN baseline, so an exponent of two
+       digits keeps whatever shape it was written with */
+    rfeet = [];
+    for (rq = 0; rq < reg.syms.length; rq++) {
+      rfeet.push(reg.syms[rq].y1 -
+        (fit.m * ((reg.syms[rq].x0 + reg.syms[rq].x1) / 2) + fit.b));
     }
-    if (extra) moved = true;
+    rbase = reg.syms.length > 1 ? tidyDensest(rfeet, H * TIDY_ON_LINE)
+                                : rfeet[0];
+    /* an operator centred in the x-height band - an equals sign, a plus,
+       a minus - is Middle in Samsung's scheme and is not a script at all.
+       Only things clear of the band are moved. */
+    var rmid = 0;
+    for (rq = 0; rq < reg.syms.length; rq++) {
+      rmid += (reg.syms[rq].y0 + reg.syms[rq].y1) / 2 -
+        (fit.m * ((reg.syms[rq].x0 + reg.syms[rq].x1) / 2) + fit.b);
+    }
+    rmid /= reg.syms.length;
+    var big = false;
+    for (rq = 0; rq < reg.syms.length; rq++) {
+      if (reg.syms[rq].y1 - reg.syms[rq].y0 >= H * TIDY_SMALL) big = true;
+    }
+    if (big) continue;
+    if (reg.kind === 'sup' && rmid < -H * TIDY_SUP_AT) want = -H * TIDY_SUP_TO;
+    else if (reg.kind === 'sub' && rmid > H * TIDY_SUB_AT) want = H * TIDY_SUB_TO;
+    else continue;
+    extra = want - rbase;
+    /* refuse rather than clamp: a rule that does nothing when it is
+       unsure beats one that confidently moves the wrong thing */
+    if (Math.abs(extra) > H * TIDY_SCRIPT_MAX) continue;
+    if (!extra) continue;
+    for (rq = 0; rq < reg.syms.length; rq++) {
+      drop[reg.syms[rq].key] = extra;
+      moved = true;
+    }
+  }
+  for (si = 0; si < syms.length; si++) {
+    extra = drop[syms[si].key] || 0;
     for (q = 0; q < syms[si].list.length; q++) {
       items.push({ s: syms[si].list[q], sym: syms[si],
                    cx: cx, cy: cy, th: -th, dx: 0, dy: dy + extra });
@@ -3040,15 +3111,21 @@ function tidyRun() {
      Three is enough to converge on every recording tried; the loop stops
      early when a pass changes nothing, which is the usual case by the
      second. One tap should finish the job. */
-  var all = [], lines, moved = 0, report = [], pass, did;
+  /* Which strokes are one line is decided ONCE. Re-deciding it on every
+     pass meant that straightening a line moved its feet, which moved the
+     boundary between it and the next line, which moved a symbol across -
+     so the second pass was judging a different line from the one the
+     first pass fixed, and a name that came out straight was reported as
+     "not a line" a moment later. The passes are there to refine an angle,
+     not to rediscover the page. */
+  var all = [], lines = tidyLines(ink), moved = 0, report = [], first = [], pass, did;
   for (pass = 0; pass < 3; pass++) {
-    lines = tidyLines(ink);
     report = []; did = 0;
     for (i = 0; i < lines.length; i++) {
       if (tidyGroup(lines[i], all)) did++;
       report.push(tidyWhy);
     }
-    if (pass === 0) moved = did;
+    if (pass === 0) { moved = did; first = report; }
     if (!did) break;
   }
   if (all.length) {
@@ -3057,7 +3134,7 @@ function tidyRun() {
   }
   toast(moved ? (moved === 1 ? '1 line tidied' : moved + ' lines tidied')
               : 'Already tidy');
-  return { lines: lines.length, moved: moved, sizes: report };
+  return { lines: lines.length, moved: moved, sizes: report, first: first };
 }
 
 /* ---------- history ---------- */
