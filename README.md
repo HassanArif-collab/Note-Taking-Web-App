@@ -204,6 +204,26 @@ implemented.
   single reason writing feels bad, and "decide late, draw early" above is what
   removes it.
 
+### Handwriting, still to come
+
+The measurements above point at one thing and rule out the rest.
+
+**Cusp-aware smoothing.** Smoothing is applied evenly along a stroke,
+including across the point of a `v` and the crossing of an `x` — so the app
+is actively rounding off the corners a fast hand is already struggling to
+keep. Detect high-curvature points and stop smoothing through them. It is
+the only candidate with both a picture and a number behind it.
+
+Honest ceiling: part of the corner loss is the hand, not the app. At speed
+the `x` crossing is genuinely shorter before anything touches it, and no
+software recreates a stroke that was never made. Expect crisper, not equal
+to careful.
+
+**Ruled out by measurement, not by argument:** more alignment work (-8% and
++2%), letter-size normalisation and slant correction (both inside this
+hand's own variation), and Bézier re-encoding — see the comment above
+`drawSmoothSeg`, which records why.
+
 ### Features
 
 - Reorder pages, and a page thumbnail view.
@@ -278,6 +298,79 @@ flex `gap`, `clamp()`, the `download` attribute, `Array.includes`,
 
 **A single unsupported token is a silent white screen on the iPad**, with no
 error anyone can see. `check_es5.js` is not optional.
+
+### Handwriting: what was measured, and what it settled
+
+Tidy handwriting straightens a line of writing, levels exponents and
+subscripts, and evens the gaps between words. It works. It is also, on this
+user's real handwriting, **not worth having** — and that is a measurement,
+not an opinion.
+
+A reference corpus decides it. The same phrase is written twice: once slowly
+and as neatly as possible (the target) and once at normal speed (the input).
+"Did a change improve the writing" then means "did the input move closer to
+the target", which is a number. Two neat takes, not one, because neat against
+neat is the noise floor — how much a hand varies when it is trying its
+hardest — and any gain smaller than that is indistinguishable from the same
+person writing again.
+
+```bash
+node scripts/refscore.js            # score the corpus in traces/
+node scripts/refscore.js --html old.html
+node scripts/fakecorpus.js DIR      # a corpus with KNOWN damage, to prove
+                                    # the scoreboard before anyone writes
+```
+
+Record it on the tablet: menu → Testing drills → **Start the reference
+session**. One screen, no timer, no countdown — write, tap Done, the next
+phrase appears.
+
+What it found:
+
+| | joined-up | printed |
+|---|---|---|
+| symbols per line | 5 | 18 |
+| overall closed | **-8%** | **+2%** |
+
+Joined-up writing arrives as roughly **one stroke per word**, so a line is
+five word-blobs and a baseline fitted through five points is mostly noise.
+There are only five things alignment can physically move, which is exactly
+what "it only moves some strokes here and there" means from the inside.
+
+Printed letters give enough symbols to measure properly, and only one defect
+clears the noise floor:
+
+```
+                 floor    gap     after   closed
+line tilt        0.47     0.20    0.23    nothing wrong
+sits on the line 0.02     0.04    0.05    -3%
+letter size      0.12     0.14    0.14    within noise
+slant spread     0.63     1.14    1.00    within noise
+word gaps        0.14     0.09    0.12    within noise
+SHAKE            0.08     0.49    0.49    0%
+```
+
+**The geometry of this handwriting is fine.** Lines straight, slant
+consistent, letter sizes inside the writer's own variation. What degrades at
+speed is stroke quality — and rendering the takes and looking at them says
+the same thing: the crossing of an `x` disappears, the point of a `v` rounds
+off, a `w` collapses. Every failure is a **corner**.
+
+Three ways this scoreboard lied before it was fixed, each worth knowing:
+
+- **Slant was measured over a full turn.** `atan2` puts an upstroke and a
+  downstroke of the same slant 180° apart, and printed letters are full of
+  both, so a perfectly consistent hand read as 145° of spread. A 24.7°
+  "defect" was reported that did not exist.
+- **One take of each is not enough.** Shake across four printed takes came
+  out neat 2.31 / 2.23, normal 3.05 / 2.07 — one normal take shakier than
+  both neat ones, the other smoother than both. Scoring the first pair
+  reports a large defect, the second reports none, and neither is true.
+  Every take is used now.
+- **Session progress lived only in memory**, so a reload restarted at take
+  one and four takes of one phrase were filed under the name of another. The
+  ink was right and the label was wrong, which is worse — a wrong label gets
+  believed.
 
 ### The scorer
 
