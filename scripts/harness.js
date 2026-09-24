@@ -288,6 +288,17 @@ App.prototype.drillPrep = function (id) { this.win.__mnDrill.prep(id); return th
 App.prototype.drillDone = function () { return this.win.__mnDrill.done(); };
 App.prototype.drillStop = function () { this.win.__mnDrill.stop(); return this; };
 App.prototype.drills = function () { return this.win.__mnDrill.list; };
+/* turn the tablet. resizeView reads the wrapper, so the wrapper is what
+   has to change - anything else would be testing a fake. */
+App.prototype.rotate = function (w, hh) {
+  this.wrap._w = w; this.wrap._h2 = hh;
+  this.win._fire ? this.win._fire("resize") : null;
+  var hs = this.win._h["resize"] || [], i;
+  for (i = 0; i < hs.length; i++) { try { hs[i]({}); } catch (e) {} }
+  this.flushFrames();
+  return this;
+};
+App.prototype.geom = function () { return this.win.__mnGeom(); };
 App.prototype.nb = function () { return this.win.__mnNb; };
 App.prototype.ref = function () { return this.win.__mnRef; };
 App.prototype.loadInk = function (list) { var n = this.win.__mnLoadInk(list); this.flushFrames(); return n; };

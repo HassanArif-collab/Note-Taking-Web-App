@@ -1046,6 +1046,17 @@ var PALM_OFF = 0, PALM_MED = 1, PALM_MAX = 2, PALM_STRICT = 3;
 var PALM_NAMES = ['Glove', 'Med', 'Max', 'Strict'];
 
 var PAGE_H   = 1000;   /* document px per page  */
+/* THE PAGE HAD NO WIDTH OF ITS OWN. It was exactly as wide as the screen,
+ * so rotating the tablet from landscape to portrait took the paper from
+ * 1024px to 768px and everything written past 768 went off the edge -
+ * still in the file, never on screen again, with no horizontal scroll to
+ * go and find it. That is the "some of my writing disappears".
+ *
+ * The page is a fixed width now, and it grows to fit what is on it, the
+ * same way it already grew downwards. Rotating changes how much of the
+ * page you can see and nothing else. */
+var PAGE_W_MIN = 1024;
+var docW = PAGE_W_MIN;
 var GAP_H    = 20;     /* gray gap between pages */
 var TILE_H   = 256;    /* offscreen tile height (document px) */
 var MARGIN_X = 46;     /* the left channel on ruled paper */
@@ -2231,7 +2242,12 @@ function sortedStrokesForBand(y0, y1) {
   return list;
 }
 
+var tileW = 0;      /* the page width the cached tiles were drawn for */
+
 function getTile(i) {
+  /* Rotating changes the page width, and a tile painted at the old width
+     is the wrong shape. Throwing them away is the whole of handling it. */
+  if (tileW !== docW) { tiles = {}; tileOrder = []; tileW = docW; }
   if (tiles[i]) {
     var k = tileOrder.indexOf(i);
     if (k >= 0) { tileOrder.splice(k, 1); tileOrder.push(i); }
@@ -2240,7 +2256,10 @@ function getTile(i) {
   var top = i * TILE_H;
   if (i < 0 || top >= docH) return null;
   var c = document.createElement('canvas');
-  c.width = Math.max(1, Math.round(viewW * dpr));
+  /* a tile is as wide as the PAGE now, not as wide as the screen - a tile
+     cut to the screen leaves the rest of the page unpainted the moment
+     the page is wider than the window */
+  c.width = Math.max(1, Math.round(docW * dpr));
   c.height = Math.round(TILE_H * dpr);
   var tc = c.getContext('2d');
   if (!tc) return null;
@@ -2266,13 +2285,13 @@ function drawPaperPages(c, y0, y1) {
     if (top + PAGE_H <= y0) continue;
     if (top >= y1) continue;
     c.fillStyle = P.bg;
-    c.fillRect(0, top, viewW, PAGE_H);
+    c.fillRect(0, top, docW, PAGE_H);
     var tpl = settings.template;
     if (tpl === TPL_RULED) {
       c.strokeStyle = P.line; c.lineWidth = 1;
       c.beginPath();
       for (var y = top + FIRST_BASE; y <= top + PAGE_H - 16; y += settings.spacing) {
-        c.moveTo(MARGIN_X, y + 0.5); c.lineTo(viewW, y + 0.5);
+        c.moveTo(MARGIN_X, y + 0.5); c.lineTo(docW, y + 0.5);
       }
       c.stroke();
       /* the margin rule. Ruled lines running wall to wall is the one thing
@@ -2289,32 +2308,36 @@ function drawPaperPages(c, y0, y1) {
     } else if (tpl === TPL_GRID) {
       c.strokeStyle = P.line; c.lineWidth = 1;
       c.beginPath();
-      for (var gx = 24; gx < viewW; gx += 24) { c.moveTo(gx + 0.5, top); c.lineTo(gx + 0.5, top + PAGE_H); }
-      for (var gy = top + 24; gy <= top + PAGE_H - 8; gy += 24) { c.moveTo(0, gy + 0.5); c.lineTo(viewW, gy + 0.5); }
+      for (var gx = 24; gx < docW; gx += 24) { c.moveTo(gx + 0.5, top); c.lineTo(gx + 0.5, top + PAGE_H); }
+      for (var gy = top + 24; gy <= top + PAGE_H - 8; gy += 24) { c.moveTo(0, gy + 0.5); c.lineTo(docW, gy + 0.5); }
       c.stroke();
     } else if (tpl === TPL_DOTTED) {
       c.fillStyle = P.dot;
       for (var dy = top + 20; dy <= top + PAGE_H - 12; dy += 24) {
-        for (var dx = 12; dx < viewW; dx += 24) c.fillRect(dx - 1, dy - 1, 2, 2);
+        for (var dx = 12; dx < docW; dx += 24) c.fillRect(dx - 1, dy - 1, 2, 2);
       }
     }
     c.fillStyle = P.num;
     c.font = '12px Helvetica, Arial, sans-serif';
     c.textAlign = 'center';
     var gy2 = top + PAGE_H + GAP_H / 2;
-    if (gy2 >= y0 - 10 && gy2 <= y1 + 10) c.fillText(String(p + 1), viewW / 2, gy2 + 4);
+    if (gy2 >= y0 - 10 && gy2 <= y1 + 10) c.fillText(String(p + 1), docW / 2, gy2 + 4);
   }
 }
 
 /* ---------- document height + scroll ---------- */
 function recomputeDoc() {
-  var maxY = 0, n = activeNote();
+  var maxY = 0, maxX = 0, n = activeNote();
   if (n) {
     for (var i = 0; i < n.strokes.length; i++) {
       var bb = strokeBBox(n.strokes[i]);
       if (bb.y1 > maxY) maxY = bb.y1;
+      if (bb.x1 > maxX) maxX = bb.x1;
     }
   }
+  /* never narrower than the screen, so a wide tablet has no dead margin,
+     and never narrower than the ink, so nothing can sit off the page */
+  docW = Math.max(PAGE_W_MIN, viewW, Math.ceil(maxX + settings.spacing * 2));
   var needed = maxY + settings.spacing * 2.5;
   var pages = Math.max(1, Math.ceil(needed / PAGE_H));
   var target = pages * (PAGE_H + GAP_H) - GAP_H;
@@ -2328,7 +2351,7 @@ function clampScroll() {
    * (negative scroll allowed). */
   var vh = viewH / zoom, vw = viewW / zoom;
   var yMax = Math.max(0, docH - vh), yMin = Math.min(0, docH - vh);
-  var xMax = Math.max(0, viewW - vw), xMin = Math.min(0, viewW - vw);
+  var xMax = Math.max(0, docW - vw), xMin = Math.min(0, docW - vw);
   scrollY = lim(scrollY, yMin, yMax);
   scrollX = lim(scrollX, xMin, xMax);
 }
@@ -2357,7 +2380,7 @@ function render() {
   var i;
   for (i = i0; i <= i1; i++) {
     var t = getTile(i);
-    if (t) ctx.drawImage(t, 0, i * TILE_H, viewW, TILE_H);
+    if (t) ctx.drawImage(t, 0, i * TILE_H, docW, TILE_H);
   }
   for (var id in inkNow) {
     if (inkNow.hasOwnProperty(id)) renderStrokeFull(ctx, inkNow[id].stroke);
@@ -4814,7 +4837,7 @@ function gestureMembers() {
   return out;
 }
 
-function engageGesture(ids, now, pairDist, kind) {
+function engageGesture(ids, now, pairDist, kind, bothMoving) {
   var c = gestureCentroid(true);
   if (!c) return;
   var i, o;
@@ -4824,7 +4847,16 @@ function engageGesture(ids, now, pairDist, kind) {
     baseD: pairDist || 0,
     sumD: 0, sumC: 0,
     kind: kind || 'pan',
-    wide: (pairDist || 0) >= SC.PINCH_MAX_SPAN,
+    /* A wide pair is refused because a stylus in one corner and a palm in
+       the other are 540px apart and their closing looks exactly like a
+       pinch. But that pair has ONE thing moving - the pen writes, the palm
+       rests - while a two-handed pinch has BOTH thumbs travelling toward
+       each other. So the span only disqualifies a pair that was engaged
+       without proving both contacts were moving, which is the anchored
+       path that the palm slips in through. Reported as "zoom does not
+       work if my hands are far apart", and it was not a bug so much as a
+       rule written on the assumption that nobody pinches with two hands. */
+    wide: (pairDist || 0) >= SC.PINCH_MAX_SPAN && !bothMoving,
     vx: 0, vy: 0, fromHand: false, key: null
   };
   traceGesture('engage', ids.length, Math.round(pairDist || 0), now);
@@ -4976,7 +5008,10 @@ function detectGesture(now) {
         if (d1 * d2 < -0.5 &&
             converge > SC.PINCH_CONVERGE &&
             vecs[0].rv.v > SC.GEST_MIN_SPEED && vecs[1].rv.v > SC.GEST_MIN_SPEED) {
-          engageGesture([vecs[0].id, vecs[1].id], now, al, 'pinch');
+          /* this branch has already required both contacts to be moving
+             fast AND converging along the line joining them, so a wide
+             span here is two hands, not a hand and a pen */
+          engageGesture([vecs[0].id, vecs[1].id], now, al, 'pinch', true);
           return;
         }
         if (d1 * d2 < -0.5) {
@@ -6886,6 +6921,10 @@ window.__mnRef = {
 window.__mnNb = {
   move: moveNotebook, rename: renameNotebook, del: deleteNotebook,
   actions: openNbActions, close: closeNbActions
+};
+window.__mnGeom = function () {
+  return { docW: docW, docH: docH, viewW: viewW, viewH: viewH,
+           scrollX: scrollX, scrollY: scrollY, zoom: zoom };
 };
 window.__mnSave = function () { saveTick(); };
 window.__mnTidy = function () { return tidyRun(); };

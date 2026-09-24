@@ -929,5 +929,48 @@ var nr = fresh();
         "renamed index " + target + ", current is " + cur);
 })();
 
+
+/* ---------- turning the tablet does not strand your writing ----------
+ * The page had no width of its own: it was exactly as wide as the screen.
+ * So writing at x=900 in landscape and then turning the tablet to
+ * portrait put that ink past the right edge of a 768px page, with no
+ * horizontal scroll to go and find it. Still in the file, never on screen
+ * again - which is what "some of my writing disappears" was. */
+
+var rt = H.load({ quiet: true, dpr: 2, viewW: 1024, viewH: 712,
+  seed: { mathnotes_v4: JSON.stringify({ v: 4,
+    notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
+    notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, strokes: [] } },
+    cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
+rt.flushFrames();
+/* write near the right-hand edge of the landscape page */
+rt.stroke({ id: 1, x0: 880, y0: 200 + 56, x1: 960, y1: 224 + 56, speed: 0.25, wobble: 1 });
+rt.tick(60); rt.flushFrames();
+var rtFar = 0, rtP = rt.strokes()[0] ? rt.strokes()[0].pts : [], rq;
+for (rq = 0; rq < rtP.length; rq++) if (rtP[rq][0] > rtFar) rtFar = rtP[rq][0];
+check('ink lands near the right edge in landscape', rtFar > 900,
+      "furthest ink at x=" + Math.round(rtFar));
+
+/* now stand the tablet up */
+rt.rotate(768, 1004);
+var rg = rt.geom();
+check('the page stays wide enough to hold it after turning',
+      rg.docW >= rtFar, "page is " + Math.round(rg.docW) +
+      "px wide, ink reaches " + Math.round(rtFar));
+
+/* and it has to be reachable, not merely present */
+rt.scrollTo ? rt.scrollTo(9999, 0) : null;
+(function () {
+  var win = rt.win;
+  win.__mnGeom();
+})();
+check('...and the screen can scroll across to reach it',
+      rg.docW > rg.viewW,
+      "page " + Math.round(rg.docW) + "px vs screen " + Math.round(rg.viewW) + "px");
+
+check('the stroke itself is untouched by the rotation',
+      rt.strokes().length === 1 && rt.strokes()[0].pts.length === rtP.length,
+      rt.strokes().length + " strokes");
+
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
