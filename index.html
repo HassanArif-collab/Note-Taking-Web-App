@@ -1827,6 +1827,7 @@ function checkQuota() {
 function doSaveNow() {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   if (!storageOk) return;
+  lastSaveAt = Date.now();
   var ids = [], i, j, k;
   for (i = 0; i < notebooks.length; i++) {
     for (j = 0; j < notebooks[i].notes.length; j++) ids.push(notebooks[i].notes[j]);
@@ -1877,9 +1878,34 @@ function dropNoteKey(id) {
  * waiting: the note is already in memory, the dirty flag is already set,
  * and leaving the page saves immediately whatever is happening. */
 var SAVE_RETRY = 250;
+/* How rarely a full save may happen while you are still working.
+ *
+ * Saving writes the WHOLE note: stringify every stroke, then a
+ * synchronous localStorage write that the main thread waits on. It ran
+ * 700ms after every stroke, which in practice is every pause. Measured
+ * while filling a page:
+ *
+ *       8 strokes on the page      3 KB written per pen-up
+ *     480 strokes on the page    124 KB written per pen-up
+ *
+ * and it keeps growing, because it is the whole note every time. That is
+ * the reported "at some point it becomes very slow", and it gets worse
+ * the more you have written, which is exactly the wrong way round.
+ *
+ * Five seconds between saves instead of seven hundred milliseconds. The
+ * most that can be lost is five seconds of ink on a hard crash, and
+ * leaving the page, going home, switching notes and importing all still
+ * save at once. */
+var SAVE_MIN_GAP = 5000;
+var lastSaveAt = 0;
 
 function saveTick() {
   saveTimer = null;
+  var since = Date.now() - lastSaveAt;
+  if (since < SAVE_MIN_GAP) {
+    saveTimer = setTimeout(saveTick, SAVE_MIN_GAP - since);
+    return;
+  }
   /* Where you had scrolled to was only written down when you tapped Back.
      Close the tab, switch notes any other way, or just let the session
      end, and the note reopened at the top - which on page nine of a
@@ -2326,6 +2352,41 @@ function drawPaperPages(c, y0, y1) {
 }
 
 /* ---------- document height + scroll ---------- */
+/* How far the ink reaches. Kept rather than recomputed, because the only
+   thing that can make it SMALLER is ink being removed. */
+var docMaxX = 0, docMaxY = 0;
+
+/* A new stroke can only ever push the edges outwards, so the whole page
+ * does not have to be measured again to find that out.
+ *
+ * recomputeDoc walks every stroke in the note, and it ran on every pen-up.
+ * Measured: the cost of finishing a stroke went 0.83ms at eight strokes on
+ * the page to 5.23ms at four hundred and eighty, with nothing being drawn
+ * at all - six times the work to add the same single stroke, purely from
+ * counting what was already there. On a tablet fifteen to thirty times
+ * slower than the machine that measured it, that is the reported "at some
+ * point it becomes very slow".
+ */
+function growDocFor(st) {
+  var bb = strokeBBox(st);
+  if (bb.x1 <= docMaxX && bb.y1 <= docMaxY) { sizeDoc(); return; }
+  if (bb.x1 > docMaxX) docMaxX = bb.x1;
+  if (bb.y1 > docMaxY) docMaxY = bb.y1;
+  sizeDoc();
+}
+
+function sizeDoc() {
+  docW = Math.max(PAGE_W_MIN, viewW, Math.ceil(docMaxX + settings.spacing * 2));
+  var needed = docMaxY + settings.spacing * 2.5;
+  var pages = Math.max(1, Math.ceil(needed / PAGE_H));
+  var target = pages * (PAGE_H + GAP_H) - GAP_H;
+  docH = target < PAGE_H ? PAGE_H : target;
+  pillTotalDirty = true;
+  clampScroll();
+}
+
+/* the full measure, for when ink has been taken AWAY and the edges may
+   have come in: erasing, undo, deleting a page, opening another note */
 function recomputeDoc() {
   var maxY = 0, maxX = 0, n = activeNote();
   if (n) {
@@ -2335,15 +2396,10 @@ function recomputeDoc() {
       if (bb.x1 > maxX) maxX = bb.x1;
     }
   }
+  docMaxX = maxX; docMaxY = maxY;
   /* never narrower than the screen, so a wide tablet has no dead margin,
      and never narrower than the ink, so nothing can sit off the page */
-  docW = Math.max(PAGE_W_MIN, viewW, Math.ceil(maxX + settings.spacing * 2));
-  var needed = maxY + settings.spacing * 2.5;
-  var pages = Math.max(1, Math.ceil(needed / PAGE_H));
-  var target = pages * (PAGE_H + GAP_H) - GAP_H;
-  docH = target < PAGE_H ? PAGE_H : target;
-  pillTotalDirty = true;
-  clampScroll();
+  sizeDoc();
 }
 function clampScroll() {
   /* visible doc-space viewport = viewW/zoom x viewH/zoom.
@@ -2368,6 +2424,9 @@ function requestRender() {
 function render() {
   renderQueued = false;
   if (!ctx) return;
+  /* what the page was busy with, so a slow frame can be blamed on
+     something rather than merely noted: 1 = drawing ink, 2 = a gesture */
+  traceFrame(Date.now(), (anyInkActive() ? 1 : 0) + (gesture ? 2 : 0));
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, cvs.width, cvs.height);
   ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -dpr * zoom * scrollX, -dpr * zoom * scrollY);
@@ -4595,7 +4654,7 @@ function finalizeInk(st, now) {
   }
   var bb = strokeBBox(s);
   if (!paintStrokeIntoTiles(s)) invalidateRange(bb.y0, bb.y1);
-  recomputeDoc();
+  growDocFor(s);
   saveSoon();
   requestRender();
 }
@@ -5980,6 +6039,31 @@ function traceVerdict(v, id, now) {
 function traceGesture(what, a, b, now) {
   if (!traceOn) return;
   tracePush(['g', what, a, b, traceNow(now)]);
+}
+
+/* HOW LONG A FRAME TOOK, ON THE TABLET.
+ *
+ * "It gets very slow" has been reported repeatedly and I have never once
+ * been able to reproduce it. The test harness has no canvas, no layout
+ * engine and no localStorage that writes to anything, so the whole cost
+ * of drawing on a 2048x1536 retina display in front of a 2012 GPU is
+ * invisible to it - a pen-up that measures 0.02ms here can take a
+ * hundred times that there, and nothing in the harness would show it.
+ *
+ * So the device reports its own frames. Only the slow ones: a frame that
+ * came in under 40ms is a frame nobody noticed, and recording every one
+ * would fill the ring with sixty entries a second of good news. What is
+ * wanted is the moments the hand felt the app stop. */
+var lastFrameAt = 0;
+var SLOW_FRAME = 40;
+
+function traceFrame(now, what) {
+  if (!traceOn) return;
+  if (lastFrameAt) {
+    var gap = now - lastFrameAt;
+    if (gap >= SLOW_FRAME) tracePush(['f', Math.round(gap), what || 0, 0, traceNow(now)]);
+  }
+  lastFrameAt = now;
 }
 
 /* view changes, throttled to meaningful movement */

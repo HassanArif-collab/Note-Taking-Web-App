@@ -832,7 +832,10 @@ check('the save is held off while the pen is on the glass',
       svStored(sva) === 1, svStored(sva) + " strokes in storage (should still be 1)");
 
 sva.up(9);
-sva.tick(40); sva.flushFrames();
+/* past the gap between full saves - writing the whole note out is
+   expensive and it is throttled, so a test that does not wait is
+   testing the throttle rather than the pen-down rule */
+sva.tick(6000); sva.flushFrames();
 sva.save();
 check('...and goes through the moment the glass is clear',
       svStored(sva) >= 2, svStored(sva) + " strokes in storage");
