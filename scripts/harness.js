@@ -299,6 +299,7 @@ App.prototype.rotate = function (w, hh) {
   return this;
 };
 App.prototype.geom = function () { return this.win.__mnGeom(); };
+App.prototype.pen = function () { return this.win.__mnPen(); };
 App.prototype.nb = function () { return this.win.__mnNb; };
 App.prototype.ref = function () { return this.win.__mnRef; };
 App.prototype.loadInk = function (list) { var n = this.win.__mnLoadInk(list); this.flushFrames(); return n; };

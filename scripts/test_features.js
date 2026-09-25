@@ -975,5 +975,55 @@ check('the stroke itself is untouched by the rotation',
       rt.strokes().length === 1 && rt.strokes()[0].pts.length === rtP.length,
       rt.strokes().length + " strokes");
 
+
+/* ---------- favourite pens: one tap to change what you write with ----------
+ * Thin black to thick red was: tap the pen, find red, drag a slider, tap
+ * away. Samsung keeps three favourites, each holding pen, colour and
+ * width TOGETHER, so that change is one tap. The apps that store colour
+ * and width as separate slots charge two, and their users complain. */
+
+var fp = fresh();
+fp.flushFrames();
+var fpSlots = fp.els.penSlots;
+check('three favourite pens sit in the toolbar',
+      fpSlots && fpSlots.children.length === 3,
+      fpSlots ? fpSlots.children.length + " slots" : "no slot bar");
+
+var fp0 = fp.pen();
+fpSlots.children[2]._fire("click", {});
+var fp1 = fp.pen();
+check('one tap on a favourite switches to it',
+      fp1.slot === 2 && fp1.color === fp0.slots[2].c,
+      "slot " + fp1.slot + ", colour " + fp1.color);
+check('...without opening any panel on the way',
+      fp1.palette !== "block", "palette " + fp1.palette);
+
+/* tapping the one you already hold is how you change it */
+fpSlots.children[2]._fire("click", {});
+check('tapping the favourite you are using opens it for editing',
+      fp.pen().palette === "block", "palette " + fp.pen().palette);
+
+/* and a change made there belongs to that favourite from then on */
+(function () {
+  var dots = fp.els.thickDots;
+  dots.children[5]._fire("click", {});
+  var after = fp.pen();
+  check('a width chosen in the panel is kept by that favourite',
+        after.slots[2].w === 5 && after.w === 5,
+        "slot width " + after.slots[2].w + ", pen width " + after.w);
+  /* switch away and back: it must come back as it was left */
+  fpSlots.children[0]._fire("click", {});
+  fpSlots.children[2]._fire("click", {});
+  check('...and comes back that way after using another one',
+        fp.pen().w === 5 && fp.pen().slot === 2, "width " + fp.pen().w);
+})();
+
+/* coming back from the eraser used to open the colour panel every time */
+fp.els.eraserBtn._fire("click", {});
+fp.els.penBtn._fire("click", {});
+check('coming back to the pen from the eraser is one tap, no panel',
+      fp.pen().tool === "pen" && fp.pen().palette !== "block",
+      "tool " + fp.pen().tool + ", palette " + fp.pen().palette);
+
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
