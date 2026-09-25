@@ -1118,5 +1118,107 @@ scPath(so, 2, scZig(292, 458, 378, 422, 8));
 check('with Scribble to erase off, a scribble is only ink', so.strokes().length === 2,
       so.strokes().length + ' strokes');
 
+/* ---------- endless page ----------
+ * On pages the note only grew once ink reached the bottom of the last
+ * page, so there was never blank paper waiting below the line you were
+ * on. An endless note always keeps a screen of it. */
+
+function enLowest(a) {
+  var lo = 0;
+  a.strokes().forEach(function (s) { s.pts.forEach(function (p) { if (p[1] > lo) lo = p[1]; }); });
+  return lo;
+}
+var ep = scApp();
+scPath(ep, 1, [[200, 560], [300, 580], [400, 600], [500, 620]]);
+var epG = ep.geom();
+check('on pages, the paper ends with the page (the old way)',
+      epG.docH < enLowest(ep) + epG.viewH, 'docH ' + epG.docH + ', ink to ' + Math.round(enLowest(ep)));
+
+var en = scApp();
+en.clickMenu('Page type');
+scPath(en, 1, [[200, 560], [300, 580], [400, 600], [500, 620]]);
+var enG = en.geom();
+check('an endless page keeps a screen of blank paper below the ink',
+      enG.docH >= enLowest(en) + enG.viewH, 'docH ' + enG.docH + ', ink to ' + Math.round(enLowest(en)));
+check('...and has no page navigator to offer', !en.clickMenu('Pages'));
+en.tick(6000); en.save();
+check('the page type is saved with the note', (en.note('n1') || {}).endless === 1,
+      JSON.stringify((en.note('n1') || {}).endless));
+en.els.backBtn._fire('click', {});
+en.els.fabNew._fire('click', {});
+en.flushFrames();
+check('a new note after choosing Endless is endless too', !en.clickMenu('Pages'));
+en.clickMenu('Page type');
+check('...and Page type turns a note back into pages', en.clickMenu('Pages'));
+
+/* ---------- two-finger scroll in Glove mode ----------
+ * It never worked: every contact inks at once in Glove mode, and the pan
+ * test only looked at contacts that were not drawing. A recording has four
+ * attempts in twenty seconds, each followed by an Undo to remove the line
+ * it drew instead. */
+
+function gsApp() {
+  var a = scApp(), z, q;
+  for (z = 0; z < 7; z++) {
+    a.down(8, 200, 300 + z * 50);
+    for (q = 1; q <= 30; q++) { a.tick(16); a.moveTo(8, 200 + q * 8, 300 + z * 50 + Math.sin(q) * 6); }
+    a.tick(16); a.up(8); a.tick(300);
+  }
+  a.tick(1500);
+  return a;
+}
+/* two contacts, the second landing `lag` ms after the first, each following
+   its own path function of the frame number */
+function gsPair(a, lag, pa, pb, frames) {
+  var i;
+  a.down(1, pa(0)[0], pa(0)[1]);
+  a.tick(lag);
+  a.down(2, pb(0)[0], pb(0)[1]);
+  for (i = 1; i <= frames; i++) {
+    a.tick(16);
+    a.moveTo(1, pa(i)[0], pa(i)[1]);
+    a.moveTo(2, pb(i)[0], pb(i)[1]);
+    a.flushFrames();
+  }
+  a.tick(16); a.up(1); a.up(2); a.tick(600); a.flushFrames();
+}
+
+var gs = gsApp(), gs0 = gs.strokes().length;
+gsPair(gs, 30, function (i) { return [400, 600 - i * 16]; },
+               function (i) { return [510, 600 - i * 16]; }, 25);
+check('Glove mode: two fingers dragged up scroll the page', gs.geom().scrollY > 200,
+      'scrollY ' + Math.round(gs.geom().scrollY));
+check('...and leave no line behind', gs.strokes().length === gs0,
+      gs0 + ' -> ' + gs.strokes().length + ' strokes');
+
+var gd = gsApp();
+gsPair(gd, 30, function (i) { return [400 - i * 2, 600 - i * 10]; },
+               function (i) { return [650 + i * 2, 600 - i * 10]; }, 25);
+check('...a scroll whose fingers drift apart still only scrolls',
+      gd.geom().scrollY > 100 && Math.abs(gd.geom().zoom - 1) < 0.01,
+      'scrollY ' + Math.round(gd.geom().scrollY) + ', zoom ' + gd.geom().zoom.toFixed(2));
+
+/* writing along the line with the side of the hand gliding beside the pen */
+var gw = gsApp(), gw0 = gw.strokes().length;
+gsPair(gw, 20, function (i) { return [300 + i * 5, 640 + 9 * Math.sin(i / 2)]; },
+               function (i) { return [520 + i * 5, 700]; }, 40);
+check('Glove mode: a pen writing with the hand gliding beside it still writes',
+      gw.strokes().length === gw0 + 1 && gw.geom().scrollY === 0,
+      gw0 + ' -> ' + gw.strokes().length + ' strokes, scrollY ' + Math.round(gw.geom().scrollY));
+
+/* a letter that starts downward, beside a palm creeping down as it settles */
+var gl = gsApp(), gl0 = gl.strokes().length;
+gsPair(gl, 20, function (i) { return [300 + 8 * Math.sin(i / 2), 600 + 1.5 * i + 8 * Math.cos(i / 2) - 8]; },
+               function (i) { return [520, 660 + Math.min(i, 30) * 0.6]; }, 45);
+check('...and so does a letter starting downward beside a settling palm',
+      gl.strokes().length === gl0 + 1 && gl.geom().scrollY === 0,
+      gl0 + ' -> ' + gl.strokes().length + ' strokes, scrollY ' + Math.round(gl.geom().scrollY));
+
+var gp = gsApp();
+gsPair(gp, 30, function (i) { return [450, 500 - i * 5]; },
+               function (i) { return [450, 560 + i * 5]; }, 20);
+check('Glove mode: spreading two fingers still zooms', gp.geom().zoom > 1.1,
+      'zoom ' + gp.geom().zoom.toFixed(2));
+
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

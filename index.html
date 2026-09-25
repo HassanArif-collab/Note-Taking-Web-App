@@ -1542,7 +1542,14 @@ var SC = {
   PAN_DEG:         35,     /* coherence cone for two-finger pan */
   PAN_RATIO:       3,
   PAN_SPEED:       0.05,
-  MOM_DECAY:       0.94
+  MOM_DECAY:       0.94,
+  /* Two-finger scroll in Glove mode - see tryGlovePan. Recorded attempts
+     landed 20-34ms apart and travelled 118-211px together. */
+  GPAN_LAND:       150,    /* both fingers down within this of each other */
+  GPAN_MIN:        12,     /* ...each has travelled this far (screen px) */
+  GPAN_COS:        0.85,   /* ...in the same direction, within ~30 degrees */
+  GPAN_RATIO:      1.8,    /* ...and about as far as each other */
+  GPAN_STRAIGHT:   0.75    /* ...along nearly straight paths */
 };
 
 /* ---------- element handles ---------- */
@@ -1604,6 +1611,7 @@ var settings = {
   uiDark: false,
   shapeAssist: SHAPE_OFF,
   scratch: true,
+  endless: false,             /* page type for new notes: the last one chosen */
   margin: true,
   scrollHintShown: false,
   pen: PEN_BALL,
@@ -1780,6 +1788,7 @@ function applyStoredSettings(set) {
     if (typeof data.set.shapeAssist === 'number') settings.shapeAssist = data.set.shapeAssist;
     if (typeof data.set.margin === 'boolean') settings.margin = data.set.margin;
     if (typeof data.set.scratch === 'boolean') settings.scratch = data.set.scratch;
+    if (typeof data.set.endless === 'boolean') settings.endless = data.set.endless;
     if (typeof data.set.scrollHintShown === 'boolean') settings.scrollHintShown = data.set.scrollHintShown;
     if (typeof data.set.pen === 'number') settings.pen = lim(data.set.pen, 0, PENS.length - 1);
     if (typeof data.set.widthStep === 'number') settings.widthStep = lim(data.set.widthStep, 0, 5);
@@ -1855,7 +1864,7 @@ function deserializeNote(rec) {
 
 function noteRecord(n) {
   return { id: n.id, title: n.title, cr: n.cr, mod: n.mod,
-           scroll: Math.round(n.scroll), fav: n.fav ? 1 : 0,
+           scroll: Math.round(n.scroll), fav: n.fav ? 1 : 0, endless: n.endless ? 1 : 0,
            strokes: serializeNote(n) };
 }
 
@@ -2366,7 +2375,58 @@ function getTile(i) {
 }
 
 /* ---------- paper ---------- */
+
+/* ENDLESS PAGE: one sheet with no page breaks that always has room below.
+ *
+ * On pages, the note grew a whole page at a time and only once ink had
+ * reached the bottom of the last one - so there was never blank paper
+ * waiting below the line being written, and a line of working that ran
+ * over a page break was cut in two by the gutter. Samsung Notes offers
+ * the same choice per note (pages or one long scroll), and research on
+ * the flagships put the useful extent at "the ink plus one screen":
+ * endless downward, never sideways, with no map to find your way. */
+function isEndless() {
+  var n = activeNote();
+  return !!(n && n.endless);
+}
+
+function drawPaperEndless(c, y0, y1) {
+  var P = PAPERS[settings.paperColor] || PAPERS[0];
+  var sp = settings.spacing, y, x;
+  if (y0 < 0) y0 = 0;
+  if (y1 <= y0) return;
+  c.fillStyle = P.bg;
+  c.fillRect(0, y0, docW, y1 - y0);
+  if (settings.template === TPL_RULED) {
+    c.strokeStyle = P.line; c.lineWidth = 1;
+    c.beginPath();
+    for (y = FIRST_BASE + Math.max(0, Math.ceil((y0 - FIRST_BASE) / sp)) * sp; y <= y1; y += sp) {
+      c.moveTo(MARGIN_X, y + 0.5); c.lineTo(docW, y + 0.5);
+    }
+    c.stroke();
+    if (settings.margin) {
+      c.strokeStyle = P.margin || 'rgba(226,35,26,0.30)';
+      c.beginPath();
+      c.moveTo(MARGIN_X + 0.5, Math.max(y0, 8));
+      c.lineTo(MARGIN_X + 0.5, y1);
+      c.stroke();
+    }
+  } else if (settings.template === TPL_GRID) {
+    c.strokeStyle = P.line; c.lineWidth = 1;
+    c.beginPath();
+    for (x = 24; x < docW; x += 24) { c.moveTo(x + 0.5, y0); c.lineTo(x + 0.5, y1); }
+    for (y = Math.max(24, Math.ceil(y0 / 24) * 24); y <= y1; y += 24) { c.moveTo(0, y + 0.5); c.lineTo(docW, y + 0.5); }
+    c.stroke();
+  } else if (settings.template === TPL_DOTTED) {
+    c.fillStyle = P.dot;
+    for (y = 20 + Math.max(0, Math.ceil((y0 - 20) / 24)) * 24; y <= y1; y += 24) {
+      for (x = 12; x < docW; x += 24) c.fillRect(x - 1, y - 1, 2, 2);
+    }
+  }
+}
+
 function drawPaperPages(c, y0, y1) {
+  if (isEndless()) { drawPaperEndless(c, y0, y1); return; }
   var P = PAPERS[settings.paperColor] || PAPERS[0];
   var pFirst = Math.max(0, Math.floor(y0 / (PAGE_H + GAP_H)) - 1);
   var pLast = Math.floor(y1 / (PAGE_H + GAP_H)) + 1;
@@ -2441,10 +2501,15 @@ function growDocFor(st) {
 
 function sizeDoc() {
   docW = Math.max(PAGE_W_MIN, viewW, Math.ceil(docMaxX + settings.spacing * 2));
-  var needed = docMaxY + settings.spacing * 2.5;
-  var pages = Math.max(1, Math.ceil(needed / PAGE_H));
-  var target = pages * (PAGE_H + GAP_H) - GAP_H;
-  docH = target < PAGE_H ? PAGE_H : target;
+  if (isEndless()) {
+    /* always at least a screen of blank paper below the last line */
+    docH = Math.max(PAGE_H, Math.ceil(docMaxY + Math.max(viewH, PAGE_H)));
+  } else {
+    var needed = docMaxY + settings.spacing * 2.5;
+    var pages = Math.max(1, Math.ceil(needed / PAGE_H));
+    var target = pages * (PAGE_H + GAP_H) - GAP_H;
+    docH = target < PAGE_H ? PAGE_H : target;
+  }
   pillTotalDirty = true;
   clampScroll();
 }
@@ -2491,12 +2556,18 @@ function render() {
   /* what the page was busy with, so a slow frame can be blamed on
      something rather than merely noted: 1 = drawing ink, 2 = a gesture */
   traceFrame(Date.now(), (anyInkActive() ? 1 : 0) + (gesture ? 2 : 0));
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, cvs.width, cvs.height);
+  /* Every pixel is painted below, all of it opaque: the desk, then the
+     paper over it. Clearing the canvas first was one more full retina
+     fill on every frame of a scroll, erasing what was about to be covered
+     anyway. An endless page covers the whole view by itself, so there
+     the desk under it is skipped as well - unless zoomed out past its
+     edges. */
   ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -dpr * zoom * scrollX, -dpr * zoom * scrollY);
   var P = PAPERS[settings.paperColor] || PAPERS[0];
-  ctx.fillStyle = P.dark ? '#141414' : '#F1F2F4';
-  ctx.fillRect(scrollX - 8, scrollY - 8, viewW / zoom + 16, viewH / zoom + 16);
+  if (!isEndless() || scrollX < 0 || scrollY < 0 || scrollX + viewW / zoom > docW) {
+    ctx.fillStyle = P.dark ? '#141414' : '#F1F2F4';
+    ctx.fillRect(scrollX - 8, scrollY - 8, viewW / zoom + 16, viewH / zoom + 16);
+  }
   drawPaperPages(ctx, scrollY - 8, scrollY + viewH / zoom + 8);
   var i0 = Math.floor(scrollY / TILE_H);
   var i1 = Math.floor((scrollY + viewH / zoom) / TILE_H);
@@ -2767,6 +2838,7 @@ function pageThumb(pIndex, w) {
 }
 
 function openPageMenu() {
+  if (isEndless()) return;
   closePanels();
   var total = pageCount(), cur = currentPage();
   var grid = byId('pagesGrid');
@@ -3272,8 +3344,8 @@ function tidyGroup(list, sink) {
   var dy = 0;
   var tall = (y1 - y0) > settings.spacing * TIDY_TALL;
   if (settings.template === TPL_RULED && !tall) {
-    var page = Math.floor(baseY / (PAGE_H + GAP_H));
-    var top = page * (PAGE_H + GAP_H);
+    /* the rules restart at each page top, and run unbroken on an endless one */
+    var top = isEndless() ? 0 : Math.floor(baseY / (PAGE_H + GAP_H)) * (PAGE_H + GAP_H);
     var k = Math.round((baseY - top - FIRST_BASE) / settings.spacing);
     var rule = top + FIRST_BASE + k * settings.spacing;
     dy = rule - baseY;
@@ -3633,10 +3705,15 @@ function exportPNG() {
   var n = activeNote();
   if (!n) return;
   closePanels();
-  var totalPages = Math.max(1, Math.ceil(docH / (PAGE_H + GAP_H)));
+  /* an endless page is exported as far as the ink goes, not with the
+     screen of blank paper it keeps below it */
+  var endless = isEndless();
+  var totalPages = Math.max(1, Math.ceil((endless ? docMaxY : docH) / (PAGE_H + GAP_H)));
   var usePages = Math.min(totalPages, 4);
   var W = Math.round(viewW * dpr);
-  var H = Math.round(usePages * (PAGE_H + GAP_H) * dpr) - Math.round(GAP_H * dpr);
+  var H = endless
+    ? Math.round(Math.max(PAGE_H, Math.min(docMaxY + settings.spacing, usePages * (PAGE_H + GAP_H))) * dpr)
+    : Math.round(usePages * (PAGE_H + GAP_H) * dpr) - Math.round(GAP_H * dpr);
   var c = document.createElement('canvas');
   c.width = W; c.height = H;
   var ec = c.getContext('2d');
@@ -4433,6 +4510,7 @@ function moveTouch(touch, now) {
        the pinch detector measures the separation between two contacts,
        and freezing cx/cy here made that separation constant, so a
        pinch could never be seen while anything was inking */
+    st.gpath = (st.gpath || 0) + dist(st.cx, st.cy, touch.clientX, touch.clientY);
     st.x = pt.x; st.y = pt.y;
     st.cx = touch.clientX; st.cy = touch.clientY;
     return;
@@ -5018,6 +5096,57 @@ function discardAllActiveInk(now) {
   for (i = 0; i < own.length; i++) discardActiveInk(own[i], now, 'pinch');
 }
 
+/* TWO-FINGER SCROLL IN GLOVE MODE.
+ *
+ * It never worked. Every contact inks from its first sample in this mode,
+ * and the pan test in detectGesture looks only at contacts that are not
+ * drawing - so it never saw the pair, and a scroll drew a line instead.
+ * Recorded: four attempts in twenty seconds, fingers landing 20-34ms apart
+ * and travelling up together 118-211px, and an Undo after each one to take
+ * the line back. The two that did move the page got there through the
+ * pinch test, because the fingers drifted apart, so the page ZOOMED as
+ * well - which is its own "scrolling does not feel right".
+ *
+ * Fingers that landed together and travel together, the same way and
+ * about as far, are a scroll. This runs before the pinch test so a scroll
+ * that drifts is still a scroll; a pinch moves its fingers in OPPOSITE
+ * directions, or holds one still, and cannot pass it. Once it is decided
+ * the page jumps to where the fingers already are, instead of starting
+ * from the point it was recognised - that lag is the other half of it
+ * feeling slow. */
+function tryGlovePan(now) {
+  if (settings.palmLevel !== PALM_OFF) return false;
+  var p = nonInkProbes();
+  if (p.length !== 2) return false;
+  var a = p[0], b = p[1];
+  if (Math.abs(a.t0 - b.t0) > SC.GPAN_LAND) return false;
+  var ax = a.cx - a.csx, ay = a.cy - a.csy, bx = b.cx - b.csx, by = b.cy - b.csy;
+  var la = Math.sqrt(ax * ax + ay * ay), lb = Math.sqrt(bx * bx + by * by);
+  if (la < SC.GPAN_MIN || lb < SC.GPAN_MIN) return false;
+  /* Up or down only. Writing with the hand gliding along beside the pen
+     is two contacts landing together and travelling together too - but
+     along the line, sideways. Across every Glove recording, each pair that
+     travelled vertically was a scroll and each horizontal one was a pen and
+     a hand writing. Once started, the page follows the fingers any way. */
+  if (Math.abs(ay + by) < Math.abs(ax + bx)) return false;
+  /* ...and in straight lines. A pen starting a letter with a downstroke,
+     beside a palm settling downward, passed everything above - but a pen
+     forming letters wanders (measured 0.19 and 0.45 of its path was net
+     travel) and scrolling fingers do not (0.88 to 1.00, every attempt). */
+  if (la < SC.GPAN_STRAIGHT * (a.state === 'ink' ? a.pathLen : a.gpath || 0) ||
+      lb < SC.GPAN_STRAIGHT * (b.state === 'ink' ? b.pathLen : b.gpath || 0)) return false;
+  if ((ax * bx + ay * by) / (la * lb) < SC.GPAN_COS) return false;
+  if (Math.max(la, lb) > SC.GPAN_RATIO * Math.min(la, lb)) return false;
+  traceGesture('gpan', Math.round(la), Math.round(lb), now);
+  discardAllActiveInk(now);
+  engageGesture([a.id, b.id], now, dist(a.cx, a.cy, b.cx, b.cy), 'pan', true);
+  if (gesture) {
+    gesture.lastCx = (a.csx + b.csx) / 2;
+    gesture.lastCy = (a.csy + b.csy) / 2;
+  }
+  return true;
+}
+
 /* Pinch by measuring the separation between two contacts rather than
    by requiring both of them to be moving. A finger held still produces
    no movement vector, so the old test could never see the most natural
@@ -5090,6 +5219,7 @@ function detectGesture(now) {
      order refused every gesture while a stroke owned the pen, so a palm
      that falsely inked also disabled zoom - which is why "the palm
      draws" and "it won't zoom" were the same complaint. */
+  if (tryGlovePan(now)) return;
   if (tryPinch(now)) return;
 
   if (anyInkActive()) { if (live >= 2) traceGesture('bail-ink', live, 0, now); return; }
@@ -6106,8 +6236,15 @@ function updateScrollPill() {
   if (page < 1) page = 1;
   var txt = page + ' / ' + totalPages;
   if (Math.abs(zoom - 1) > 0.01) txt = txt + '  ' + Math.round(zoom * 100) + '%';
-  scrollPill.textContent = txt;
-  scrollPill.style.display = 'block';
+  /* an endless page has no page numbers to show - only the zoom, if any */
+  if (isEndless()) {
+    if (Math.abs(zoom - 1) <= 0.01) { scrollPill.style.display = 'none'; return; }
+    txt = Math.round(zoom * 100) + '%';
+  }
+  /* this runs on every frame of a scroll; touching the DOM only when the
+     text actually changes spares the browser a style pass per frame */
+  if (scrollPill.textContent !== txt) scrollPill.textContent = txt;
+  if (scrollPill.style.display !== 'block') scrollPill.style.display = 'block';
   if (scrollPillTimer) clearTimeout(scrollPillTimer);
   /* while zoomed the pill stays visible as the zoom indicator */
   if (Math.abs(zoom - 1) <= 0.01) {
@@ -7488,7 +7625,8 @@ function goHome() {
 
 function newNote() {
   var id = genId();
-  notes[id] = { id: id, title: 'Untitled', cr: Date.now(), mod: Date.now(), scroll: 0, strokes: [] };
+  notes[id] = { id: id, title: 'Untitled', cr: Date.now(), mod: Date.now(), scroll: 0, strokes: [],
+                endless: settings.endless };
   if (notebooks[curNotebook]) notebooks[curNotebook].notes.unshift(id);
   openNote(id);
   toast('New note created');
@@ -7974,7 +8112,17 @@ var moreRowDefs = null;
 function buildMoreMenu() {
   moreMenu.innerHTML = '';
   moreRowDefs = [
-    { leave: true, lbl: 'Pages', val: currentPage() + ' / ' + pageCount(), act: openPageMenu },
+    isEndless() ? null : { leave: true, lbl: 'Pages', val: currentPage() + ' / ' + pageCount(), act: openPageMenu },
+    { lbl: 'Page type', val: isEndless() ? 'Endless' : 'Pages', act: function () {
+        var n = activeNote();
+        if (!n) return;
+        n.endless = !n.endless;
+        settings.endless = n.endless;       /* new notes follow the last choice */
+        recomputeDoc();
+        toast(n.endless ? 'Endless - one long page, always room below'
+                        : 'Pages');
+        afterSettingChange();
+      } },
     { leave: true, lbl: 'Insert photo', val: '', act: function () {
         try { photoInput.value = ''; photoInput.click(); }
         catch (e) { toast('Photos are not supported on this device'); }
@@ -8035,6 +8183,7 @@ function buildMoreMenu() {
     { leave: true, lbl: 'Delete note', val: '', warn: true, act: deleteCurrentNote },
     { leave: true, lbl: 'About', val: '', act: function () { window.alert('MathNotes v5.1 (S-Class 5)\n\nSamsung-notes style handwriting for iPad 3.\nWorks offline. Notes are saved in this browser.\n\nHand tool: finger scrolls, pen writes.\nTwo-finger pinch zooms. Lasso tool selects ink.\nDrag the corner handle or tap - / + to resize\nthe selection. Double-tap with the hand tool\nresets zoom.'); } }
   ];
+  moreRowDefs = moreRowDefs.filter(function (r) { return r; });   /* rows that do not apply here */
   for (var i = 0; i < moreRowDefs.length; i++) {
     var d = moreRowDefs[i];
     var row = document.createElement('button');
