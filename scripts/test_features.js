@@ -1256,5 +1256,68 @@ check('a pen type from the wheel', pw.pen().pen === 3, 'pen ' + pw.pen().pen);
 
 check('the wheel sits on the side away from a left hand', /right/.test(scApp({ hand: 1 }).els.penWheel.className));
 
+/* ---------- copy, cut and paste ---------- */
+function lassoAround(a, x0, y0, x1, y1) {
+  a.els.selectBtn._fire('click', {});
+  scPath(a, 40, [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0 + 4]]);
+}
+function lassoTap(a, x, y) {
+  a.els.selectBtn._fire('click', {});
+  a.down(41, x, y); a.tick(60); a.up(41); a.tick(100); a.flushFrames();
+}
+function lowestY(list) {
+  var lo = 1e9;
+  list.forEach(function (s) { s.pts.forEach(function (p) { if (p[1] < lo) lo = p[1]; }); });
+  return lo;
+}
+
+var cp = scApp();
+scPath(cp, 1, scWord(300, 400));
+scPath(cp, 2, scWord(300, 460));
+lassoAround(cp, 280, 370, 470, 490);
+check('a lasso round the writing selects it', cp.els.selBar.style.display === 'block',
+      'selection bar ' + cp.els.selBar.style.display);
+cp.els.selClipBtn._fire('click', {});
+check('Copy leaves the page as it was', cp.strokes().length === 2);
+cp.els.backBtn._fire('click', {});
+cp.els.fabNew._fire('click', {});
+cp.flushFrames();
+lassoTap(cp, 500, 600);
+check('in another note, a lasso tap offers Paste there', cp.els.pasteBar.style.display === 'block',
+      'paste button ' + cp.els.pasteBar.style.display);
+cp.els.pasteBtn._fire('click', {});
+check('Paste puts the copy in the other note', cp.strokes().length === 2,
+      cp.strokes().length + ' strokes');
+check('...centred where the lasso tapped', Math.abs(lowestY(cp.strokes()) - (600 - 56 - 60)) < 40,
+      'top of the pasted ink at ' + Math.round(lowestY(cp.strokes())));
+check('...and selected, ready to drag into place', cp.els.selBar.style.display === 'block');
+cp.undo();
+check('one Undo takes the paste back', cp.strokes().length === 0, cp.strokes().length + ' strokes');
+
+var ct = scApp();
+scPath(ct, 1, scWord(300, 400));
+lassoAround(ct, 280, 370, 470, 430);
+ct.els.selCutBtn._fire('click', {});
+check('Cut takes it off the page', ct.strokes().length === 0, ct.strokes().length + ' strokes');
+lassoTap(ct, 400, 650);
+ct.els.pasteBtn._fire('click', {});
+check('...and Paste puts it down somewhere else', ct.strokes().length === 1 &&
+      lowestY(ct.strokes()) > 400, ct.strokes().length + ' strokes, top ' + Math.round(lowestY(ct.strokes())));
+
+/* a duplicated photo used to come out as an empty box: the copy left the picture behind */
+var ph = H.load({ quiet: true, dpr: 2, viewW: 1024, viewH: 712,
+  seed: { mathnotes_v4: JSON.stringify({ v: 4,
+    notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
+    notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, strokes: [
+      { id: 'img1', pen: 6, w: 1, color: '#000000', a: 1, ord: 1, pts: [[300, 300, 0]],
+        src: 'data:image/png;base64,iVBORw0KGgo=', iw: 120, ih: 90 }] } },
+    cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
+ph.flushFrames();
+lassoAround(ph, 330, 330, 500, 480);
+ph.els.selCopyBtn._fire('click', {});
+var phs = ph.strokes();
+check('a duplicated photo keeps its picture', phs.length === 2 && phs[1].src === phs[0].src,
+      phs.length + ' items, copy src ' + (phs[1] && String(phs[1].src).slice(0, 20)));
+
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

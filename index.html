@@ -690,7 +690,7 @@ body.dark #tokenInput { background: #26282D; color: #E8E8E8; border-color: #3A43
 .sh-mode.on { background: rgba(3,129,254,0.12); color: #0381FE; }
 
 /* ---------- selection floating action bar ---------- */
-#selBar {
+#selBar, #pasteBar {
   position: absolute; display: none; z-index: 26;
   height: 44px; border-radius: 22px;
   background: rgba(255,255,255,0.97);
@@ -698,11 +698,13 @@ body.dark #tokenInput { background: #26282D; color: #E8E8E8; border-color: #3A43
   border: 1px solid rgba(0,0,0,0.05);
   padding: 0 4px;
 }
-#selBar button {
+#selBar button, #pasteBar button {
   height: 36px; padding: 0 15px; border-radius: 18px;
   font-size: 13px; font-weight: 600; color: #474747;
 }
-#selBar button:active { background: #EFF0F2; }
+#selBar button:active, #pasteBar button:active { background: #EFF0F2; }
+#pasteBtn { color: #0381FE; }
+body.dark #pasteBar { background: rgba(29,30,34,0.97); border-color: rgba(255,255,255,0.08); }
 #selDelBtn { color: #E2231A; }
 #selBar button.selz { width: 34px; padding: 0; font-size: 17px; font-weight: 700; color: #0381FE; }
 
@@ -956,10 +958,14 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
   <div id="selBar">
     <button id="selSmallBtn" class="selz">-</button>
     <button id="selBigBtn" class="selz">+</button>
-    <button id="selDelBtn">Delete</button>
+    <button id="selCutBtn">Cut</button>
+    <button id="selClipBtn">Copy</button>
     <button id="selCopyBtn">Duplicate</button>
+    <button id="selDelBtn">Delete</button>
     <button id="selDoneBtn">Done</button>
   </div>
+  <!-- offered where the lasso taps, once something has been copied -->
+  <div id="pasteBar"><button id="pasteBtn">Paste</button></div>
 
   <!-- text editor overlay (insert text tool) -->
   <div id="textOverlay">
@@ -4978,8 +4984,10 @@ function endTouch(touch, now, cancelled) {
   if (st.kind === 'lasso') {
     if (lassoId === st.id) lassoId = null;
     if (cancelled || !st.active) {
-      /* a plain tap with the select tool clears the selection */
+      /* a plain tap with the select tool clears the selection - and,
+         with something copied, offers to paste it right there */
       clearSelection();
+      if (!cancelled && clip) showPasteBar(st.sx, st.sy);
       requestRender();
     } else {
       resolveSelection(st.path);
@@ -5969,33 +5977,81 @@ function deleteSelection() {
   toast(list.length + (list.length === 1 ? ' item deleted' : ' items deleted'));
 }
 
-function duplicateSelection() {
+/* A copy of a stroke, moved by (dx, dy). Duplicate used to build this by
+   hand and left out a photo's picture, so a duplicated photo came out as
+   an empty box - one function for every copy means that cannot drift. */
+function cloneStroke(s, dx, dy) {
+  var pts = [], j;
+  for (j = 0; j < s.pts.length; j++) pts.push([s.pts[j][0] + dx, s.pts[j][1] + dy, s.pts[j][2]]);
+  var c = { id: genId(), pen: s.pen, w: s.w, color: s.color, a: s.a, ord: strokeSeq++, pts: pts };
+  if (s.pen === PEN_TEXT) { c.txt = s.txt; c.sz = s.sz; c.tw = s.tw; c.th = s.th; }
+  if (s.pen === PEN_IMG) { c.src = s.src; c.iw = s.iw; c.ih = s.ih; }
+  return c;
+}
+
+/* put copies of `items` on the page, select them, one undo takes them away */
+function placeCopies(items, dx, dy) {
   var n = activeNote();
-  if (!n || !selection.length) return;
-  var clones = [], i, s;
-  for (i = 0; i < selection.length; i++) {
-    s = selection[i];
-    var pts = [];
-    for (var j = 0; j < s.pts.length; j++) {
-      pts.push([s.pts[j][0] + 26, s.pts[j][1] + 26, s.pts[j][2]]);
-    }
-    var c = { id: genId(), pen: s.pen, w: s.w, color: s.color, a: s.a, ord: strokeSeq++, pts: pts };
-    if (s.pen === PEN_TEXT) {
-      c.txt = s.txt; c.sz = s.sz; c.tw = s.tw; c.th = s.th;
-    }
-    clones.push(c);
+  if (!n || !items.length) return;
+  clearSelection();
+  var list = [], i, c;
+  for (i = 0; i < items.length; i++) {
+    c = cloneStroke(items[i], dx, dy);
     addStroke(n, c);
+    list.push(c);
   }
-  pushUndo({ t: 'adds', list: clones });
-  selection = clones;
+  pushUndo({ t: 'adds', list: list });
+  selection = list;
   selHidden = {};
   selBBox = selUnionBBox();
   positionSelBar();
   recomputeDoc();
   saveSoon();
   requestRender();
+}
+
+function duplicateSelection() {
+  if (!selection.length) return;
+  placeCopies(selection.slice(), 26, 26);
   toast('Duplicated');
 }
+
+/* ---------- copy, cut and paste ----------
+ * The clipboard lives for the session, so it carries between notes: copy
+ * a diagram here, open another note, tap with the lasso, Paste. What is
+ * pasted arrives selected, so it can be dragged straight into place. */
+var clip = null;            /* { items, w, h } - items relative to their box */
+var pasteAt = null;         /* where the Paste button offers to put it */
+
+function copySelection(cut) {
+  if (!selection.length || !selBBox) return;
+  var bx = selBBox.x0, by = selBBox.y0, items = [], i;
+  for (i = 0; i < selection.length; i++) items.push(cloneStroke(selection[i], -bx, -by));
+  clip = { items: items, w: selBBox.x1 - bx, h: selBBox.y1 - by };
+  if (cut) deleteSelection();
+  else clearSelection();
+  requestRender();
+  toast((cut ? 'Cut' : 'Copied') + ' - tap with the lasso where it should go');
+}
+
+/* centred on (x, y), in page coordinates */
+function pasteClip(x, y) {
+  hidePasteBar();
+  if (!clip) return;
+  if (tool !== 'select') setTool('select');
+  placeCopies(clip.items, x - clip.w / 2, y - clip.h / 2);
+  toast('Pasted');
+}
+
+function showPasteBar(x, y) {
+  var bar = byId('pasteBar');
+  pasteAt = { x: x, y: y };
+  bar.style.display = 'block';
+  var sp = docToScreen(x, y), bw = bar.offsetWidth || 80;
+  bar.style.left = Math.round(lim(sp.x - bw / 2, 10, viewW - bw - 10)) + 'px';
+  bar.style.top = Math.round(lim(sp.y - 56, 62, viewH)) + 'px';
+}
+function hidePasteBar() { byId('pasteBar').style.display = 'none'; }
 
 /* ---------- selection + lasso rendering ---------- */
 function drawSelectionOverlays(c) {
@@ -8348,6 +8404,11 @@ function buildMoreMenu() {
   moreMenu.innerHTML = '';
   moreRowDefs = [
     isEndless() ? null : { leave: true, lbl: 'Pages', val: currentPage() + ' / ' + pageCount(), act: openPageMenu },
+    clip ? { leave: true, lbl: 'Paste', val: clip.items.length === 1 ? '1 item' : clip.items.length + ' items',
+             act: function () {
+               closePanels();
+               pasteClip(scrollX + viewW / zoom / 2, scrollY + viewH / zoom / 2);
+             } } : null,
     { lbl: 'Page type', val: isEndless() ? 'Endless' : 'Pages', act: function () {
         var n = activeNote();
         if (!n) return;
@@ -8489,6 +8550,7 @@ function closePanels() {
   moreMenu.style.display = 'none';
   byId('panelScrim').className = '';
   if (pwOpen) setWheel(false);
+  hidePasteBar();
 }
 
 /* any panel being visible is the same question as whether the scrim
@@ -8589,6 +8651,9 @@ function setTool(t) {
 /* selection action bar */
 selDelBtn.addEventListener('click', deleteSelection);
 selCopyBtn.addEventListener('click', duplicateSelection);
+byId('selClipBtn').addEventListener('click', function () { copySelection(false); });
+byId('selCutBtn').addEventListener('click', function () { copySelection(true); });
+byId('pasteBtn').addEventListener('click', function () { if (pasteAt) pasteClip(pasteAt.x, pasteAt.y); });
 selSmallBtn.addEventListener('click', function () { scaleSelectionBy(0.85); });
 selBigBtn.addEventListener('click', function () { scaleSelectionBy(1.18); });
 selDoneBtn.addEventListener('click', function () { clearSelection(); requestRender(); });
