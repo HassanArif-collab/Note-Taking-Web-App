@@ -1603,6 +1603,7 @@ var settings = {
   paperColor: 0,
   uiDark: false,
   shapeAssist: SHAPE_OFF,
+  scratch: true,
   margin: true,
   scrollHintShown: false,
   pen: PEN_BALL,
@@ -1778,6 +1779,7 @@ function applyStoredSettings(set) {
     if (typeof data.set.uiDark === 'boolean') settings.uiDark = data.set.uiDark;
     if (typeof data.set.shapeAssist === 'number') settings.shapeAssist = data.set.shapeAssist;
     if (typeof data.set.margin === 'boolean') settings.margin = data.set.margin;
+    if (typeof data.set.scratch === 'boolean') settings.scratch = data.set.scratch;
     if (typeof data.set.scrollHintShown === 'boolean') settings.scrollHintShown = data.set.scrollHintShown;
     if (typeof data.set.pen === 'number') settings.pen = lim(data.set.pen, 0, PENS.length - 1);
     if (typeof data.set.widthStep === 'number') settings.widthStep = lim(data.set.widthStep, 0, 5);
@@ -4700,6 +4702,7 @@ function finalizeInk(st, now) {
   }
   var n = activeNote();
   if (!n) return;
+  if (tryScratch(n, s, st, now)) return;
   /* shape assist mutates the points before the stroke lands in
      the document, so undo is a plain remove (v4 semantics) */
   if (settings.shapeAssist !== SHAPE_OFF && s.pen !== PEN_TEXT && s.pts.length > 4) {
@@ -5350,6 +5353,175 @@ function eraseAt(x, y) {
     pushUndo({ t: 'erase', list: hits });
     saveSoon();
   }
+}
+
+/* ---------- scratch out: scribble over ink to erase it ----------
+ *
+ * Samsung Notes, GoodNotes and Apple's Scribble all let a zigzag drawn
+ * over writing take that writing away, without reaching for the eraser.
+ *
+ * Three questions, all answered at the lift:
+ *
+ *   1. Was this a scribble? It turns back on itself many times, and the
+ *      pen travelled well over the ground it covers.
+ *   2. What was under it? Ink lying mostly INSIDE the scribble, clear of
+ *      its edge. Shading under a curve touches the curve at every turn,
+ *      but the curve is on the shading's edge, never inside it, so it stays.
+ *   3. Was the scribble ABOUT that ink? Most of the scribble has to sit on
+ *      what it takes. This one is the user's own handwriting talking: in
+ *      1,754 recorded strokes, a joined-up word often runs back over a
+ *      letter it started earlier ("Hassan", "brown", "the"). The shape
+ *      test cannot tell that from a scribble - cursive m, w and ll zigzag
+ *      too - but the word runs far past the fragment, and a scratch-out
+ *      stays on the thing it is scratching.
+ *
+ * Measured on every recording: none of the 1,754 real strokes erases
+ * anything once the user's own Undo taps are replayed too (the six that
+ * fire without them are words undone and written again in the same
+ * place). Scratch-outs drawn over the user's recorded words take the
+ * whole word 90% of the time. Nothing real has been scribbled yet, so a
+ * wrong call still has to be cheap - see tryScratch - and there is an
+ * off switch in the menu.
+ * Nothing under it means it was never a scratch-out: it is kept as ink.
+ * A highlighter zigzag is highlighting, so it never erases. */
+var SCRATCH_TURNS = 4;      /* reversals of direction, at least */
+var SCRATCH_RATIO = 2;      /* path length over the longer side of its box */
+var SCRATCH_COVER = 0.4;    /* share of a stroke's length that must be under it */
+var SCRATCH_FOOT = 0.7;     /* share of the scribble that must be over what it takes */
+
+/* reversals along one axis, ignoring wobble smaller than tol */
+function scribbleTurns(p, k, tol) {
+  var hi = p[0][k], lo = hi, dir = 0, c = 0, i, v;
+  for (i = 1; i < p.length; i++) {
+    v = p[i][k];
+    if (v > hi) hi = v;
+    if (v < lo) lo = v;
+    if (dir <= 0 && v - lo > tol) { if (dir) c++; dir = 1; hi = v; }
+    else if (dir >= 0 && hi - v > tol) { if (dir) c++; dir = -1; lo = v; }
+  }
+  return c;
+}
+
+/* convex hull, monotone chain */
+function hullOf(pts) {
+  var q = pts.slice().sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+  var lo = [], up = [], i;
+  function turn(o, a, b) { return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]); }
+  for (i = 0; i < q.length; i++) {
+    while (lo.length >= 2 && turn(lo[lo.length - 2], lo[lo.length - 1], q[i]) <= 0) lo.pop();
+    lo.push(q[i]);
+  }
+  for (i = q.length - 1; i >= 0; i--) {
+    while (up.length >= 2 && turn(up[up.length - 2], up[up.length - 1], q[i]) <= 0) up.pop();
+    up.push(q[i]);
+  }
+  lo.pop(); up.pop();
+  return lo.concat(up);
+}
+
+function scribbleOf(s) {
+  if (!settings.scratch || s.pen === PEN_HIGH || s.pen === PEN_TEXT || s.pen === PEN_IMG) return null;
+  var p = s.pts, n = p.length, i;
+  if (n < 10) return null;
+  /* the ink's own extent - strokeBBox pads by 14px a side, which would
+     make every small scribble look far bigger than it is */
+  var x0 = p[0][0], x1 = x0, y0 = p[0][1], y1 = y0, len = 0;
+  for (i = 1; i < n; i++) {
+    len += dist(p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]);
+    if (p[i][0] < x0) x0 = p[i][0]; else if (p[i][0] > x1) x1 = p[i][0];
+    if (p[i][1] < y0) y0 = p[i][1]; else if (p[i][1] > y1) y1 = p[i][1];
+  }
+  var w = x1 - x0, h = y1 - y0, big = Math.max(w, h);
+  if (big < 12 || len < SCRATCH_RATIO * big) return null;
+  var turns = Math.max(scribbleTurns(p, 0, Math.max(6, w * 0.35)),
+                       scribbleTurns(p, 1, Math.max(6, h * 0.35)));
+  if (turns < SCRATCH_TURNS) return null;
+  var hull = hullOf(p);
+  if (hull.length < 3) return null;
+  var leg = len / (turns + 1);
+  /* how far inside the edge ink must sit to count as under the scribble:
+     a tenth of a leg, so the ends of a shading stroke do not reach it */
+  return { pts: p, hull: hull, bb: { x0: x0, y0: y0, x1: x1, y1: y1 },
+           leg: leg, m: Math.max(4, leg / 10) };
+}
+
+function underScribble(x, y, sc) {
+  if (x < sc.bb.x0 || x > sc.bb.x1 || y < sc.bb.y0 || y > sc.bb.y1) return false;
+  if (!ptInPoly(x, y, sc.hull)) return false;
+  var h = sc.hull, i, j;
+  for (i = 0, j = h.length - 1; i < h.length; j = i++) {
+    if (segDist(x, y, h[j][0], h[j][1], h[i][0], h[i][1]) < sc.m) return false;
+  }
+  return true;
+}
+
+/* the strokes a scribble covers, by share of their length */
+function scratchTargets(n, sc) {
+  var out = [], boxes = [], st = n.strokes, i, j, s, bb, p, seg, tot, cov, ok;
+  var x0, y0, x1, y1;
+  for (i = 0; i < st.length; i++) {
+    s = st[i];
+    if (s.pen === PEN_TEXT || s.pen === PEN_IMG) continue;
+    bb = strokeBBox(s);
+    if (bb.x1 < sc.bb.x0 || bb.x0 > sc.bb.x1 || bb.y1 < sc.bb.y0 || bb.y0 > sc.bb.y1) continue;
+    p = s.pts;
+    x0 = x1 = p[0][0]; y0 = y1 = p[0][1];
+    tot = 0; cov = 0;
+    for (j = 1; j < p.length; j++) {
+      seg = dist(p[j - 1][0], p[j - 1][1], p[j][0], p[j][1]);
+      tot += seg;
+      if (underScribble((p[j - 1][0] + p[j][0]) / 2, (p[j - 1][1] + p[j][1]) / 2, sc)) cov += seg;
+      if (p[j][0] < x0) x0 = p[j][0]; else if (p[j][0] > x1) x1 = p[j][0];
+      if (p[j][1] < y0) y0 = p[j][1]; else if (p[j][1] > y1) y1 = p[j][1];
+    }
+    if (Math.max(x1 - x0, y1 - y0) < 8) {
+      /* a dot, or a mark too small to share out by length: all of it */
+      ok = true;
+      for (j = 0; j < p.length && ok; j++) ok = underScribble(p[j][0], p[j][1], sc);
+    } else {
+      ok = cov >= SCRATCH_COVER * tot;
+    }
+    if (!ok) continue;
+    out.push(s);
+    boxes.push([x0, y0, x1, y1]);
+  }
+  if (!out.length) return out;
+  /* question 3: is the scribble about these, or a word passing over them */
+  var sp = sc.pts, pad = Math.max(4, sc.leg / 4), on = 0, len = 0, mx, my, k, b;
+  for (i = 1; i < sp.length; i++) {
+    seg = dist(sp[i - 1][0], sp[i - 1][1], sp[i][0], sp[i][1]);
+    len += seg;
+    mx = (sp[i - 1][0] + sp[i][0]) / 2;
+    my = (sp[i - 1][1] + sp[i][1]) / 2;
+    for (k = 0; k < boxes.length; k++) {
+      b = boxes[k];
+      if (mx >= b[0] - pad && mx <= b[2] + pad && my >= b[1] - pad && my <= b[3] + pad) { on += seg; break; }
+    }
+  }
+  return on >= SCRATCH_FOOT * len ? out : [];
+}
+
+/* True when the stroke was a scratch-out and has been dealt with.
+ *
+ * Undo is what makes a wrong call cheap. Undoing a plain erase would put
+ * the old ink back and lose the stroke just drawn - and when the call was
+ * wrong, that stroke was a word the user meant to keep. So the history
+ * records it as if the stroke had landed as ink and then erased itself
+ * along with what was under it: the first Undo gives back both, the
+ * scribble now plain ink, and a second Undo takes the scribble away too. */
+function tryScratch(n, s, st, now) {
+  var sc = scribbleOf(s);
+  if (!sc) return false;
+  var gone = scratchTargets(n, sc), i;
+  if (!gone.length) return false;
+  for (i = 0; i < gone.length; i++) removeStroke(n, gone[i]);
+  pushUndo({ t: 'add', s: s });
+  pushUndo({ t: 'erase', list: gone.concat([s]) });
+  traceVerdict('scratch', st.id, now);
+  toast('Scribble erased it - Undo keeps it as writing');
+  saveSoon();
+  requestRender();
+  return true;
 }
 
 function drawEraserCursor(c) {
@@ -7835,6 +8007,13 @@ function buildMoreMenu() {
         settings.gestures = !settings.gestures;
         toast(settings.gestures ? 'Two fingers zoom and scroll again'
                                 : 'Off - use the hand tool to zoom and scroll');
+        afterSettingChange();
+      } },
+    { lbl: 'Scribble to erase', val: settings.scratch ? 'On' : 'Off',
+      act: function () {
+        settings.scratch = !settings.scratch;
+        toast(settings.scratch ? 'Scribble over writing to erase it'
+                               : 'Off - scribbles stay as ink');
         afterSettingChange();
       } },
     { lbl: 'Zoom window', val: zw.on ? 'On' : 'Off', act: zwToggle },

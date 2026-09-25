@@ -1025,5 +1025,98 @@ check('coming back to the pen from the eraser is one tap, no panel',
       fp.pen().tool === "pen" && fp.pen().palette !== "block",
       "tool " + fp.pen().tool + ", palette " + fp.pen().palette);
 
+/* ---------- scratch out: scribble over writing to erase it ----------
+ * Samsung Notes, GoodNotes and Apple all do this. The risk is the other
+ * direction: cursive zigzags too, and math shades areas under curves, and
+ * neither may ever lose ink to it. */
+
+function scApp(set) {
+  var s = { palmLevel: 0, hand: 0 }, k;
+  for (k in set || {}) s[k] = set[k];
+  var a = H.load({ quiet: true, dpr: 2, viewW: 1024, viewH: 712,
+    seed: { mathnotes_v4: JSON.stringify({ v: 4,
+      notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
+      notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, strokes: [] } },
+      cur: { nb: 0, note: 'n1' }, set: s }) } });
+  a.flushFrames();
+  return a;
+}
+function scPath(a, id, pts) {
+  a.down(id, pts[0][0], pts[0][1]);
+  for (var i = 1; i < pts.length; i++) { a.tick(16); a.moveTo(id, pts[i][0], pts[i][1]); }
+  a.tick(16); a.up(id); a.tick(150); a.flushFrames();
+}
+/* a joined-up word: small arches, like "mnm" */
+function scWord(x0, y) {
+  var p = [], x;
+  for (x = x0; x <= x0 + 150; x += 3) p.push([x, y + 11 * Math.sin((x - x0) / 7)]);
+  return p;
+}
+/* a scratch-out: tall legs, close together, travelling across */
+function scZig(x0, x1, yTop, yBot, gap) {
+  var p = [], x, k, up = false;
+  for (x = x0; x <= x1; x += gap) {
+    for (k = 0; k <= 5; k++) p.push([x + gap * k / 5, up ? yBot + (yTop - yBot) * k / 5 : yTop + (yBot - yTop) * k / 5]);
+    up = !up;
+  }
+  return p;
+}
+
+var sx = scApp();
+scPath(sx, 1, scWord(300, 400));
+scPath(sx, 2, scZig(292, 458, 378, 422, 8));
+check('scribbling over a word erases it', sx.strokes().length === 0,
+      sx.strokes().length + ' strokes left');
+check('...and the scribble is not left behind as ink', sx.strokes().length === 0);
+sx.undo();
+check('Undo gives the word back and keeps the scribble as writing',
+      sx.strokes().length === 2, sx.strokes().length + ' strokes');
+sx.undo();
+check('a second Undo takes the scribble away too', sx.strokes().length === 1,
+      sx.strokes().length + ' strokes');
+
+var se = scApp();
+scPath(se, 1, scZig(292, 458, 378, 422, 8));
+check('a zigzag over empty paper is just ink', se.strokes().length === 1,
+      se.strokes().length + ' strokes');
+
+var sw = scApp();
+scPath(sw, 1, scWord(300, 400));
+scPath(sw, 2, scWord(300, 400));
+check('writing a joined-up word over another leaves both', sw.strokes().length === 2,
+      sw.strokes().length + ' strokes');
+
+/* shading the area under a curve, legs running from the axis up to it */
+function scShade(over) {
+  var a = scApp(), curve = [], x, shade = [], up = true, k, yc;
+  function cy(x) { return 520 - 70 * Math.sin(Math.PI * (x - 300) / 200); }
+  for (x = 300; x <= 500; x += 4) curve.push([x, cy(x)]);
+  scPath(a, 1, curve);
+  scPath(a, 2, [[280, 520], [360, 520], [440, 520], [520, 520]]);
+  for (x = 312; x <= 488; x += 7) {
+    yc = cy(x) - over;
+    for (k = 0; k <= 5; k++) shade.push([x, up ? 518 + (yc - 518) * k / 5 : yc + (518 - yc) * k / 5]);
+    up = !up;
+  }
+  scPath(a, 3, shade);
+  return a.strokes().length;
+}
+check('shading under a curve keeps the curve and the axis', scShade(-2) === 3,
+      scShade(-2) + ' strokes');
+check('...even when the shading runs a little past the curve', scShade(3) === 3,
+      scShade(3) + ' strokes');
+
+var sh = scApp({ pen: 4 });
+scPath(sh, 1, scWord(300, 400));
+scPath(sh, 2, scZig(292, 458, 378, 422, 8));
+check('a highlighter zigzag highlights, it does not erase', sh.strokes().length === 2,
+      sh.strokes().length + ' strokes');
+
+var so = scApp({ scratch: false });
+scPath(so, 1, scWord(300, 400));
+scPath(so, 2, scZig(292, 458, 378, 422, 8));
+check('with Scribble to erase off, a scribble is only ink', so.strokes().length === 2,
+      so.strokes().length + ' strokes');
+
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
