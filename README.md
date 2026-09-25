@@ -18,20 +18,31 @@ Pick a pen from the toolbar and write. Five pens — ballpoint, fountain,
 calligraphy, pencil, highlighter — each remembering its own colour and
 thickness, with 24 colours to choose from.
 
+- **Three favourite pens** sit in the toolbar, each holding pen, colour and
+  width together. Tap one to write with it; tap the one you hold to change it.
+- **The pen wheel** — the dark bubble at the page edge (Samsung's "pens in
+  pop-up view"). Tap it: pens, six widths and colours on one disc, one tap
+  each. Start writing and it closes; a tap on the page just closes it. Drag
+  the bubble up or down. It sits on the side away from your writing hand.
+- **Scribble to erase** — scratch back and forth over writing and it goes.
+  Undo once to get it back with the scribble kept as ink; twice to remove
+  the scribble too. Shading under a curve does not erase the curve.
+
 ### Tools
 
 | Tool | What it does |
 |------|--------------|
 | **Pen** | Write. Tap again to open the pen tray. |
 | **Eraser** | Rub out strokes. Stroke mode removes a whole line, Area mode rubs out what you touch. |
-| **Lasso** | Draw a loop around ink to select it, then drag to move, pinch the corner handle to resize, or duplicate/delete. |
+| **Lasso** | Draw a loop around ink to select it, then drag to move, pinch the corner handle to resize, or cut/copy/duplicate/delete. With something copied, tap with the lasso — in any note — and **Paste** appears right there. |
 | **T (text)** | Tap the page and type. Text behaves like ink — movable, erasable, selectable. |
 | **Hand** | One finger drags the paper instead of drawing. Double-tap resets zoom. |
 | **Undo / Redo** | Up to 60 steps. |
 
 ### Gestures
 
-- **Two fingers** — pinch to zoom (60%–260%), drag to scroll.
+- **Two fingers** — pinch to zoom (60%–260%), drag to scroll. Works in Glove
+  mode too: two fingers landing together and moving up or down scroll.
 - **Two-finger tap** — undo. The fastest way to remove a stray palm mark.
 - **Double-tap with the hand tool** — back to 100%.
 
@@ -42,6 +53,10 @@ grid of thumbnails of every page. Tap one to go there — the page you are on
 is outlined in blue. **Insert page here** adds a blank page and pushes
 everything below it down; **Delete this page** removes it (it asks first, and
 says how many marks are on it). Each is a single undo.
+
+**⋮ menu → Page type → Endless** makes the note one long page with no page
+breaks and always a screen of blank paper below the last line. New notes
+follow the last choice.
 
 ### Notebooks and folders
 
@@ -229,8 +244,9 @@ hand's own variation), and Bézier re-encoding — see the comment above
 - Reorder pages, and a page thumbnail view.
 - Better export: multi-page PDF instead of the 4-page PNG cap, which may fail
   outright on this iPad because it builds one enormous canvas.
-- Copy and paste between notes.
 - A ruler / straight-edge.
+- From Samsung Notes: a "new note" window choosing template, cover and page
+  type up front; templates per note rather than one for all.
 - Drag notebooks in the drawer instead of typing a number.
 
 ---
