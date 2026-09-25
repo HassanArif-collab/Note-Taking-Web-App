@@ -189,7 +189,52 @@ body.dark #nbActions button { color: #F2F3F5; }
 #newNbBtn { height: 52px; color: #0381FE; font-size: 15px; font-weight: 600; text-align: left; padding: 0 18px; }
 
 /* ---------- editor canvas ---------- */
-#drawView { background: #F1F2F4; }
+#drawView { background: #F1F2F4; overflow: hidden; }
+
+/* ---------- pen wheel: Samsung's "pens in pop-up view" ----------
+   A bubble docked at the edge away from the writing hand opens into a
+   half-disc: pens on the inner ring, widths in the middle, colours round
+   the rim. Everything a pen change needs, one tap each, beside the hand. */
+#penWheel { position: absolute; left: 0; top: 50%; width: 0; height: 0; z-index: 18; }
+#penWheel.right { left: auto; right: 0; }
+#penWheel.off { display: none; }
+#pwDisc {
+  position: absolute; left: -190px; top: -190px; width: 380px; height: 380px;
+  border-radius: 50%; background: #202227;
+  box-shadow: 0 6px 26px rgba(0,0,0,0.30);
+  opacity: 0; pointer-events: none;
+  -webkit-transform: scale(0.2); transform: scale(0.2);
+  -webkit-transition: -webkit-transform 0.16s ease-out, opacity 0.12s;
+  transition: transform 0.16s ease-out, opacity 0.12s;
+}
+#penWheel.open #pwDisc { opacity: 1; pointer-events: auto; -webkit-transform: scale(1); transform: scale(1); }
+#pwBubble {
+  position: absolute; left: -30px; top: -30px; width: 60px; height: 60px;
+  border: 0; padding: 0; border-radius: 50%; background: #202227;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.30);
+}
+#pwBubble i {
+  position: absolute; left: 34px; top: 21px; width: 18px; height: 18px; border-radius: 50%;
+  box-shadow: 0 0 0 2px #202227, 0 0 0 3.5px rgba(255,255,255,0.55);
+}
+#penWheel.right #pwBubble i { left: 8px; }
+.pw-it {
+  position: absolute; width: 38px; height: 38px; margin: -19px 0 0 -19px;
+  border: 0; padding: 0; border-radius: 50%; background: transparent;
+  display: -webkit-box; display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center;
+  -webkit-justify-content: center; justify-content: center;
+}
+.pw-it i { display: block; border-radius: 50%; }
+.pw-col i { width: 26px; height: 26px; box-shadow: 0 0 0 1px rgba(255,255,255,0.28); }
+.pw-col.on i { box-shadow: 0 0 0 2px #202227, 0 0 0 4px #FFFFFF; }
+.pw-pen.on, .pw-w.on { background: rgba(255,255,255,0.16); }
+.pw-pen canvas { width: 30px; height: 18px; }
+.pw-more i {
+  width: 26px; height: 26px;
+  background: -webkit-linear-gradient(45deg, #E2231A, #F5D300, #36C0A1, #0381FE, #8E50E6);
+  background: linear-gradient(45deg, #E2231A, #F5D300, #36C0A1, #0381FE, #8E50E6);
+}
 #canvasWrap { position: absolute; top: 102px; left: 0; right: 0; bottom: 0; overflow: hidden; }
 #noteCanvas { position: absolute; top: 0; left: 0; }
 
@@ -811,6 +856,11 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
   <div id="canvasWrap">
     <canvas id="noteCanvas"></canvas>
     <div id="pendingDot"></div>
+  </div>
+
+  <div id="penWheel">
+    <div id="pwDisc"></div>
+    <button id="pwBubble" aria-label="Pen wheel"><i></i></button>
   </div>
 
   <!-- scroll/zoom pill: outside canvasWrap so its tap is not eaten
@@ -1612,6 +1662,8 @@ var settings = {
   shapeAssist: SHAPE_OFF,
   scratch: true,
   endless: false,             /* page type for new notes: the last one chosen */
+  wheel: true,                /* the pen wheel bubble at the page edge */
+  wheelY: 0.5,                /* ...and how far down the edge it sits */
   margin: true,
   scrollHintShown: false,
   pen: PEN_BALL,
@@ -1789,6 +1841,8 @@ function applyStoredSettings(set) {
     if (typeof data.set.margin === 'boolean') settings.margin = data.set.margin;
     if (typeof data.set.scratch === 'boolean') settings.scratch = data.set.scratch;
     if (typeof data.set.endless === 'boolean') settings.endless = data.set.endless;
+    if (typeof data.set.wheel === 'boolean') settings.wheel = data.set.wheel;
+    if (typeof data.set.wheelY === 'number') settings.wheelY = lim(data.set.wheelY, 0, 1);
     if (typeof data.set.scrollHintShown === 'boolean') settings.scrollHintShown = data.set.scrollHintShown;
     if (typeof data.set.pen === 'number') settings.pen = lim(data.set.pen, 0, PENS.length - 1);
     if (typeof data.set.widthStep === 'number') settings.widthStep = lim(data.set.widthStep, 0, 5);
@@ -2727,6 +2781,7 @@ function resizeView() {
   cvs.style.height = viewH + 'px';
   invalidateAll();
   wrapRect = canvasWrap.getBoundingClientRect();
+  pwLayout();
   if (refOn) wrapRect = { left: wrapRect.left, top: wrapRect.top + REF_BAR_H,
                           width: wrapRect.width, height: wrapRect.height };
   clampScroll();
@@ -4775,6 +4830,7 @@ function finalizeInk(st, now) {
      rather than going through the tap-dot queue, and without this a
      decimal point simply vanished. */
   if (s.pts.length < 2 || st.pathLen < SC.TAP_PATH) {
+    if (st.quiet) { requestRender(); return; }   /* the tap that closed the wheel */
     flushDot({ x: s.pts[0][0], y: s.pts[0][1], t: now });
     return;
   }
@@ -4967,7 +5023,7 @@ function endTouch(touch, now, cancelled) {
   if (cancelled || (st.state === 'palm' && !stillTap)) {
     palmMemAdd(st.sx, st.sy, now);
   } else if (stillTap) {
-    queueTapDot(st, now);
+    if (!st.quiet) queueTapDot(st, now);
   } else if (shortMark(st, age)) {
     /* decided in hindsight, at the lift - see SC.SHORT_MS */
     st.state = 'ink';
@@ -7393,6 +7449,10 @@ window.__mnZW = function () { var g = zwGeom(); return { on: zw.on, x: zw.x, y: 
 /* ---------- event wiring ---------- */
 function onTouchStart(e) {
   e.preventDefault();
+  /* a touch that lands while the pen wheel is open closes it; if it turns
+     out to be a stroke it is written, and if it was only a tap it leaves
+     nothing behind - closing the wheel is not a decimal point */
+  var quiet = pwOpen;
   closePanels();
   stopMomentum();
   var now = Date.now();
@@ -7414,7 +7474,11 @@ function onTouchStart(e) {
   var ch = e.changedTouches;
   var burst = ch.length >= 2 || (e.touches && e.touches.length >= 3);
   if (burst) traceGesture('burst', ch.length, e.touches ? e.touches.length : 0, now);
-  for (var i = 0; i < ch.length; i++) { traceTouch(0, ch[i], now); beginTouch(ch[i], now, burst); }
+  for (var i = 0; i < ch.length; i++) {
+    traceTouch(0, ch[i], now);
+    beginTouch(ch[i], now, burst);
+    if (quiet && touchStates[ch[i].identifier]) touchStates[ch[i].identifier].quiet = true;
+  }
 }
 function onTouchMove(e) {
   e.preventDefault();
@@ -7956,6 +8020,176 @@ function buildPalette() {
   shapeShapeBtn.addEventListener('click', function () { settings.shapeAssist = SHAPE_SHAPE; applyShapeUI(); saveSoon(); });
 }
 
+/* ---------- pen wheel ----------
+ * Samsung Notes' "pens in pop-up view": the pen, its width and its colour
+ * all on one disc beside the hand, every change a single tap. The toolbar
+ * sits at the far edge of the screen from where the writing happens;
+ * this sits where the hand already is.
+ *
+ * It docks on the side away from the writing hand, in the margin, and
+ * can be dragged up or down. Widths are six dots rather than Samsung's
+ * curved slider - a slider is a drag along a thin track, and with a disc
+ * stylus that was the thing that took several tries (see #thickDots).
+ * Starting to write closes it and the stroke still lands; a tap on the
+ * page only closes it, so closing it never leaves a dot to undo. */
+var PW_R = 190;
+var PW_COLORS = ['#000000', '#7F7F7F', '#E2231A', '#F58300', '#F5D300', '#36C0A1',
+                 '#2E7D32', '#0381FE', '#1428A0', '#8E50E6', '#F763C6'];
+var pwOpen = false, pwDrag = null, pwDragged = false;
+
+function pwRight() { return settings.hand === 1; }
+
+/* ring position: deg is measured from the edge's normal, + downwards */
+function pwPlace(el, r, deg) {
+  var a = deg * Math.PI / 180, x = r * Math.cos(a);
+  el.style.left = Math.round(pwRight() ? PW_R - x : PW_R + x) + 'px';
+  el.style.top = Math.round(PW_R + r * Math.sin(a)) + 'px';
+}
+
+function pwItem(cls, label, act) {
+  var b = document.createElement('button');
+  b.className = 'pw-it ' + cls;
+  b.setAttribute('aria-label', label);
+  b.addEventListener('click', function () {
+    act();
+    if (tool !== 'pen') setTool('pen');
+    applyPenUI();
+    saveSoon();
+  });
+  byId('pwDisc').appendChild(b);
+  return b;
+}
+
+function buildWheel() {
+  var disc = byId('pwDisc'), i;
+  disc.innerHTML = '';
+  for (i = 0; i < PENS.length; i++) {
+    (function (idx) {
+      var b = pwItem('pw-pen', PENS[idx].name, function () {
+        settings.penCfg[settings.pen].c = settings.color;
+        settings.penCfg[settings.pen].w = settings.widthStep;
+        settings.pen = idx;
+        settings.color = settings.penCfg[idx].c;
+        settings.widthStep = settings.penCfg[idx].w;
+      });
+      var cv = document.createElement('canvas');
+      cv.width = 60; cv.height = 36;
+      b.appendChild(cv);
+      pwPlace(b, 70, -60 + idx * 30);
+    })(i);
+  }
+  for (i = 0; i <= 5; i++) {
+    (function (step) {
+      var b = pwItem('pw-w', 'Thickness ' + (step + 1), function () { settings.widthStep = step; });
+      b.appendChild(document.createElement('i'));
+      pwPlace(b, 118, -65 + step * 26);
+    })(i);
+  }
+  for (i = 0; i < PW_COLORS.length; i++) {
+    (function (col, k) {
+      var b = pwItem('pw-col', 'Colour ' + col, function () { settings.color = col; });
+      b.appendChild(document.createElement('i'));
+      b.children[0].style.background = col;
+      pwPlace(b, 164, -78 + k * 13);
+    })(PW_COLORS[i], i);
+  }
+  /* the rest of the colours, and everything else the pen has */
+  var more = document.createElement('button');
+  more.className = 'pw-it pw-more';
+  more.setAttribute('aria-label', 'All colours');
+  more.appendChild(document.createElement('i'));
+  more.addEventListener('click', function () {
+    setWheel(false);
+    if (tool !== 'pen') setTool('pen');
+    applyPenUI();
+    penPalette.style.display = 'block';
+    syncScrim();
+  });
+  disc.appendChild(more);
+  pwPlace(more, 164, 78);
+  pwLayout();
+}
+
+/* dark ink on a dark disc would vanish, so widths are shown in white then */
+function pwInk(c) {
+  var n = parseInt(c.slice(1), 16);
+  var lum = (0.3 * (n >> 16) + 0.59 * ((n >> 8) & 255) + 0.11 * (n & 255)) / 255;
+  return lum < 0.3 ? '#E8EAED' : c;
+}
+
+function paintWheel() {
+  var bub = byId('pwBubble');
+  if (bub && bub.children[0]) bub.children[0].style.background = settings.color;
+  if (!pwOpen) return;
+  var disc = byId('pwDisc'), kids = disc.children, i, b, cls, pdef = PENS[settings.pen], w, d;
+  for (i = 0; i < kids.length; i++) {
+    b = kids[i];
+    cls = b.className;
+    if (cls.indexOf('pw-pen') >= 0) {
+      var idx = i;
+      b.className = 'pw-it pw-pen' + (idx === settings.pen ? ' on' : '');
+      drawSquiggle(b.children[0], idx, 3, idx === settings.pen ? pwInk(settings.color) : '#9AA0A6');
+    } else if (cls.indexOf('pw-w') >= 0) {
+      var step = i - PENS.length;
+      w = pdef.wMin + (pdef.wMax - pdef.wMin) * step / 5;
+      d = Math.round(lim(4 + w * 1.6, 5, 30));
+      b.children[0].style.width = d + 'px';
+      b.children[0].style.height = d + 'px';
+      b.children[0].style.background = pwInk(settings.color);
+      b.className = 'pw-it pw-w' + (step === settings.widthStep ? ' on' : '');
+    } else if (cls.indexOf('pw-col') >= 0) {
+      var col = PW_COLORS[i - PENS.length - 6];
+      b.className = 'pw-it pw-col' + (col === settings.color ? ' on' : '');
+    }
+  }
+}
+
+function setWheel(open) {
+  pwOpen = !!open;
+  pwLayout();
+  paintWheel();
+}
+
+/* where the wheel sits: the margin away from the writing hand, at the
+   height it was left, kept far enough in that the open disc fits */
+function pwLayout() {
+  var el = byId('penWheel');
+  if (!el) return;
+  el.className = (settings.wheel ? '' : 'off') + (pwRight() ? ' right' : '') + (pwOpen ? ' open' : '');
+  var top = 102, h = Math.max(window.innerHeight || 0, top + 2 * PW_R + 12);
+  var y = top + (h - top) * lim(settings.wheelY, 0, 1);
+  el.style.top = Math.round(lim(y, top + PW_R + 6, h - PW_R - 6)) + 'px';
+}
+
+function initWheel() {
+  var bub = byId('pwBubble');
+  buildWheel();
+  bub.addEventListener('click', function () {
+    if (pwDragged) { pwDragged = false; return; }
+    if (!pwOpen) closePanels();
+    setWheel(!pwOpen);
+  });
+  /* drag the bubble up or down to where the hand rests */
+  bub.addEventListener('touchstart', function (e) {
+    var t = e.changedTouches[0];
+    pwDrag = { y0: t.clientY, top0: parseFloat(byId('penWheel').style.top) || 0, moved: false };
+  });
+  bub.addEventListener('touchmove', function (e) {
+    if (!pwDrag) return;
+    e.preventDefault();
+    var dy = e.changedTouches[0].clientY - pwDrag.y0;
+    if (Math.abs(dy) > 8) pwDrag.moved = true;
+    if (!pwDrag.moved) return;
+    var top = 102, h = Math.max(window.innerHeight || 0, top + 2 * PW_R + 12);
+    settings.wheelY = lim((pwDrag.top0 + dy - top) / (h - top), 0, 1);
+    pwLayout();
+  });
+  bub.addEventListener('touchend', function () {
+    if (pwDrag && pwDrag.moved) { pwDragged = true; saveSoon(); }
+    pwDrag = null;
+  });
+}
+
 /* the dot's size tracks the width it will draw, so a thick marker and a
    fine pen are told apart without reading anything */
 function slotDotSize(sl) {
@@ -8047,6 +8281,7 @@ function applyPenUI() {
   penBadge.style.background = settings.color;
   paintThickDots();
   paintSlots();
+  paintWheel();
   drawSquiggle(previewCanvas, settings.pen, currentPenWidth(), settings.color);
   applyShapeUI();
 }
@@ -8157,6 +8392,12 @@ function buildMoreMenu() {
                                 : 'Off - use the hand tool to zoom and scroll');
         afterSettingChange();
       } },
+    { lbl: 'Pen wheel', val: settings.wheel ? 'On' : 'Off',
+      act: function () {
+        settings.wheel = !settings.wheel;
+        toast(settings.wheel ? 'Pen wheel at the edge of the page' : 'Pen wheel hidden');
+        afterSettingChange();
+      } },
     { lbl: 'Scribble to erase', val: settings.scratch ? 'On' : 'Off',
       act: function () {
         settings.scratch = !settings.scratch;
@@ -8213,6 +8454,7 @@ function afterSettingChange() {
   var keep = moreMenu.scrollTop;
   buildMoreMenu();
   moreMenu.scrollTop = keep;
+  if (byId('pwDisc').children.length) buildWheel();   /* writing hand may have changed sides */
   requestRender();
   saveSoon();
 }
@@ -8246,6 +8488,7 @@ function closePanels() {
   eraserPanel.style.display = 'none';
   moreMenu.style.display = 'none';
   byId('panelScrim').className = '';
+  if (pwOpen) setWheel(false);
 }
 
 /* any panel being visible is the same question as whether the scrim
@@ -8420,6 +8663,7 @@ byId('backupImportBtn').addEventListener('click', doImport);
 function init() {
   loadAll();
   buildPalette();
+  initWheel();
   buildEraserPanel();
   buildMoreMenu();
   applyPenUI();

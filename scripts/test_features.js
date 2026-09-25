@@ -1220,5 +1220,41 @@ gsPair(gp, 30, function (i) { return [450, 500 - i * 5]; },
 check('Glove mode: spreading two fingers still zooms', gp.geom().zoom > 1.1,
       'zoom ' + gp.geom().zoom.toFixed(2));
 
+/* ---------- pen wheel (Samsung's "pens in pop-up view") ----------
+ * Pens on the inner ring, six widths in the middle, colours on the rim:
+ * children 0-4, 5-10, 11-21, then the all-colours button. */
+
+var pw = scApp();
+pw.els.pwBubble._fire('click', {});
+check('the pen wheel opens from its bubble at the page edge',
+      /open/.test(pw.els.penWheel.className), pw.els.penWheel.className);
+check('...with every pen, six widths and the colours on it',
+      pw.els.pwDisc.children.length === 5 + 6 + 11 + 1,
+      pw.els.pwDisc.children.length + ' items');
+pw.els.pwDisc.children[13]._fire('click', {});           /* red */
+pw.els.pwDisc.children[10]._fire('click', {});           /* thickest */
+check('a colour and a width are one tap each, and the wheel stays open for both',
+      pw.pen().color === '#E2231A' && pw.pen().w === 5 && /open/.test(pw.els.penWheel.className),
+      pw.pen().color + ' width ' + pw.pen().w + ' ' + pw.els.penWheel.className);
+var pw0 = pw.strokes().length;
+scPath(pw, 5, [[300, 500], [340, 520], [380, 505], [420, 530]]);
+check('writing closes the wheel and the stroke still lands, in the new colour',
+      !/open/.test(pw.els.penWheel.className) && pw.strokes().length === pw0 + 1 &&
+      pw.strokes()[pw0].color === '#E2231A',
+      pw.els.penWheel.className + ', ' + pw.strokes().length + ' strokes');
+
+pw.els.pwBubble._fire('click', {});
+var pwT = pw.strokes().length;
+pw.down(6, 600, 400); pw.tick(80); pw.up(6); pw.tick(500); pw.flushFrames();
+check('a tap on the page just closes the wheel - no dot to undo',
+      !/open/.test(pw.els.penWheel.className) && pw.strokes().length === pwT,
+      pw.strokes().length - pwT + ' dots left');
+
+pw.els.pwBubble._fire('click', {});
+pw.els.pwDisc.children[3]._fire('click', {});
+check('a pen type from the wheel', pw.pen().pen === 3, 'pen ' + pw.pen().pen);
+
+check('the wheel sits on the side away from a left hand', /right/.test(scApp({ hand: 1 }).els.penWheel.className));
+
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
