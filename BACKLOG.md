@@ -31,7 +31,11 @@ Samsung Notes does it (research an in-depth Samsung Notes guide first).
 - **Folders** open with Samsung's scale-up animation.
 
 ## Pen pop-up extras (seen in the videos)
-- Favourite pens inside the pop-up, each with its own colour.
-- Colour palette sets ("Select color sets to show"), an eyedropper, opacity.
+- ~~Favourite pens inside the pop-up, each with its own colour.~~ **Done** —
+  the pop-up's star opens a grid of favourite pens saved whole (type, colour
+  and width together) with add / edit / delete, and the docked sidebar keeps
+  them in a row. Opacity is done too: a 0.1×–1× dial on the sidebar that
+  multiplies the pen's own alpha.
+- Colour palette sets ("Select color sets to show"), an eyedropper.
 - Line styles (solid, dashed, dotted) and a "Straighten lines" toggle.
 - Pen pictures made by AI, if the drawn ones are not good enough.

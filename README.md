@@ -22,10 +22,24 @@ thickness, with 24 colours to choose from.
   width together. Tap one to write with it; tap the one you hold to change it.
 - **Pen pop-up** — hold the pen still for a moment (Glove mode) and a disc
   opens at the nib, like Samsung's S Pen button: the pen in the middle, its
-  colour on the right, its width on the left, eraser and lasso below. Tap the
+  colour on the right, its width on the left, eraser and lasso below, and —
+  while it floats — a star and a panel icon at the bottom of the ring. Tap the
   middle to fan out the pens, the colour for a ring of colours (drag round to
   turn it), the width for the widths. Drag it to a side and it docks there
   and stays while you write. "Hold pen for pop-up" in the menu turns it off.
+- **Favourite pens grid** — the star on the pop-up (or "All pens" in the
+  sidebar) opens a grid of every pen saved whole: type, colour and width in
+  one tap. Tap one to write with it; tap the one already in hand to switch
+  the grid to **Edit**, where each entry can be changed or deleted and
+  **Cancel**/**Done** decide it. The **+** adds a pen: pick the type and
+  size, then the colour, then **Done**.
+- **Pen sidebar** — the panel icon on the pop-up docks Samsung's rectangular
+  panel to the right edge, and it stays up while you write. Top to bottom:
+  the colour wheel, the five pens standing in a rack, a size slider with -
+  and + and a sample of the stroke, an opacity slider (0.1×–1×, multiplying
+  the pen's own alpha), and the favourite pens in a row. **All pens** opens
+  the grid, **Close** puts the sidebar away; it scrolls when the screen is
+  short.
 - **Pen panel** — the pen button opens Samsung's layout: the pens standing in
   a rack with a sample of the stroke above the one in hand, a size slider
   with - and +, and a row of colours with dots for more pages.
@@ -267,9 +281,10 @@ dependencies.
 ```
 node scripts/check_es5.js     # Safari 9 gate - run before every push
 node scripts/test_palm.js     # palm-rejection behaviour (60 assertions)
-node scripts/test_recorder.js # recorder, pinch-zoom, drills (29 assertions)
+node scripts/test_recorder.js # recorder, pinch-zoom, drills (46 assertions)
 node scripts/test_backup.js   # storage and backup (20 assertions)
-node scripts/test_features.js # pages, folders, photos, zoom window (35 assertions)
+node scripts/test_features.js # pages, tools, pen pop-up, sidebar (160 assertions)
+node scripts/test_tidy.js     # writing replayed from real traces (7 assertions)
 node scripts/serve.js         # serve the app to the iPad, collect recordings
 node scripts/score.js         # replay every recording, print a scoreboard
 node scripts/train.js         # refit the pen/palm scorer to traces/

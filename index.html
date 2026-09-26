@@ -201,13 +201,21 @@ body.dark #nbActions button { color: #F2F3F5; }
    so opening and closing is the same one animation run either way. */
 #penPop { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 18; display: none; }
 #penPop.on { display: block; }
+/* FROSTED GLASS, not a plate. Samsung's disc is a blurred window onto the
+   note underneath - the ink either side still reads through it - so the
+   pop-up lies ON the page rather than cutting a hole in it. The blur needs
+   the -webkit- prefix; Safari 9 only ever spelled it that way. Without the
+   filter the 0.74 white alone still looks close enough to walk away from. */
 #ppDisc {
   position: absolute; left: -88px; top: -88px; width: 176px; height: 176px;
-  border-radius: 50%; background: rgba(252,252,253,0.97);
-  box-shadow: 0 8px 28px rgba(0,0,0,0.20), 0 0 0 1px rgba(0,0,0,0.05);
-  opacity: 0; -webkit-transform: scale(0.35); transform: scale(0.35);
-  -webkit-transition: -webkit-transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.12), opacity 0.14s;
-  transition: transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.12), opacity 0.14s;
+  border-radius: 50%; background: rgba(255,255,255,0.74);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
+  box-shadow: 0 10px 34px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.5) inset,
+              0 0 0 1px rgba(0,0,0,0.07);
+  opacity: 0; -webkit-transform: scale(0.2); transform: scale(0.2);
+  -webkit-transition: -webkit-transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.06), opacity 0.12s ease-out;
+  transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.06), opacity 0.12s ease-out;
 }
 #penPop.show #ppDisc { opacity: 1; -webkit-transform: scale(1); transform: scale(1); }
 #ppCore {
@@ -246,6 +254,283 @@ body.dark #nbActions button { color: #F2F3F5; }
 @keyframes ppFade { from { opacity: 0; } to { opacity: 1; } }
 #ppBand svg { -webkit-animation: ppFade 0.2s ease-out; animation: ppFade 0.2s ease-out; }
 #ppBand { position: absolute; left: 88px; top: 88px; width: 0; height: 0; }
+
+/* ---------- redesigned surfaces: docked sidebar, favourites, add-pen ------
+   The disc above is the transient one that opens at the nib, and it behaves
+   exactly as it did - the tests lean on every part of it, down to where it
+   lands when you drag it to an edge. What Samsung has ALONGSIDE that disc is
+   a rectangular panel pinned to the edge that stays up while you write, and
+   over both a favourites system: a GRID of pens saved whole (type, colour
+   and width together) rather than the three loose slots in the toolbar.
+   Everything below is additive, so nothing here changes the disc's behaviour.
+   No grid display, no flex gap, no custom properties: this still has to pass
+   the Safari 9 gate. */
+
+/* ---- 1. the docked sidebar ---- */
+#penDock {
+  position: fixed; right: 0; top: 116px; bottom: 18px; width: 108px;
+  background: rgba(255,255,255,0.95);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+  border-radius: 16px 0 0 16px;
+  box-shadow: -5px 0 24px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.06);
+  z-index: 21; display: none; overflow: hidden;
+  padding: 6px 8px 0 10px;
+  -webkit-transform: translateX(108%); transform: translateX(108%);
+  -webkit-transition: -webkit-transform 0.26s cubic-bezier(0.2, 0.9, 0.3, 1);
+  transition: transform 0.26s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+/* the body scrolls, the foot stays put: a Close you have to scroll to
+   find is a Close the panel does not have */
+#penDock.on {
+  display: -webkit-box; display: -webkit-flex; display: flex;
+  -webkit-flex-direction: column; flex-direction: column;
+}
+#penDock.in { -webkit-transform: translateX(0); transform: translateX(0); }
+.pd-body {
+  -webkit-flex: 1 1 auto; flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.pd-h {
+  position: relative; font-size: 9px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: #9AA0A6; margin: 6px 0 3px;
+}
+/* the colour ring: ten of the palette's colours round a wheel, with the one
+   in hand sat in the middle as a solid disc you can see from arm's length */
+.pd-wheel { position: relative; width: 90px; height: 90px; margin: 4px auto 0; }
+.pd-cw {
+  position: absolute; width: 14px; height: 14px; border: 0; padding: 0;
+  border-radius: 50%; margin: -7px 0 0 -7px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.14);
+}
+.pd-cw.on { box-shadow: 0 0 0 1px rgba(0,0,0,0.14), 0 0 0 2px #FFFFFF, 0 0 0 4px #0381FE; }
+.pd-ctr {
+  position: absolute; left: 45px; top: 45px; width: 32px; height: 32px;
+  margin: -16px 0 0 -16px; border: 0; padding: 0; border-radius: 50%;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.26);
+}
+/* the pens stand nib-up; only the top of each shows, so the colour it writes
+   rides alongside as a dot - the band on the body sits below the cut */
+.pd-pen {
+  position: relative; display: block; width: 100%; height: 36px;
+  border: 0; padding: 0; background: none; border-radius: 10px;
+  overflow: hidden; margin-bottom: 1px;
+}
+.pd-pen svg { position: absolute; left: 10px; top: -6px; }
+.pd-pen .pd-cdot {
+  position: absolute; right: 10px; top: 50%; width: 13px; height: 13px;
+  margin-top: -6.5px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,0.16);
+}
+.pd-pen.on { background: rgba(3,129,254,0.10); box-shadow: inset 0 0 0 1px rgba(3,129,254,0.32); }
+/* a vertical slider: the track is short and the knob fat, because with a
+   disc stylus a tap on the nearest step beats dragging a hairline */
+.pd-sl { position: relative; width: 36px; height: 66px; margin: 2px auto 0; }
+.pd-sl .tr { position: absolute; left: 17px; top: 3px; bottom: 3px; width: 3px; border-radius: 2px; background: #E3E5E8; }
+.pd-sl .pd-kb {
+  position: absolute; left: 18px; width: 20px; height: 20px; margin: -10px 0 0 -10px;
+  border-radius: 50%; background: #FFFFFF;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3), 0 0 0 1px rgba(0,0,0,0.05);
+  -webkit-transition: top 0.12s ease-out; transition: top 0.12s ease-out;
+}
+.pd-pmrow { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-justify-content: center; justify-content: center; margin-top: 1px; }
+.pd-pm {
+  width: 46px; height: 26px; border: 0; padding: 0; background: none;
+  color: #5F6368; border-radius: 9px; font-size: 16px; line-height: 26px;
+  text-align: center; font-weight: 600;
+}
+.pd-pm:active { background: #EFF0F2; }
+.pd-prev { position: relative; height: 16px; margin-top: 2px; background: #F1F3F4; border-radius: 5px; }
+.pd-prev canvas { position: absolute; left: 0; top: 0; width: 100%; height: 16px; }
+.pd-vals { font-size: 11px; color: #5F6368; text-align: center; margin-top: 1px; }
+.pd-favrow { position: relative; }
+.pd-favs { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 0 -3px; }
+.pd-fav {
+  position: relative; width: 30px; height: 30px; margin: 3px;
+  border: 0; padding: 0; background: #F3F4F6; border-radius: 9px;
+}
+.pd-fav i {
+  position: absolute; left: 50%; top: 50%; width: 16px; height: 16px;
+  border-radius: 50%; -webkit-transform: translate(-50%, -50%); transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.16);
+}
+.pd-fav:active { background: #E8EAED; }
+.pd-add {
+  position: absolute; right: -3px; top: -6px; width: 24px; height: 24px;
+  border: 0; padding: 0; background: #E9EBEE; color: #3C4043;
+  border-radius: 50%; font-size: 15px; line-height: 24px; font-weight: 600;
+}
+.pd-add:active { background: #0381FE; color: #FFFFFF; }
+.pd-foot {
+  display: -webkit-box; display: -webkit-flex; display: flex;
+  -webkit-flex: 0 0 auto; flex: 0 0 auto;
+  margin-top: 6px; padding: 6px 0 6px; border-top: 1px solid #EDEEF0;
+  background: rgba(255,255,255,0.95);
+}
+.pd-foot button {
+  -webkit-flex: 1; flex: 1; height: 34px; border: 0; padding: 0;
+  background: none; color: #5F6368; font-size: 12px;
+}
+.pd-foot button:active { background: #EFF0F2; }
+
+/* ---- 2. the favourites grid ---- */
+#favGrid {
+  position: fixed; top: 116px; left: 50%; margin-left: -176px; width: 352px;
+  background: #FFFFFF; border-radius: 22px;
+  box-shadow: 0 14px 44px rgba(0,0,0,0.24), 0 0 0 1px rgba(0,0,0,0.05);
+  padding: 6px 14px 12px 14px; display: none; z-index: 23;
+  opacity: 0; -webkit-transform: scale(0.94); transform: scale(0.94);
+  -webkit-transition: opacity 0.16s ease-out, -webkit-transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.05);
+  transition: opacity 0.16s ease-out, transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.05);
+}
+#favGrid.on { opacity: 1; -webkit-transform: scale(1); transform: scale(1); }
+.fg-head { position: relative; height: 30px; }
+.fg-title { font-size: 13px; font-weight: 600; color: #202124; line-height: 30px; }
+.fg-ic {
+  position: absolute; top: -1px; width: 32px; height: 32px; border: 0;
+  padding: 0; background: none; color: #5F6368; border-radius: 50%;
+}
+.fg-ic:active { background: #EFF0F2; }
+.fg-ic svg { position: absolute; left: 50%; top: 50%; margin: -11px 0 0 -11px; }
+#fgClose { right: -6px; }
+#fgEdit { right: 26px; }
+.fg-grid {
+  position: relative; display: -webkit-box; display: -webkit-flex; display: flex;
+  -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 2px -4px 0;
+}
+.fg-cell {
+  position: relative; width: 72px; height: 92px; margin: 4px;
+  border: 1px solid #ECEDEF; background: #FAFBFC; border-radius: 15px;
+  padding: 0; overflow: hidden;
+}
+.fg-cell .fg-art {
+  position: absolute; left: 50%; top: 4px; margin-left: -11px;
+  -webkit-transform: scale(0.55); transform: scale(0.55);
+  -webkit-transform-origin: 0 0; transform-origin: 0 0;
+}
+.fg-cell .fg-dot {
+  position: absolute; left: 50%; bottom: 7px; width: 14px; height: 14px;
+  margin-left: -7px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,0.16);
+}
+.fg-cell:active { background: #F1F3F5; }
+.fg-cell .fg-x {
+  position: absolute; right: -1px; top: -1px; width: 26px; height: 26px;
+  display: none; border: 0; padding: 0; background: #E2231A; color: #FFFFFF;
+  border-radius: 0 15px 0 13px; font-size: 16px; line-height: 24px;
+}
+#favGrid.edit .fg-x { display: block; }
+#favGrid.edit .fg-cell { border-style: dashed; border-color: #C6CAD0; }
+/* edit mode is pick-then-place rather than a drag: tap one cell to lift it,
+   tap where it should go and it moves there. Two taps a stylus can land
+   every time; a drag handle is a drag handle on a 2012 digitiser. */
+#favGrid.edit .fg-cell.sel { background: rgba(3,129,254,0.10); border-color: #0381FE; border-style: solid; }
+#fgTip {
+  position: absolute; display: none; padding: 4px 9px; border-radius: 8px;
+  background: rgba(32,33,36,0.94); color: #FFFFFF; font-size: 11px;
+  white-space: nowrap; pointer-events: none; z-index: 4;
+}
+.fg-foot {
+  display: -webkit-box; display: -webkit-flex; display: flex;
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid #EDEEF0;
+}
+.fg-foot button {
+  -webkit-flex: 1; flex: 1; height: 38px; border: 0; padding: 0;
+  border-radius: 12px; background: #F2F3F5; color: #3C4043;
+  font-size: 14px; font-weight: 600; margin: 0 4px;
+}
+.fg-foot button:active { background: #E6E8EB; }
+.fg-foot .fg-pri { background: #0381FE; color: #FFFFFF; }
+
+/* ---- 3. the "add favourite pen" panel ---- */
+#favEdit {
+  position: fixed; top: 116px; left: 50%; margin-left: -166px; width: 332px;
+  background: #FFFFFF; border-radius: 22px;
+  box-shadow: 0 14px 44px rgba(0,0,0,0.24), 0 0 0 1px rgba(0,0,0,0.05);
+  padding: 12px 16px 14px 16px; display: none; z-index: 24;
+  opacity: 0; -webkit-transform: scale(0.94); transform: scale(0.94);
+  -webkit-transition: opacity 0.16s ease-out, -webkit-transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.05);
+  transition: opacity 0.16s ease-out, transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.05);
+}
+#favEdit.on { opacity: 1; -webkit-transform: scale(1); transform: scale(1); }
+.fe-title { font-size: 13px; font-weight: 600; color: #202124; margin-bottom: 9px; }
+.fe-pens { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-justify-content: space-between; justify-content: space-between; }
+.fe-pen {
+  position: relative; width: 54px; height: 58px; border: 0; padding: 0;
+  background: #F6F7F9; border-radius: 12px; overflow: hidden;
+}
+.fe-pen svg { position: absolute; left: 7px; top: -7px; }
+.fe-pen.on { background: rgba(3,129,254,0.10); box-shadow: inset 0 0 0 1.5px rgba(3,129,254,0.5); }
+.fe-size { position: relative; height: 40px; margin-top: 12px; }
+.fe-pm {
+  position: absolute; top: 2px; width: 36px; height: 36px; border: 0;
+  padding: 0; background: none; color: #5F6368; border-radius: 50%;
+}
+.fe-pm:active { background: #EFF0F2; }
+.fe-pm svg { position: absolute; left: 50%; top: 50%; margin: -9px 0 0 -9px; }
+.fe-less { left: -4px; }
+.fe-moreb { right: -4px; }
+.fe-track { position: absolute; left: 38px; right: 38px; top: 0; height: 40px; }
+.fe-line { position: absolute; left: 0; right: 0; top: 18px; height: 4px; border-radius: 2px; background: #E3E5E8; }
+.fe-stop { position: absolute; top: 17px; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; background: #C6CAD0; }
+.fe-knob {
+  position: absolute; top: 5px; width: 30px; height: 30px; margin-left: -15px;
+  border-radius: 50%; background: #FFFFFF; color: #202124;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.28), 0 0 0 1px rgba(0,0,0,0.04);
+  font-size: 13px; font-weight: 600; line-height: 30px; text-align: center; z-index: 1;
+  -webkit-transition: left 0.12s ease-out; transition: left 0.12s ease-out;
+}
+.fe-prev { position: relative; height: 22px; margin-top: 2px; background: #F1F3F4; border-radius: 6px; }
+.fe-prev canvas { position: absolute; left: 0; top: 0; width: 100%; height: 22px; }
+.fe-cols { position: relative; height: 38px; margin-top: 4px; white-space: nowrap; }
+.fe-col {
+  display: inline-block; width: 26px; height: 26px; margin: 6px 7px 0 0;
+  border: 0; padding: 0; border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.10);
+}
+.fe-col.on { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.10), 0 0 0 2px #FFFFFF, 0 0 0 4px #0381FE; }
+.fe-morecols {
+  display: inline-block; width: 28px; height: 28px; margin-top: 5px;
+  border: 0; padding: 0; vertical-align: top; border-radius: 50%;
+  background: -webkit-linear-gradient(45deg, #E2231A, #F5D300, #36C0A1, #0381FE, #8E50E6);
+  background: linear-gradient(45deg, #E2231A, #F5D300, #36C0A1, #0381FE, #8E50E6);
+}
+.fe-foot { display: -webkit-box; display: -webkit-flex; display: flex; margin-top: 14px; }
+.fe-foot button {
+  -webkit-flex: 1; flex: 1; height: 40px; border: 0; padding: 0;
+  border-radius: 12px; background: #F2F3F5; color: #3C4043;
+  font-size: 14px; font-weight: 600; margin: 0 5px;
+}
+.fe-foot button:active { background: #E6E8EB; }
+.fe-foot .fe-done { background: #0381FE; color: #FFFFFF; }
+
+/* ---- dark ---- */
+body.dark #penDock { background: rgba(29,30,34,0.95); box-shadow: -5px 0 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08); }
+body.dark #favGrid, body.dark #favEdit { background: #1D1E22; box-shadow: 0 14px 44px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.07); }
+body.dark .fg-title, body.dark .fe-title { color: #E8EAED; }
+body.dark .fg-cell { background: #23252A; border-color: #2F3237; }
+body.dark .fg-cell:active { background: #2B2E34; }
+body.dark .fg-foot { border-top-color: #2F3033; }
+body.dark .fg-foot button, body.dark .fe-foot button { background: #26282C; color: #C4C7CC; }
+body.dark .fg-foot .fg-pri, body.dark .fe-foot .fe-done { background: #61A8FF; color: #0E0F12; }
+body.dark .fg-ic { color: #C4C7CC; }
+body.dark .pd-h { color: #8C8C8C; }
+body.dark .pd-pen.on { background: rgba(61,140,255,0.16); box-shadow: inset 0 0 0 1px rgba(61,140,255,0.4); }
+body.dark .pd-fav { background: #26282C; }
+body.dark .pd-add { background: #33363C; color: #E8EAED; }
+body.dark .pd-sl .tr, body.dark .fe-line { background: #3A3C42; }
+body.dark .pd-kb, body.dark .fe-knob { background: #2B2D33; color: #E8EAED; }
+/* the sidebar knob carries no number, so it stays light and you can find it */
+body.dark .pd-kb { background: #E8EAED; box-shadow: 0 1px 4px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08); }
+body.dark .pd-foot { border-top-color: #2F3033; }
+body.dark .pd-pm, body.dark .pd-foot button, body.dark .fe-pm { color: #C4C7CC; }
+body.dark .pd-pm:active, body.dark .pd-foot button:active, body.dark .fe-pm:active { background: #26282C; }
+body.dark .pd-vals { color: #A8ADB5; }
+body.dark .fe-pen { background: #26282C; }
+body.dark .fe-stop { background: #55585F; }
+body.dark .fe-cols { color: #C4C7CC; }
+body.dark #fgTip { background: rgba(232,234,237,0.96); color: #202124; }
+
 /* CENTRED BY POSITION, NOT BY THE BUTTON'S OWN LAYOUT.
    Safari 9 lays out a <button>'s insides its own way: it cannot be a flex
    container (WebKit fixed that in Safari 11), and relying on its text
@@ -804,7 +1089,7 @@ body.dark .sz-stop, body.dark .pg-dot i { background: #55585F; }
 body.dark .pg-dot.on i { background: #C4C7CC; }
 body.dark #sizeKnob { background: #2B2D33; color: #E8EAED; }
 body.dark .sw.on { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12), 0 0 0 2px #1D1E22, 0 0 0 4px #61A8FF; }
-body.dark #ppDisc { background: rgba(32,34,39,0.97); box-shadow: 0 8px 28px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.07); }
+body.dark #ppDisc { background: rgba(32,34,39,0.78); box-shadow: 0 10px 34px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.10) inset, 0 0 0 1px rgba(255,255,255,0.07); }
 body.dark #ppCore { background: #2B2D33; }
 body.dark .pp-c.on i { box-shadow: 0 0 0 2px #202227, 0 0 0 4px #61A8FF; }
 body.dark #eraserPanel .ep-h, body.dark #shapeRow .sh-h { color: #8C8C8C; }
@@ -934,7 +1219,93 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
         </svg>
       </button>
       <button id="ppMore" class="pp-it" aria-label="All colours and pen settings"></button>
+      <button id="ppFav" class="pp-it" aria-label="Favourite pens">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+          <path d="M12 3.6l2.6 5.3 5.9.9-4.2 4.1 1 5.8L12 17l-5.3 2.7 1-5.8-4.2-4.1 5.9-.9z"/>
+        </svg>
+      </button>
+      <button id="ppDock" class="pp-it" aria-label="Dock the pen sidebar">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+          <rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/>
+          <path d="M14.5 4.5v15"/>
+          <path d="M7 9h3.5M7 12.5h3.5"/>
+        </svg>
+      </button>
       <button id="ppCore" aria-label="Pens"></button>
+    </div>
+  </div>
+
+  <!-- docked pen sidebar: the rectangular panel Samsung pins to the edge,
+       which stays up while you write instead of folding away at the nib -->
+  <div id="penDock" aria-hidden="true">
+    <div class="pd-body">
+      <div class="pd-wheel" id="pdWheel"></div>
+      <div class="pd-h">Pen</div>
+      <div id="pdPens"></div>
+      <div class="pd-h">Size</div>
+      <div class="pd-sl" id="pdSizeSl"><div class="tr"></div><i class="pd-kb" id="pdSizeKb"></i></div>
+      <div class="pd-pmrow">
+        <button class="pd-pm" id="pdSizeLess" aria-label="Thinner">&#8722;</button>
+        <button class="pd-pm" id="pdSizeMore" aria-label="Thicker">+</button>
+      </div>
+      <div class="pd-prev"><canvas id="pdPrev" width="176" height="40"></canvas></div>
+      <div class="pd-h">Opacity</div>
+      <div class="pd-sl" id="pdOpaSl" style="height:50px"><div class="tr"></div><i class="pd-kb" id="pdOpaKb"></i></div>
+      <div class="pd-pmrow">
+        <button class="pd-pm" id="pdOpaLess" aria-label="More transparent">&#8722;</button>
+        <button class="pd-pm" id="pdOpaMore" aria-label="More opaque">+</button>
+      </div>
+      <div class="pd-vals" id="pdOpaVal">100%</div>
+      <div class="pd-h">Favourites</div>
+      <div class="pd-favrow">
+        <div class="pd-favs" id="pdFavs"></div>
+        <button class="pd-add" id="pdFavAdd" aria-label="Add a favourite pen">+</button>
+      </div>
+    </div>
+    <div class="pd-foot">
+      <button id="pdGridBtn">All pens</button>
+      <button id="pdClose">Close</button>
+    </div>
+  </div>
+
+  <!-- favourites grid: pens saved whole - type, colour and width together -->
+  <div id="favGrid" aria-hidden="true">
+    <div class="fg-head">
+      <div class="fg-title">Favourite pens</div>
+      <button class="fg-ic" id="fgEdit" aria-label="Edit favourites">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7h16M4 12h16M4 17h10"/>
+        </svg>
+      </button>
+      <button class="fg-ic" id="fgClose" aria-label="Close">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="fg-grid" id="fgGrid"></div>
+    <div id="fgTip"></div>
+    <div class="fg-foot" id="fgFoot"></div>
+  </div>
+
+  <!-- add a favourite pen: type, size, then the colour row Samsung shows -->
+  <div id="favEdit" aria-hidden="true">
+    <div class="fe-title">Add favourite pen</div>
+    <div class="fe-pens" id="fePens"></div>
+    <div class="fe-size">
+      <button class="fe-pm fe-less" id="feLess" aria-label="Thinner">
+        <svg width="18" height="18" viewBox="0 0 18 18"><path d="M3 9 H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <div class="fe-track" id="feTrack"><div class="fe-line"></div><b class="fe-knob" id="feKnob">3</b></div>
+      <button class="fe-pm fe-moreb" id="feMore" aria-label="Thicker">
+        <svg width="18" height="18" viewBox="0 0 18 18"><path d="M3 9 H15 M9 3 V15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="fe-prev"><canvas id="fePrev" width="600" height="44"></canvas></div>
+    <div class="fe-cols" id="feCols"></div>
+    <div class="fe-foot">
+      <button id="feCancel">Cancel</button>
+      <button class="fe-done" id="feDone">Done</button>
     </div>
   </div>
 
@@ -1303,6 +1674,22 @@ function defaultSlots() {
     { p: 0, c: '#000000', w: 2 },
     { p: 0, c: '#0381FE', w: 2 },
     { p: 0, c: '#E2231A', w: 2 }
+  ];
+}
+
+/* THE FAVOURITES GRID holds the same {pen, colour, width} triple the three
+ * toolbar slots hold, but as an open-ended list: add, delete and reorder are
+ * the whole reason it exists, and three was a limit rather than a choice.
+ * Six to start with, so the grid reads as a grid the first time it opens and
+ * there is an obvious empty slot to fill with "+" rather than a lone row. */
+function defaultFavs() {
+  return [
+    { p: 0, c: '#000000', w: 1 },
+    { p: 0, c: '#7F7F7F', w: 2 },
+    { p: 0, c: '#E2231A', w: 3 },
+    { p: 3, c: '#000000', w: 2 },
+    { p: 4, c: '#F5D300', w: 4 },
+    { p: 1, c: '#1428A0', w: 3 }
   ];
 }
 
@@ -1768,7 +2155,9 @@ var settings = {
   slots: defaultSlots(),
   slot: 0,
   color: '#000000',
-  penCfg: defaultPenCfg()
+  penCfg: defaultPenCfg(),
+  favs: defaultFavs(),
+  opacity: 1                  /* 0.1..1, multiplied into a new stroke's alpha */
 };
 
 var viewW = 768, viewH = 968, wrapRect = { left: 0, top: 0 };
@@ -1968,6 +2357,23 @@ function applyStoredSettings(set) {
       }
     }
     if (typeof data.set.slot === 'number') settings.slot = lim(data.set.slot, 0, 2);
+    /* the favourites grid and the sidebar's opacity dial are read back the
+       same way the toolbar's three slots are: only well-formed entries are
+       taken, so a corrupt save degrades to the defaults rather than
+       throwing the moment the panel is painted */
+    if (data.set.favs && data.set.favs.length) {
+      var fv = [];
+      for (var pf = 0; pf < data.set.favs.length && fv.length < 40; pf++) {
+        var f = data.set.favs[pf];
+        if (f && typeof f.p === 'number' && f.p >= 0 && f.p < PENS.length &&
+            typeof f.c === 'string' && COLORS.indexOf(f.c) >= 0 &&
+            typeof f.w === 'number' && f.w >= 0 && f.w <= 5) {
+          fv.push({ p: f.p, c: f.c, w: Math.round(f.w) });
+        }
+      }
+      if (fv.length) settings.favs = fv;
+    }
+    if (typeof data.set.opacity === 'number') settings.opacity = lim(data.set.opacity, 0.1, 1);
   }
 }
 
@@ -2156,7 +2562,11 @@ function saveSoon() {
  * ============================================================ */
 
 function mkStroke(pen, w, color, pts) {
-  var s = { id: genId(), pen: pen, w: w, color: color, a: PENS[pen].alpha, pts: pts, ord: strokeSeq++ };
+  /* the sidebar's opacity dial multiplies the pen's own alpha: a pencil at
+     half opacity is lighter, a highlighter still ends up translucent, and
+     the default of 1 leaves every stroke exactly as it was before */
+  var a = PENS[pen].alpha * (settings.opacity == null ? 1 : settings.opacity);
+  var s = { id: genId(), pen: pen, w: w, color: color, a: a, pts: pts, ord: strokeSeq++ };
   return s;
 }
 
@@ -7875,7 +8285,12 @@ window.__mnPen = function () {
   return { tool: tool, slot: settings.slot, pen: settings.pen, color: settings.color,
            w: settings.widthStep, palette: penPalette.style.display,
            pop: pop.on ? (settings.popDock ? 'dock' + settings.popDock : 'float') + (pop.open ? ' ' + pop.open : '') : '',
-           slots: JSON.parse(JSON.stringify(settings.slots)) };
+           slots: JSON.parse(JSON.stringify(settings.slots)),
+           favs: JSON.parse(JSON.stringify(settings.favs)),
+           sidebar: !!byId('penDock').className,
+           opacity: settings.opacity,
+           favGrid: byId('favGrid').style.display === 'block',
+           favEdit: byId('favEdit').style.display === 'block' };
 };
 window.__mnSave = function () { saveTick(); };
 window.__mnHold = function () { holdCheck(); };
@@ -8648,11 +9063,16 @@ function ppSet(el, r, deg, rot, shown, fold) {
   el.style.pointerEvents = shown ? 'auto' : 'none';
 }
 /* angles, 0 = right and 90 = down. Docked, everything moves round to the
-   half of the disc that is still on screen. */
+   half of the disc that is still on screen.
+   Floating, two more join the ring: the star at 315 opens the favourites
+   grid and the panel icon at 225 opens the docked sidebar - both in the
+   empty upper corners, clear of the colour at the right and the width on
+   the left. Docked there is no room left in the visible half for either,
+   so they are folded away and reached by floating the disc first. */
 function ppAngles() {
   var b = ppBase();
-  if (!settings.popDock) return { col: 0, size: 180, erase: 118, lasso: 62, more: 90, r0: 120, r1: 420, rs: 30, s0: 110, s1: 250 };
-  return { col: b - 75, size: b - 25, erase: b + 25, lasso: b + 75, more: b + 96, r0: b - 96, r1: b + 72, rs: 24, s0: b - 70, s1: b + 70 };
+  if (!settings.popDock) return { col: 0, size: 180, erase: 118, lasso: 62, more: 90, fav: 315, dock: 225, r0: 120, r1: 420, rs: 30, s0: 110, s1: 250 };
+  return { col: b - 75, size: b - 25, erase: b + 25, lasso: b + 75, more: b + 96, fav: b - 150, dock: b + 150, r0: b - 96, r1: b + 72, rs: 24, s0: b - 70, s1: b + 70 };
 }
 function ppSlots(A) { return Math.round((A.r1 - A.r0) / A.rs) + 1; }
 /* the pens fan out above the nib, unless the toolbar is in the way */
@@ -8754,6 +9174,10 @@ function popPaint() {
   var items = [['ppCol', A.col], ['ppSize', A.size], ['ppErase', A.erase], ['ppLasso', A.lasso]];
   for (k = 0; k < items.length; k++) ppSet(byId(items[k][0]), PP_R, items[k][1], 0, !open, true);
   ppSet(byId('ppMore'), PP_R, A.more, 0, open === 'col', true);
+  /* the star and the sidebar icon are floating-only: docked, the visible
+     half of the disc has no angle left free for either of them */
+  ppSet(byId('ppFav'), PP_R, A.fav, 0, !open && !settings.popDock, true);
+  ppSet(byId('ppDock'), PP_R, A.dock, 0, !open && !settings.popDock, true);
   byId('ppErase').className = 'pp-it' + (tool === 'eraser' ? ' on' : '');
   byId('ppLasso').className = 'pp-it' + (tool === 'select' ? ' on' : '');
   byId('ppCol').children[0].style.background = settings.color;
@@ -8831,6 +9255,8 @@ function initPop() {
   byId('ppErase').addEventListener('click', function () { popTool('eraser'); });
   byId('ppLasso').addEventListener('click', function () { popTool('select'); });
   byId('ppMore').addEventListener('click', openPenPanel);
+  byId('ppFav').addEventListener('click', favGridToggle);
+  byId('ppDock').addEventListener('click', dockToggle);
   /* drag the disc to move it (and to a side to dock it); drag round an
      open ring to turn the colours or slide the width */
   disc.addEventListener('touchstart', function (e) {
@@ -8878,6 +9304,422 @@ function initPop() {
     saveSoon();
   }, false);
   if (settings.popDock) { pop.on = true; byId('penPop').className = 'on show'; popPlace(); popPaint(); }
+}
+
+/* ============================================================
+ * REDESIGNED PEN SURFACES - the docked sidebar, the favourites
+ * grid, and the "add favourite pen" panel.
+ *
+ * The disc above stays exactly as it was: the tests lean on every part of
+ * it, down to where it lands when it is dragged to an edge. These are the
+ * three things Samsung has ALONGSIDE that disc.
+ *
+ *   The SIDEBAR is the rectangular panel pinned to the edge, which stays up
+ *   while you write instead of folding away at the nib.
+ *
+ *   The GRID holds favourite pens saved WHOLE - type, colour and width
+ *   together - as an open-ended list you add to, delete from and put in
+ *   your own order. The toolbar's three slots are a fixed set; this is the
+ *   same triple without the ceiling.
+ *
+ *   The ADD panel is how one gets made: pen types across the top, a size
+ *   slider under them, a sample of the stroke it will draw, then colours.
+ *
+ * Everything paints itself from settings. The only thing any of it asks of
+ * the engine is the single opacity multiply in mkStroke.
+ * ============================================================ */
+
+/* Samsung's tooltip reads "Pen, Ultraviolet, 6" - a name you can hold in
+   your head, not a hex code. Named here so the same words can show on a
+   favourite in the grid, in the sidebar, and on a toolbar slot. */
+var COLOR_NAMES = {
+  '#000000': 'Black',    '#7F7F7F': 'Grey',     '#C3C7CC': 'Silver',  '#FFFFFF': 'White',
+  '#E2231A': 'Red',      '#F0563A': 'Coral',    '#F58300': 'Orange',  '#FFB02E': 'Amber',
+  '#F5D300': 'Yellow',   '#9ACD32': 'Lime',     '#36C0A1': 'Jade',    '#0B7285': 'Teal',
+  '#0381FE': 'Blue',     '#1428A0': 'Ultraviolet', '#6A3AB2': 'Violet', '#8E50E6': 'Purple',
+  '#F763C6': 'Pink',     '#D6336C': 'Rose',     '#9C6632': 'Bronze',  '#6B4A2B': 'Brown',
+  '#12B5CB': 'Cyan',     '#4DD0E1': 'Sky',      '#8E44AD': 'Plum',    '#2E7D32': 'Green'
+};
+function favLabel(f) {
+  if (!f) return '';
+  return PENS[f.p].name + ', ' + (COLOR_NAMES[f.c] || f.c) + ', ' + (f.w + 1);
+}
+function pickColor(col) {
+  settings.color = col;
+  if (tool !== 'pen') setTool('pen');
+  applyPenUI();
+  saveSoon();
+}
+function applyFav(idx) {
+  var f = settings.favs[idx];
+  if (!f) return;
+  if (tool !== 'pen') { setTool('pen'); }
+  settings.pen = f.p;
+  settings.color = f.c;
+  settings.widthStep = f.w;
+  settings.penCfg[f.p] = { c: f.c, w: f.w };
+  applyPenUI();
+  saveSoon();
+}
+
+/* ---------- 1. the docked sidebar ---------- */
+/* ten of the palette's colours round the wheel, reading the way Samsung's
+   does: the neutrals first, then the warm end, then cool into the pinks */
+var PD_WHEEL = ['#000000', '#7F7F7F', '#E2231A', '#F58300', '#F5D300',
+                '#36C0A1', '#0381FE', '#1428A0', '#8E50E6', '#F763C6'];
+var pdState = { on: false }, pdOfT = null;
+
+function dockToggle() {
+  if (pdState.on) { pdHide(); return; }
+  closePanels();
+  popHide();
+  var el = byId('penDock');
+  pdState.on = true;
+  el.setAttribute('aria-hidden', 'false');
+  el.className = 'on';
+  void el.offsetWidth;                      /* a forced reflow, so the slide-in has a start */
+  el.className = 'on in';
+  pdPaint();
+}
+function pdHide() {
+  var el = byId('penDock');
+  if (!pdState.on) return;
+  pdState.on = false;
+  el.setAttribute('aria-hidden', 'true');
+  el.className = 'on';                      /* kept on while it slides out */
+  if (pdOfT) clearTimeout(pdOfT);
+  /* held open while it slides out, or it would vanish before moving */
+  pdOfT = setTimeout(function () { if (!pdState.on) el.className = ''; }, 280);
+}
+
+function initSidebar() {
+  var i, wheel = byId('pdWheel');
+  for (i = 0; i < PD_WHEEL.length; i++) {
+    (function (idx) {
+      var b = document.createElement('button'), a = idx * 36 - 90;
+      b.className = 'pd-cw';
+      b.setAttribute('data-c', PD_WHEEL[idx]);
+      b.setAttribute('aria-label', 'Colour ' + (COLOR_NAMES[PD_WHEEL[idx]] || PD_WHEEL[idx]));
+      b.style.left = (45 + Math.cos(a * Math.PI / 180) * 33).toFixed(1) + 'px';
+      b.style.top = (45 + Math.sin(a * Math.PI / 180) * 33).toFixed(1) + 'px';
+      b.style.background = PD_WHEEL[idx];
+      b.addEventListener('click', function () { pickColor(PD_WHEEL[idx]); });
+      wheel.appendChild(b);
+    })(i);
+  }
+  var ctr = document.createElement('button');
+  ctr.className = 'pd-ctr';
+  ctr.id = 'pdCtr';
+  ctr.setAttribute('aria-label', 'All colours');
+  ctr.addEventListener('click', function () { openPenPanel(); });
+  wheel.appendChild(ctr);
+
+  var pens = byId('pdPens');
+  for (i = 0; i < PENS.length; i++) {
+    (function (idx) {
+      var b = document.createElement('button');
+      b.className = 'pd-pen';
+      b.setAttribute('aria-label', PENS[idx].name);
+      b.addEventListener('click', function () { pickPen(idx); applyPenUI(); saveSoon(); });
+      pens.appendChild(b);
+    })(i);
+  }
+
+  byId('pdSizeLess').addEventListener('click', function () { setWidthStep(settings.widthStep - 1); });
+  byId('pdSizeMore').addEventListener('click', function () { setWidthStep(settings.widthStep + 1); });
+  byId('pdOpaLess').addEventListener('click', function () { setOpacity(settings.opacity - 0.1); });
+  byId('pdOpaMore').addEventListener('click', function () { setOpacity(settings.opacity + 0.1); });
+  /* a tap anywhere on a track lands on the nearest step - with a disc
+     stylus that beats dragging a hairline, which is why Samsung's own
+     slider is stepped dots rather than a free rail */
+  byId('pdSizeSl').addEventListener('click', function (e) {
+    var r = this.getBoundingClientRect(), h = Math.max(1, r.height - 6);
+    setWidthStep(Math.round(lim(1 - (e.clientY - r.top - 3) / h, 0, 1) * 5));
+  });
+  byId('pdOpaSl').addEventListener('click', function (e) {
+    var r = this.getBoundingClientRect(), h = Math.max(1, r.height - 6);
+    setOpacity(0.1 + lim(1 - (e.clientY - r.top - 3) / h, 0, 1) * 0.9);
+  });
+  byId('pdFavAdd').addEventListener('click', function () { favEditOpen('dock'); });
+  byId('pdGridBtn').addEventListener('click', function () { pdHide(); favGridOpen(); });
+  byId('pdClose').addEventListener('click', pdHide);
+}
+function setOpacity(v) {
+  settings.opacity = Math.round(lim(v, 0.1, 1) * 10) / 10;
+  pdPaint();
+  saveSoon();
+}
+function pdPrev() {
+  var cv = byId('pdPrev'), c = cv.getContext && cv.getContext('2d');
+  if (!c) return;
+  var W = cv.width, H = cv.height, p = PENS[settings.pen];
+  var w = p.wMin + (p.wMax - p.wMin) * settings.widthStep / 5;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, W, H);
+  c.globalAlpha = p.alpha * (settings.opacity == null ? 1 : settings.opacity);
+  c.strokeStyle = settings.color;
+  c.lineWidth = lim(6 + w * 3.4, 7, 34);
+  c.lineCap = 'round';
+  c.beginPath();
+  c.moveTo(14, H / 2); c.lineTo(W - 14, H / 2); c.stroke();
+  c.globalAlpha = 1;
+}
+function pdFavs() {
+  var box = byId('pdFavs'), i, b;
+  box.innerHTML = '';
+  for (i = 0; i < settings.favs.length && i < 12; i++) {
+    b = document.createElement('button');
+    b.className = 'pd-fav';
+    b.setAttribute('aria-label', favLabel(settings.favs[i]));
+    b.innerHTML = '<i></i>';
+    b.children[0].style.background = settings.favs[i].c;
+    (function (idx) { b.addEventListener('click', function () { applyFav(idx); }); })(i);
+    box.appendChild(b);
+  }
+}
+function pdPaint() {
+  if (!pdState.on) return;
+  var i, wheel = byId('pdWheel').children, col;
+  for (i = 0; i < wheel.length; i++) {
+    if (wheel[i].className.indexOf('pd-cw') < 0) continue;
+    wheel[i].className = 'pd-cw' + (wheel[i].getAttribute('data-c') === settings.color ? ' on' : '');
+  }
+  byId('pdCtr').style.background = settings.color;
+
+  var pens = byId('pdPens').children;
+  for (i = 0; i < pens.length; i++) {
+    col = i === settings.pen ? settings.color : settings.penCfg[i].c;
+    if (pens[i].getAttribute('data-col') !== col) {
+      pens[i].innerHTML = penArt(i, col) + '<i class="pd-cdot"></i>';
+      pens[i].setAttribute('data-col', col);
+    }
+    pens[i].children[1].style.background = col;
+    pens[i].className = 'pd-pen' + (i === settings.pen ? ' on' : '');
+  }
+
+  byId('pdSizeKb').style.top = (3 + 60 * settings.widthStep / 5) + 'px';
+  var op = settings.opacity == null ? 1 : settings.opacity;
+  byId('pdOpaKb').style.top = (3 + 44 * (op - 0.1) / 0.9) + 'px';
+  byId('pdOpaVal').textContent = Math.round(op * 100) + '%';
+  pdPrev();
+  pdFavs();
+}
+
+/* ---------- 2. the favourites grid ---------- */
+var fgMode = 0, fgSel = -1, fgTipT = null;
+
+function favGridOpen() {
+  closePanels();
+  fgMode = 0; fgSel = -1;
+  var el = byId('favGrid');
+  el.style.display = 'block';
+  el.setAttribute('aria-hidden', 'false');
+  void el.offsetWidth;
+  el.className = 'on';
+  favGridPaint();
+  syncScrim();
+}
+function favGridClose() {
+  var el = byId('favGrid');
+  el.className = '';
+  el.setAttribute('aria-hidden', 'true');
+  el.style.display = 'none';
+  fgMode = 0; fgSel = -1;
+  fgTipHide();
+  syncScrim();
+}
+function favGridToggle() {
+  if (byId('favGrid').style.display === 'block') favGridClose();
+  else favGridOpen();
+}
+function fgTipHide() {
+  if (fgTipT) { clearTimeout(fgTipT); fgTipT = null; }
+  byId('fgTip').style.display = 'none';
+}
+function fgTipShow(cell, idx) {
+  var f = settings.favs[idx], tip = byId('fgTip');
+  if (!f) return;
+  if (fgTipT) { clearTimeout(fgTipT); fgTipT = null; }
+  tip.textContent = favLabel(f);
+  tip.style.display = 'block';
+  var pr = byId('favGrid').getBoundingClientRect(), cr = cell.getBoundingClientRect();
+  var w = tip.offsetWidth;
+  tip.style.left = lim((cr.left + cr.width / 2) - pr.left - w / 2, 4, pr.width - w - 4) + 'px';
+  tip.style.top = ((cr.top - pr.top) - 26) + 'px';
+  fgTipT = setTimeout(fgTipHide, 2200);
+}
+function mkBtn(text, fn, cls) {
+  var b = document.createElement('button');
+  b.className = cls || '';
+  b.appendChild(document.createTextNode(text));
+  b.addEventListener('click', fn);
+  return b;
+}
+function favGridPaint() {
+  var el = byId('favGrid'), box = byId('fgGrid'), i, b;
+  el.className = 'on' + (fgMode ? ' edit' : '');
+  box.innerHTML = '';
+  for (i = 0; i < settings.favs.length; i++) {
+    b = document.createElement('button');
+    b.className = 'fg-cell' + (fgMode && fgSel === i ? ' sel' : '');
+    b.setAttribute('aria-label', favLabel(settings.favs[i]));
+    b.innerHTML = '<span class="fg-art">' + penArt(settings.favs[i].p, settings.favs[i].c) + '</span>' +
+                  '<i class="fg-dot"></i><span class="fg-x">&#215;</span>';
+    b.children[1].style.background = settings.favs[i].c;
+    (function (idx, cell) {
+      cell.addEventListener('click', function (e) {
+        if (fgMode) {
+          var onX = e.target && String(e.target.className).indexOf('fg-x') >= 0;
+          if (onX) {
+            settings.favs.splice(idx, 1);
+            fgSel = -1;
+            saveSoon();
+          } else if (fgSel < 0) { fgSel = idx; }
+          else if (fgSel === idx) { fgSel = -1; }
+          else {
+            var it = settings.favs.splice(fgSel, 1)[0];
+            settings.favs.splice(idx, 0, it);
+            fgSel = -1;
+            saveSoon();
+          }
+          favGridPaint();
+          return;
+        }
+        applyFav(idx);
+        favGridClose();
+      });
+      cell.addEventListener('mouseenter', function () { if (!fgMode) fgTipShow(cell, idx); });
+      cell.addEventListener('mouseleave', fgTipHide);
+      cell.addEventListener('touchstart', function () { if (!fgMode) fgTipShow(cell, idx); });
+    })(i, b);
+    box.appendChild(b);
+  }
+  var foot = byId('fgFoot');
+  foot.innerHTML = '';
+  if (fgMode) {
+    foot.appendChild(mkBtn('Cancel', function () { fgMode = 0; fgSel = -1; favGridPaint(); }));
+    foot.appendChild(mkBtn('Done', function () { fgMode = 0; fgSel = -1; saveSoon(); favGridPaint(); }, 'fg-pri'));
+  } else {
+    foot.appendChild(mkBtn('+  Add pen', function () { favEditOpen('grid'); }, 'fg-pri'));
+  }
+}
+function initFavs() {
+  byId('fgClose').addEventListener('click', favGridClose);
+  byId('fgEdit').addEventListener('click', function () {
+    fgMode = fgMode ? 0 : 1;
+    fgSel = -1;
+    fgTipHide();
+    favGridPaint();
+  });
+}
+
+/* ---------- 3. the "add favourite pen" panel ---------- */
+var feDraft = { p: 0, c: '#000000', w: 2, back: '' };
+
+function favEditOpen(back) {
+  feDraft.p = settings.pen;
+  feDraft.c = settings.color;
+  feDraft.w = settings.widthStep;
+  feDraft.back = back || '';
+  closePanels();
+  var el = byId('favEdit');
+  el.style.display = 'block';
+  el.setAttribute('aria-hidden', 'false');
+  void el.offsetWidth;
+  el.className = 'on';
+  favEditPaint();
+  syncScrim();
+}
+function favEditClose() {
+  var back = feDraft.back, el = byId('favEdit');
+  el.className = '';
+  el.setAttribute('aria-hidden', 'true');
+  el.style.display = 'none';
+  if (pdState.on) pdPaint();
+  if (back === 'grid') favGridOpen();
+  else syncScrim();
+}
+function favEditDone() {
+  if (settings.favs.length >= 40) { toast('Favourites are full'); favEditClose(); return; }
+  settings.favs.push({ p: feDraft.p, c: feDraft.c, w: feDraft.w });
+  saveSoon();
+  favEditClose();
+}
+function fePrev() {
+  var cv = byId('fePrev'), c = cv.getContext && cv.getContext('2d');
+  if (!c) return;
+  var W = cv.width, H = cv.height, p = PENS[feDraft.p];
+  var w = p.wMin + (p.wMax - p.wMin) * feDraft.w / 5;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, W, H);
+  c.globalAlpha = p.alpha;
+  c.strokeStyle = feDraft.c;
+  c.lineWidth = lim(6 + w * 4.6, 8, 44);
+  c.lineCap = 'round';
+  c.beginPath();
+  c.moveTo(16, H / 2); c.lineTo(W - 16, H / 2); c.stroke();
+  c.globalAlpha = 1;
+}
+function favEditPaint() {
+  var i, el, pens = byId('fePens');
+  pens.innerHTML = '';
+  for (i = 0; i < PENS.length; i++) {
+    (function (idx) {
+      var b = document.createElement('button');
+      b.className = 'fe-pen' + (idx === feDraft.p ? ' on' : '');
+      b.setAttribute('aria-label', PENS[idx].name);
+      b.innerHTML = penArt(idx, feDraft.c);
+      b.addEventListener('click', function () { feDraft.p = idx; favEditPaint(); });
+      pens.appendChild(b);
+    })(i);
+  }
+
+  var track = byId('feTrack');
+  track.innerHTML = '<div class="fe-line"></div>';
+  for (i = 0; i <= 5; i++) {
+    el = document.createElement('i');
+    el.className = 'fe-stop';
+    el.style.left = (i * 20) + '%';
+    track.appendChild(el);
+  }
+  el = document.createElement('b');
+  el.className = 'fe-knob';
+  el.style.left = (feDraft.w * 20) + '%';
+  el.appendChild(document.createTextNode(String(feDraft.w + 1)));
+  track.appendChild(el);
+
+  var cols = byId('feCols');
+  cols.innerHTML = '';
+  var seven = ['#000000', '#7F7F7F', '#C3C7CC', '#FFFFFF', '#E2231A', '#F0563A', '#F58300'];
+  for (i = 0; i < seven.length; i++) {
+    (function (col) {
+      var b = document.createElement('button');
+      b.className = 'fe-col' + (col === feDraft.c ? ' on' : '');
+      b.setAttribute('aria-label', 'Colour ' + (COLOR_NAMES[col] || col));
+      b.style.background = col;
+      b.addEventListener('click', function () { feDraft.c = col; favEditPaint(); });
+      cols.appendChild(b);
+    })(seven[i]);
+  }
+  el = document.createElement('button');
+  el.className = 'fe-morecols';
+  el.id = 'feMoreCols';
+  el.setAttribute('aria-label', 'All colours');
+  el.addEventListener('click', function () { settings.color = feDraft.c; openPenPanel(); });
+  cols.appendChild(el);
+
+  fePrev();
+}
+function initFavEdit() {
+  byId('feCancel').addEventListener('click', favEditClose);
+  byId('feDone').addEventListener('click', favEditDone);
+  byId('feLess').addEventListener('click', function () { feDraft.w = lim(feDraft.w - 1, 0, 5); favEditPaint(); });
+  byId('feMore').addEventListener('click', function () { feDraft.w = lim(feDraft.w + 1, 0, 5); favEditPaint(); });
+  byId('feTrack').addEventListener('click', function (e) {
+    var r = this.getBoundingClientRect();
+    feDraft.w = lim(Math.round((e.clientX - r.left) / Math.max(1, r.width) * 5), 0, 5);
+    favEditPaint();
+  });
 }
 
 /* the dot's size tracks the width it will draw, so a thick marker and a
@@ -8958,6 +9800,9 @@ function applyPenUI() {
   penBadge.style.background = settings.color;
   paintSlots();
   popPaint();
+  /* the sidebar shows the same pen, size, opacity and colours the disc
+     does, so it repaints with them rather than keeping stale art */
+  if (pdState && pdState.on) pdPaint();
   /* The panel is small drawings - five pens and the stroke sample - and
      this runs on every pen change, including picking the pen up, while
      the panel is shut. They are drawn when it can be seen: the places
@@ -9163,10 +10008,18 @@ function cyclePalm() {
 }
 
 /* ---------- panels ---------- */
+/* The two redesign panels close with everything else. The docked sidebar
+   deliberately does NOT: it is the one surface that stays up while you
+   write, so it has its own close button instead of a scrim. */
 function closePanels() {
   penPalette.style.display = 'none';
   eraserPanel.style.display = 'none';
   moreMenu.style.display = 'none';
+  byId('favGrid').style.display = 'none';
+  byId('favGrid').className = '';
+  byId('favEdit').style.display = 'none';
+  byId('favEdit').className = '';
+  fgMode = 0; fgSel = -1; fgTipHide();
   byId('panelScrim').className = '';
   if (pop.on) {
     if (!settings.popDock) popHide();
@@ -9181,7 +10034,9 @@ function closePanels() {
 function syncScrim() {
   var open = penPalette.style.display === 'block' ||
              eraserPanel.style.display === 'block' ||
-             moreMenu.style.display === 'block';
+             moreMenu.style.display === 'block' ||
+             byId('favGrid').style.display === 'block' ||
+             byId('favEdit').style.display === 'block';
   byId('panelScrim').className = open ? 'on' : '';
 }
 
@@ -9349,6 +10204,9 @@ function init() {
   loadAll();
   buildPalette();
   initPop();
+  initSidebar();
+  initFavs();
+  initFavEdit();
   buildEraserPanel();
   buildMoreMenu();
   applyPenUI();
