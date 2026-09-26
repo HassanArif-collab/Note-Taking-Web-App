@@ -1148,8 +1148,9 @@ var PAGE_W_MIN = 1024;
 var docW = PAGE_W_MIN;
 var GAP_H    = 20;     /* gray gap between pages */
 var TILE_H   = 256;    /* offscreen tile height (document px) */
+var TILE_W   = 512;    /* ...and width: tiles are a grid, not page-wide strips */
 var MARGIN_X = 46;     /* the left channel on ruled paper */
-var MAX_TILES = 30;    /* tile cache entries kept alive */
+var MAX_TILES = 64;    /* tile canvases kept alive - blank tiles cost none */
 var FIRST_BASE = 56;   /* first ruled line distance from page top */
 
 var TPL_RULED = 0, TPL_GRID = 1, TPL_DOTTED = 2, TPL_BLANK = 3;
@@ -1612,6 +1613,7 @@ var SC = {
   GPAN_COS:        0.85,   /* ...in the same direction, within ~30 degrees */
   GPAN_RATIO:      1.8,    /* ...and about as far as each other */
   GPAN_STRAIGHT:   0.75,   /* ...along nearly straight paths */
+  GPAN_LEVEL:      110,    /* sideways: the two no more than this far apart vertically */
   PINCH_BOTH:      12,     /* a wide pinch zooms only if BOTH contacts moved this far */
   AUTO_PINCH:      30,     /* hand/lasso/eraser/text: the gap changed this much = zoom */
   AUTO_PAN:        40      /* ...the fingers travelled this far first = scroll */
@@ -2379,21 +2381,32 @@ function paintStrokeIntoTiles(s) {
   if (s.pen === PEN_IMG) return false;      /* an image may not have loaded */
   if (selHidden[s.id]) return false;
   var bb = strokeBBox(s);
-  var i0 = Math.floor(bb.y0 / TILE_H), i1 = Math.floor(bb.y1 / TILE_H), i, c, tc;
+  var i0 = Math.floor(bb.y0 / TILE_H), i1 = Math.floor(bb.y1 / TILE_H);
+  var j0 = Math.floor(bb.x0 / TILE_W), j1 = Math.floor(bb.x1 / TILE_W), i, j, key, c, tc;
   for (i = i0; i <= i1; i++) {
-    c = tiles[i];
-    if (!c) continue;     /* not cached: it will be built with this stroke in it */
-    tc = c.getContext('2d');
-    if (!tc) { delete tiles[i]; continue; }
-    tc.setTransform(dpr, 0, 0, dpr, 0, -i * TILE_H * dpr);
-    renderStrokeFull(tc, s);
+    for (j = j0; j <= j1; j++) {
+      key = i + ',' + j;
+      c = tiles[key];
+      if (!c) continue;     /* not cached: it will be built with this stroke in it */
+      /* a blank tile has no canvas to paint into; build it afresh */
+      if (c === TILE_BLANK) { delete tiles[key]; continue; }
+      tc = c.getContext('2d');
+      if (!tc) { delete tiles[key]; continue; }
+      tc.setTransform(dpr, 0, 0, dpr, -j * TILE_W * dpr, -i * TILE_H * dpr);
+      renderStrokeFull(tc, s);
+    }
   }
   return true;
 }
 
+/* every tile in rows y0..y1, across the whole width */
 function invalidateRange(y0, y1) {
-  var i0 = Math.floor(y0 / TILE_H), i1 = Math.floor(y1 / TILE_H);
-  for (var i = i0; i <= i1; i++) delete tiles[i];
+  var i0 = Math.floor(y0 / TILE_H), i1 = Math.floor(y1 / TILE_H), k, row;
+  for (k in tiles) {
+    if (!tiles.hasOwnProperty(k)) continue;
+    row = parseInt(k, 10);
+    if (row >= i0 && row <= i1) delete tiles[k];
+  }
 }
 function invalidateAll() { tiles = {}; tileOrder = []; }
 
@@ -2410,35 +2423,54 @@ function sortedStrokesForBand(y0, y1) {
   return list;
 }
 
-var tileW = 0;      /* the page width the cached tiles were drawn for */
+/* TILES ARE A GRID.
+ *
+ * They were strips as wide as the page - one canvas per 256px of height,
+ * docW across - which cannot survive a page that grows sideways: at a few
+ * screens wide a single strip is past what the iPad will allocate. A
+ * 512x256 tile is a quarter of the old strip at the old width and stays
+ * that size however far the page runs.
+ *
+ * Blank tiles are not drawn at all. Most of an endless page is empty
+ * paper, and even on pages every blank band used to cost a full-width
+ * bitmap; TILE_BLANK marks "looked, nothing here" and costs no canvas.
+ * Tiles no longer depend on the page width, so rotating keeps them. */
+var TILE_BLANK = {};
 
-function getTile(i) {
-  /* Rotating changes the page width, and a tile painted at the old width
-     is the wrong shape. Throwing them away is the whole of handling it. */
-  if (tileW !== docW) { tiles = {}; tileOrder = []; tileW = docW; }
-  if (tiles[i]) {
-    var k = tileOrder.indexOf(i);
-    if (k >= 0) { tileOrder.splice(k, 1); tileOrder.push(i); }
-    return tiles[i];
+function getTile(i, j) {
+  var key = i + ',' + j, have = tiles[key];
+  if (have) {
+    if (have !== TILE_BLANK) {
+      var k = tileOrder.indexOf(key);
+      if (k >= 0) tileOrder.splice(k, 1);
+      tileOrder.push(key);
+    }
+    return have;
   }
-  var top = i * TILE_H;
+  var top = i * TILE_H, left = j * TILE_W;
   if (i < 0 || top >= docH) return null;
+  if (!isEndless() && (j < 0 || left >= docW)) return null;
+  var band = sortedStrokesForBand(top, top + TILE_H), st = [], q, bb;
+  for (q = 0; q < band.length; q++) {
+    bb = strokeBBox(band[q]);
+    if (bb.x1 >= left && bb.x0 <= left + TILE_W) st.push(band[q]);
+  }
+  if (!st.length) { tiles[key] = TILE_BLANK; return TILE_BLANK; }
   var c = document.createElement('canvas');
-  /* a tile is as wide as the PAGE now, not as wide as the screen - a tile
-     cut to the screen leaves the rest of the page unpainted the moment
-     the page is wider than the window */
-  c.width = Math.max(1, Math.round(docW * dpr));
+  c.width = Math.round(TILE_W * dpr);
   c.height = Math.round(TILE_H * dpr);
   var tc = c.getContext('2d');
   if (!tc) return null;
-  tc.setTransform(dpr, 0, 0, dpr, 0, -top * dpr);
-  var st = sortedStrokesForBand(top, top + TILE_H);
-  for (var j = 0; j < st.length; j++) renderStrokeFull(tc, st[j]);
-  tiles[i] = c;
-  tileOrder.push(i);
-  if (tileOrder.length > MAX_TILES) {
+  tc.setTransform(dpr, 0, 0, dpr, -left * dpr, -top * dpr);
+  for (q = 0; q < st.length; q++) renderStrokeFull(tc, st[q]);
+  tiles[key] = c;
+  /* an invalidated key can still be listed; list each key once */
+  var old = tileOrder.indexOf(key);
+  if (old >= 0) tileOrder.splice(old, 1);
+  tileOrder.push(key);
+  while (tileOrder.length > MAX_TILES) {
     var drop = tileOrder.shift();
-    if (drop !== i) delete tiles[drop];
+    if (tiles[drop] !== TILE_BLANK) delete tiles[drop];
   }
   return c;
 }
@@ -2459,18 +2491,19 @@ function isEndless() {
   return !!(n && n.endless);
 }
 
-function drawPaperEndless(c, y0, y1) {
+function drawPaperEndless(c, y0, y1, x0, x1) {
   var P = PAPERS[settings.paperColor] || PAPERS[0];
   var sp = settings.spacing, y, x;
+  if (x0 === undefined) { x0 = docX0; x1 = docW; }
   if (y0 < 0) y0 = 0;
   if (y1 <= y0) return;
   c.fillStyle = P.bg;
-  c.fillRect(0, y0, docW, y1 - y0);
+  c.fillRect(x0, y0, x1 - x0, y1 - y0);
   if (settings.template === TPL_RULED) {
     c.strokeStyle = P.line; c.lineWidth = 1;
     c.beginPath();
     for (y = FIRST_BASE + Math.max(0, Math.ceil((y0 - FIRST_BASE) / sp)) * sp; y <= y1; y += sp) {
-      c.moveTo(MARGIN_X, y + 0.5); c.lineTo(docW, y + 0.5);
+      c.moveTo(x0, y + 0.5); c.lineTo(x1, y + 0.5);
     }
     c.stroke();
     if (settings.margin) {
@@ -2483,19 +2516,19 @@ function drawPaperEndless(c, y0, y1) {
   } else if (settings.template === TPL_GRID) {
     c.strokeStyle = P.line; c.lineWidth = 1;
     c.beginPath();
-    for (x = 24; x < docW; x += 24) { c.moveTo(x + 0.5, y0); c.lineTo(x + 0.5, y1); }
-    for (y = Math.max(24, Math.ceil(y0 / 24) * 24); y <= y1; y += 24) { c.moveTo(0, y + 0.5); c.lineTo(docW, y + 0.5); }
+    for (x = Math.ceil(x0 / 24) * 24; x < x1; x += 24) { c.moveTo(x + 0.5, y0); c.lineTo(x + 0.5, y1); }
+    for (y = Math.max(24, Math.ceil(y0 / 24) * 24); y <= y1; y += 24) { c.moveTo(x0, y + 0.5); c.lineTo(x1, y + 0.5); }
     c.stroke();
   } else if (settings.template === TPL_DOTTED) {
     c.fillStyle = P.dot;
     for (y = 20 + Math.max(0, Math.ceil((y0 - 20) / 24)) * 24; y <= y1; y += 24) {
-      for (x = 12; x < docW; x += 24) c.fillRect(x - 1, y - 1, 2, 2);
+      for (x = Math.ceil((x0 - 12) / 24) * 24 + 12; x < x1; x += 24) c.fillRect(x - 1, y - 1, 2, 2);
     }
   }
 }
 
-function drawPaperPages(c, y0, y1) {
-  if (isEndless()) { drawPaperEndless(c, y0, y1); return; }
+function drawPaperPages(c, y0, y1, x0, x1) {
+  if (isEndless()) { drawPaperEndless(c, y0, y1, x0, x1); return; }
   var P = PAPERS[settings.paperColor] || PAPERS[0];
   var pFirst = Math.max(0, Math.floor(y0 / (PAGE_H + GAP_H)) - 1);
   var pLast = Math.floor(y1 / (PAGE_H + GAP_H)) + 1;
@@ -2548,6 +2581,8 @@ function drawPaperPages(c, y0, y1) {
 /* How far the ink reaches. Kept rather than recomputed, because the only
    thing that can make it SMALLER is ink being removed. */
 var docMaxX = 0, docMaxY = 0;
+var docMinX = 0;       /* ...and how far left, which only an infinite page allows */
+var docX0 = 0;         /* the page's left edge: 0, except on an infinite page */
 
 /* A new stroke can only ever push the edges outwards, so the whole page
  * does not have to be measured again to find that out.
@@ -2562,17 +2597,23 @@ var docMaxX = 0, docMaxY = 0;
  */
 function growDocFor(st) {
   var bb = strokeBBox(st);
-  if (bb.x1 <= docMaxX && bb.y1 <= docMaxY) { sizeDoc(); return; }
   if (bb.x1 > docMaxX) docMaxX = bb.x1;
   if (bb.y1 > docMaxY) docMaxY = bb.y1;
+  if (bb.x0 < docMinX) docMinX = bb.x0;
   sizeDoc();
 }
 
 function sizeDoc() {
   docW = Math.max(PAGE_W_MIN, viewW, Math.ceil(docMaxX + settings.spacing * 2));
+  docX0 = 0;
   if (isEndless()) {
-    /* always at least a screen of blank paper below the last line */
+    /* INFINITE: always at least a screen of blank paper beyond the ink -
+       below the last line, and to the right and the left of the widest.
+       The ruled lines and the margin rule carry on across all of it. The
+       top stays put: a page still starts somewhere. */
     docH = Math.max(PAGE_H, Math.ceil(docMaxY + Math.max(viewH, PAGE_H)));
+    docW = Math.ceil(Math.max(PAGE_W_MIN, viewW, docMaxX) + viewW);
+    docX0 = Math.floor(Math.min(0, docMinX) - viewW);
   } else {
     var needed = docMaxY + settings.spacing * 2.5;
     var pages = Math.max(1, Math.ceil(needed / PAGE_H));
@@ -2586,15 +2627,16 @@ function sizeDoc() {
 /* the full measure, for when ink has been taken AWAY and the edges may
    have come in: erasing, undo, deleting a page, opening another note */
 function recomputeDoc() {
-  var maxY = 0, maxX = 0, n = activeNote();
+  var maxY = 0, maxX = 0, minX = 0, n = activeNote();
   if (n) {
     for (var i = 0; i < n.strokes.length; i++) {
       var bb = strokeBBox(n.strokes[i]);
       if (bb.y1 > maxY) maxY = bb.y1;
       if (bb.x1 > maxX) maxX = bb.x1;
+      if (bb.x0 < minX) minX = bb.x0;
     }
   }
-  docMaxX = maxX; docMaxY = maxY;
+  docMaxX = maxX; docMaxY = maxY; docMinX = minX;
   /* never narrower than the screen, so a wide tablet has no dead margin,
      and never narrower than the ink, so nothing can sit off the page */
   sizeDoc();
@@ -2605,7 +2647,7 @@ function clampScroll() {
    * (negative scroll allowed). */
   var vh = viewH / zoom, vw = viewW / zoom;
   var yMax = Math.max(0, docH - vh), yMin = Math.min(0, docH - vh);
-  var xMax = Math.max(0, docW - vw), xMin = Math.min(0, docW - vw);
+  var xMax = Math.max(docX0, docW - vw), xMin = Math.min(docX0, docW - vw);
   scrollY = lim(scrollY, yMin, yMax);
   scrollX = lim(scrollX, xMin, xMax);
 }
@@ -2633,17 +2675,21 @@ function render() {
      edges. */
   ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -dpr * zoom * scrollX, -dpr * zoom * scrollY);
   var P = PAPERS[settings.paperColor] || PAPERS[0];
-  if (!isEndless() || scrollX < 0 || scrollY < 0 || scrollX + viewW / zoom > docW) {
+  if (!isEndless() || scrollY < 0) {
     ctx.fillStyle = P.dark ? '#141414' : '#F1F2F4';
     ctx.fillRect(scrollX - 8, scrollY - 8, viewW / zoom + 16, viewH / zoom + 16);
   }
-  drawPaperPages(ctx, scrollY - 8, scrollY + viewH / zoom + 8);
+  drawPaperPages(ctx, scrollY - 8, scrollY + viewH / zoom + 8, scrollX - 8, scrollX + viewW / zoom + 8);
   var i0 = Math.floor(scrollY / TILE_H);
   var i1 = Math.floor((scrollY + viewH / zoom) / TILE_H);
-  var i;
+  var j0 = Math.floor(scrollX / TILE_W);
+  var j1 = Math.floor((scrollX + viewW / zoom) / TILE_W);
+  var i, j, t;
   for (i = i0; i <= i1; i++) {
-    var t = getTile(i);
-    if (t) ctx.drawImage(t, 0, i * TILE_H, docW, TILE_H);
+    for (j = j0; j <= j1; j++) {
+      t = getTile(i, j);
+      if (t && t !== TILE_BLANK) ctx.drawImage(t, j * TILE_W, i * TILE_H, TILE_W, TILE_H);
+    }
   }
   for (var id in inkNow) {
     if (inkNow.hasOwnProperty(id)) renderStrokeFull(ctx, inkNow[id].stroke);
@@ -5249,12 +5295,18 @@ function tryGlovePan(now) {
   var ax = a.cx - a.csx, ay = a.cy - a.csy, bx = b.cx - b.csx, by = b.cy - b.csy;
   var la = Math.sqrt(ax * ax + ay * ay), lb = Math.sqrt(bx * bx + by * by);
   if (la < SC.GPAN_MIN || lb < SC.GPAN_MIN) return false;
-  /* Up or down only. Writing with the hand gliding along beside the pen
-     is two contacts landing together and travelling together too - but
-     along the line, sideways. Across every Glove recording, each pair that
-     travelled vertically was a scroll and each horizontal one was a pen and
-     a hand writing. Once started, the page follows the fingers any way. */
-  if (Math.abs(ay + by) < Math.abs(ax + bx)) return false;
+  /* Sideways only from fingers side by side. Writing with the hand gliding
+     along beside the pen is two contacts landing together and travelling
+     together too - along the line, sideways. In every Glove recording the
+     pairs that travelled up or down were scrolls; the sideways ones were a
+     pen with a palm below it (115-309px lower in 9 of 11), while scrolling
+     fingers and thumbs sit level (8-124px apart vertically, mostly). An
+     infinite page needs sideways scrolling, so it is allowed from a level
+     pair. Once started, the page follows the fingers any way. */
+  if (Math.abs(ay + by) < Math.abs(ax + bx)) {
+    var sx = Math.abs(a.csx - b.csx), sy = Math.abs(a.csy - b.csy);
+    if (sy > SC.GPAN_LEVEL || sy > sx) return false;
+  }
   /* ...and in straight lines. A pen starting a letter with a downstroke,
      beside a palm settling downward, passed everything above - but a pen
      forming letters wanders (measured 0.19 and 0.45 of its path was net
@@ -8535,13 +8587,13 @@ function buildMoreMenu() {
                closePanels();
                pasteClip(scrollX + viewW / zoom / 2, scrollY + viewH / zoom / 2);
              } } : null,
-    { lbl: 'Page type', val: isEndless() ? 'Endless' : 'Pages', act: function () {
+    { lbl: 'Page type', val: isEndless() ? 'Infinite' : 'Pages', act: function () {
         var n = activeNote();
         if (!n) return;
         n.endless = !n.endless;
         settings.endless = n.endless;       /* new notes follow the last choice */
         recomputeDoc();
-        toast(n.endless ? 'Endless - one long page, always room below'
+        toast(n.endless ? 'Infinite - the page keeps going left, right and down'
                         : 'Pages');
         afterSettingChange();
       } },

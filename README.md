@@ -54,9 +54,12 @@ is outlined in blue. **Insert page here** adds a blank page and pushes
 everything below it down; **Delete this page** removes it (it asks first, and
 says how many marks are on it). Each is a single undo.
 
-**⋮ menu → Page type → Endless** makes the note one long page with no page
-breaks and always a screen of blank paper below the last line. New notes
-follow the last choice.
+**⋮ menu → Page type → Infinite** turns the note into an infinite canvas: no
+page breaks, and it keeps going left, right and down — there is always a
+screen of blank paper beyond your writing. The ruled lines and the margin
+rule carry on across it (Template and Margin line in the menu change them).
+Scroll sideways with two fingers side by side. New notes follow the last
+choice.
 
 ### Notebooks and folders
 

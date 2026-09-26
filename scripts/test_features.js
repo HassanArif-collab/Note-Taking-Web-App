@@ -1198,13 +1198,22 @@ check('...a scroll whose fingers drift apart still only scrolls',
       gd.geom().scrollY > 100 && Math.abs(gd.geom().zoom - 1) < 0.01,
       'scrollY ' + Math.round(gd.geom().scrollY) + ', zoom ' + gd.geom().zoom.toFixed(2));
 
-/* writing along the line with the side of the hand gliding beside the pen */
+/* writing along the line with the hand gliding with the pen: the palm sits
+   115-309px below the nib in the recordings, 180 here */
 var gw = gsApp(), gw0 = gw.strokes().length;
-gsPair(gw, 20, function (i) { return [300 + i * 5, 640 + 9 * Math.sin(i / 2)]; },
+gsPair(gw, 20, function (i) { return [300 + i * 5, 520 + 9 * Math.sin(i / 2)]; },
                function (i) { return [520 + i * 5, 700]; }, 40);
-check('Glove mode: a pen writing with the hand gliding beside it still writes',
-      gw.strokes().length === gw0 + 1 && gw.geom().scrollY === 0,
-      gw0 + ' -> ' + gw.strokes().length + ' strokes, scrollY ' + Math.round(gw.geom().scrollY));
+check('Glove mode: a pen writing with the palm gliding below it still writes',
+      gw.strokes().length === gw0 + 1 && gw.geom().scrollY === 0 && gw.geom().scrollX === 0,
+      gw0 + ' -> ' + gw.strokes().length + ' strokes, scroll ' +
+      Math.round(gw.geom().scrollX) + ',' + Math.round(gw.geom().scrollY));
+/* ...and with the side of the hand level beside a pen forming letters */
+var gv = gsApp(), gv0 = gv.strokes().length;
+gsPair(gv, 20, function (i) { return [300 + i * 5, 640 + 20 * Math.sin(i / 1.5)]; },
+               function (i) { return [520 + i * 5, 700]; }, 40);
+check('...and with the side of the hand level with a pen forming letters',
+      gv.strokes().length === gv0 + 1 && gv.geom().scrollX === 0,
+      gv0 + ' -> ' + gv.strokes().length + ' strokes, scrollX ' + Math.round(gv.geom().scrollX));
 
 /* a letter that starts downward, beside a palm creeping down as it settles */
 var gl = gsApp(), gl0 = gl.strokes().length;
@@ -1233,6 +1242,43 @@ gsPair(gw3, 20, function (i) { return [300 + i * 6, 420 + 4 * Math.sin(i)]; },
                 function (i) { return [900, 640]; }, 20);
 check('...but a pen writing beside a still contact far away does not',
       Math.abs(gw3.geom().zoom - 1) < 0.01, 'zoom ' + gw3.geom().zoom.toFixed(2));
+
+/* ---------- infinite page: it keeps going sideways too ---------- */
+function infApp() {
+  var a = gsApp();
+  a.clickMenu('Page type');
+  a.flushFrames();
+  return a;
+}
+var il = infApp();
+gsPair(il, 20, function (i) { return [300 + i * 14, 420]; },
+               function (i) { return [520 + i * 14, 430]; }, 20);
+check('Infinite page: two fingers carry it left of where the page began',
+      il.geom().scrollX < -150, 'scrollX ' + Math.round(il.geom().scrollX));
+var ir = infApp();
+gsPair(ir, 20, function (i) { return [700 - i * 14, 420]; },
+               function (i) { return [900 - i * 14, 430]; }, 20);
+check('...and right, past where the page used to end',
+      ir.geom().scrollX > 150, 'scrollX ' + Math.round(ir.geom().scrollX));
+var irW = ir.geom().docW;
+scPath(ir, 9, [[850, 500], [900, 520], [950, 505], [1000, 525]]);
+check('...and writing out at the right edge makes room for more',
+      ir.geom().docW > irW, irW + ' -> ' + ir.geom().docW);
+check('...and the page type says Infinite', ir.clickMenu('Infinite'));
+
+var ip = gsApp();
+gsPair(ip, 20, function (i) { return [700 - i * 14, 420]; },
+               function (i) { return [900 - i * 14, 430]; }, 20);
+check('on pages, sideways stops at the page edge', ip.geom().scrollX === 0,
+      'scrollX ' + Math.round(ip.geom().scrollX));
+
+/* a straight line drawn with the palm gliding along below the pen */
+var iw = infApp(), iw0 = iw.strokes().length;
+gsPair(iw, 20, function (i) { return [200 + i * 12, 420]; },
+               function (i) { return [320 + i * 12, 640]; }, 25);
+check('a pen with the palm below it, both moving sideways, still writes',
+      iw.strokes().length === iw0 + 1 && iw.geom().scrollX === 0,
+      iw0 + ' -> ' + iw.strokes().length + ' strokes, scrollX ' + Math.round(iw.geom().scrollX));
 
 /* ---------- scrolling and zooming with the other tools ----------
  * The hand tool threw on every move (a path it does not have), so it could
