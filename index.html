@@ -225,11 +225,17 @@ body.dark #nbActions button { color: #F2F3F5; }
   -webkit-align-items: center; align-items: center;
   -webkit-justify-content: center; justify-content: center;
 }
-.pw-it i { display: block; border-radius: 50%; }
+/* Centred by the button itself, not by flex. Safari 9 cannot make a
+   <button> a flex container (WebKit fixed it in Safari 11), so on the iPad
+   every dot here sat at the left of its button while the highlight circle
+   was drawn round the middle - the "offset" highlight. An inline-block in
+   a zero-height line is centred by any browser's own button layout. */
+.pw-it, .pslot, .tdot { font-size: 0; line-height: 0; text-align: center; }
+.pw-it i { display: inline-block; vertical-align: middle; border-radius: 50%; }
 .pw-col i { width: 26px; height: 26px; box-shadow: 0 0 0 1px rgba(255,255,255,0.28); }
 .pw-col.on i { box-shadow: 0 0 0 2px #202227, 0 0 0 4px #FFFFFF; }
 .pw-pen.on, .pw-w.on { background: rgba(255,255,255,0.16); }
-.pw-pen canvas { width: 30px; height: 18px; }
+.pw-pen canvas { width: 30px; height: 18px; vertical-align: middle; }
 .pw-more i {
   width: 26px; height: 26px;
   background: -webkit-linear-gradient(45deg, #E2231A, #F5D300, #36C0A1, #0381FE, #8E50E6);
@@ -279,7 +285,7 @@ body.dark #nbActions button { color: #F2F3F5; }
 }
 .pslot:active { background: #EFF0F2; }
 .pslot i {
-  display: block; border-radius: 50%;
+  display: inline-block; vertical-align: middle; border-radius: 50%;
   box-shadow: 0 0 0 1px rgba(0,0,0,0.12);
 }
 /* the one you are writing with wears a ring in its own colour, so the
@@ -349,7 +355,7 @@ body.dark .pslot.on i { box-shadow: 0 0 0 2px #1D1E22, 0 0 0 4px currentColor; }
   -webkit-justify-content: center; justify-content: center; padding: 0;
 }
 .tdot.on { background: rgba(3,129,254,0.12); }
-.tdot i { display: block; border-radius: 50%; }
+.tdot i { display: inline-block; vertical-align: middle; border-radius: 50%; }
 body.dark .tdot.on { background: rgba(97,168,255,0.18); }
 #thickLbl { font-size: 12px; color: #8C8C8C; margin-bottom: 2px; }
 #previewCanvas { display: block; margin: 4px auto 0 auto; }
