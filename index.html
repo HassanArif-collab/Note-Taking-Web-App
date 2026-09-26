@@ -1621,7 +1621,9 @@ var SC = {
   AUTO_PINCH:      30,     /* hand/lasso/eraser/text: the gap changed this much = zoom */
   AUTO_PAN:        40,     /* ...the fingers travelled this far first = scroll */
   PAN_ZOOM_PX:     60,     /* a scroll starts zooming once the gap changes by this */
-  PAN_ZOOM_FRAC:   0.2     /* ...or by this share of the gap, whichever is larger */
+  PAN_ZOOM_FRAC:   0.2,    /* ...or by this share of the gap, whichever is larger */
+  ZOOM_SLACK:      8,      /* the gap moves this far past where it settled before zoom follows */
+  ZOOM_SNAP:       0.06    /* a zoom ending within 6% of 100% settles at 100% */
 };
 
 /* ---------- element handles ---------- */
@@ -2666,7 +2668,11 @@ function requestRender() {
   renderQueued = true;
   window.requestAnimationFrame(render);
 }
+var gestureDirty = false;
 function render() {
+  /* before renderQueued is cleared, so the gesture's own requestRender
+     does not queue a second frame behind this one */
+  if (gestureDirty) { gestureDirty = false; applyGesture(Date.now()); }
   renderQueued = false;
   if (!ctx) return;
   /* what the page was busy with, so a slow frame can be blamed on
@@ -2697,7 +2703,7 @@ function render() {
     }
   }
   for (var id in inkNow) {
-    if (inkNow.hasOwnProperty(id)) renderStrokeFull(ctx, inkNow[id].stroke);
+    if (inkNow.hasOwnProperty(id) && !inkNow[id].held) renderStrokeFull(ctx, inkNow[id].stroke);
   }
   if (eraserTouchId !== null) drawEraserCursor(ctx);
   drawSelectionOverlays(ctx);
@@ -4491,6 +4497,7 @@ function beginTouch(touch, now, burst) {
     } else {
       st.state = 'palm';
       palmMemAdd(pt.x, pt.y, now);
+      if (settings.palmLevel === PALM_OFF) holdYoungInk(now);
     }
   } else if (settings.palmLevel === PALM_OFF) {
     st.state = 'ink';
@@ -4561,6 +4568,29 @@ function toolTwoFinger(touch, now) {
   traceGesture('engage', 2, Math.round(d), now);
   requestRender();
   return true;
+}
+
+/* GLOVE MODE: A LINE THAT FLASHED AND VANISHED.
+ * Every contact inks from its first sample, so the first finger of a
+ * two-finger gesture drew for 86 to 277ms (recorded) before the gesture
+ * was recognised and took the line back - a stroke flashing up and
+ * disappearing at the start of every zoom and scroll. A second finger
+ * landing that soon after is almost always a gesture, so the young line
+ * is not drawn while it is there. If no gesture comes of it, the line
+ * reappears, whole, the moment the other finger lifts. */
+function holdYoungInk(now) {
+  var k, o;
+  for (k in inkNow) {
+    if (!inkNow.hasOwnProperty(k)) continue;
+    o = touchStates[k];
+    if (o && now - o.t0 <= SC.GPAN_LAND) { inkNow[k].held = true; requestRender(); }
+  }
+}
+function releaseHeldInk() {
+  var k;
+  for (k in inkNow) {
+    if (inkNow.hasOwnProperty(k) && inkNow[k].held) { inkNow[k].held = false; requestRender(); }
+  }
 }
 
 function startInkRecord(st, now) {
@@ -5042,6 +5072,8 @@ function endTouch(touch, now, cancelled) {
   var st = touchStates[touch.identifier];
   if (!st) return;
   delete touchStates[touch.identifier];
+  /* the other finger went without making a gesture: show the line again */
+  if (st.kind === 'probe' && st.state === 'palm') releaseHeldInk();
 
   if (st.kind === 'zwplace') {
     if (!cancelled) {
@@ -5216,7 +5248,7 @@ function gestureMembers() {
   return out;
 }
 
-function engageGesture(ids, now, pairDist, kind, bothMoving) {
+function engageGesture(ids, now, pairDist, kind, bothMoving, fromD) {
   var c = gestureCentroid(true);
   if (!c) return;
   var i, o;
@@ -5236,7 +5268,14 @@ function engageGesture(ids, now, pairDist, kind, bothMoving) {
        work if my hands are far apart", and it was not a bug so much as a
        rule written on the assumption that nobody pinches with two hands. */
     wide: (pairDist || 0) >= SC.PINCH_MAX_SPAN && !bothMoving,
-    vx: 0, vy: 0, fromHand: false, key: null
+    vx: 0, vy: 0, fromHand: false, key: null,
+    /* A pinch zooms from the gap it STARTED at, not the one it was
+       recognised at. Recognising it takes a 45px change, and a real
+       anchored pinch did most of its spreading - 120px to 190 - in the
+       126ms before that; zooming only from there left the page behind
+       the fingers. The catch-up is spread over a few frames (see the
+       per-frame cap in applyGesture), so it follows rather than jumps. */
+    zd0: kind === 'pinch' ? (fromD || pairDist || null) : null, zd: pairDist || 0, z0: zoom
   };
   traceGesture('engage', ids.length, Math.round(pairDist || 0), now);
   for (i = 0; i < ids.length; i++) {
@@ -5373,7 +5412,7 @@ function tryPinch(now) {
      pen-and-palm pairs the rule exists for, the palm had moved 0 to 6. */
   var both = dist(a.csx, a.csy, a.cx, a.cy) >= SC.PINCH_BOTH &&
              dist(b.csx, b.csy, b.cx, b.cy) >= SC.PINCH_BOTH;
-  engageGesture([a.id, b.id], now, d, 'pinch', both);
+  engageGesture([a.id, b.id], now, d, 'pinch', both, pinchTrack.d0);
   pinchTrack = null;
   return true;
 }
@@ -5540,6 +5579,7 @@ function applyGesture(now) {
        happened. A flickering palm made that happen sixteen times in one
        twenty second scroll. */
     gesture.baseD = gesture.lastD;
+    gesture.zd0 = null;
     return;
   }
 
@@ -5561,7 +5601,11 @@ function applyGesture(now) {
        deciding it is a scroll. */
     if (gesture.kind === 'auto') {
       var spread = Math.abs(d - gesture.baseD);
-      if (spread >= SC.AUTO_PINCH && spread > gesture.sumC * 0.6) gesture.kind = 'pinch';
+      if (spread >= SC.AUTO_PINCH && spread > gesture.sumC * 0.6) {
+        gesture.kind = 'pinch';
+        /* zoom from where the fingers started, as a recognised pinch does */
+        gesture.zd0 = gesture.baseD; gesture.zd = d; gesture.z0 = zoom;
+      }
       else if (gesture.sumC >= SC.AUTO_PAN) gesture.kind = 'pan';
     }
     /* A scroll whose fingers then spread or close zooms from there, the way
@@ -5574,7 +5618,7 @@ function applyGesture(now) {
         Math.abs(d - gesture.baseD) > Math.max(SC.PAN_ZOOM_PX, gesture.baseD * SC.PAN_ZOOM_FRAC)) {
       gesture.kind = 'pinch';
       gesture.wide = false;     /* a scroll had both fingers moving to begin with */
-      gesture.lastD = d;        /* zoom from here: no jump for the spread so far */
+      gesture.zd0 = null;       /* zoom from here: no jump for the spread so far */
       traceGesture('pan-zoom', Math.round(gesture.baseD), Math.round(d), now);
     }
     /* Two fingers dragging the page apart by a few pixels is not a pinch.
@@ -5594,17 +5638,45 @@ function applyGesture(now) {
        sliding - which no longer scales. It was never reliably separable
        from a pen stroke beside a resting finger anyway, which is what the
        note above tryPinch has said all along. */
-    if (gesture.kind !== 'pinch') { gesture.lastD = d; }
-    else if (!gesture.wide && gesture.lastD > 30 && d > 30) {
-      /* no real pinch scales the page by more than a few percent in one
-         frame; anything larger is a bad measurement, not a gesture */
-      var f = lim(d / gesture.lastD, 0.85, 1.18);
-      var nz = lim(zoom * f, Z_MIN, Z_MAX);
-      var ax = (c.x - wrapRect.left) / zoom + scrollX;
-      var ay = (c.y - wrapRect.top) / zoom + scrollY;
-      zoom = nz;
-      scrollX = ax - (c.x - wrapRect.left) / zoom;
-      scrollY = ay - (c.y - wrapRect.top) / zoom;
+    if (gesture.kind !== 'pinch') { gesture.lastD = d; gesture.zd0 = null; }
+    else if (!gesture.wide && d > 30) {
+      /* ZOOM FROM THE WHOLE SPREAD, WITH SLACK.
+         The zoom used to be built up frame by frame, times the change in
+         the gap since the last one. Recorded, that shook the page: 375
+         reversals of direction in 720 updates of one zoom. Two causes.
+         Fingers moving together wobble their gap by a few px, and each
+         wobble became zoom. And at 60% or 260% the clamp threw away
+         whatever the fingers did past the limit, so every small wobble
+         back zoomed the page straight out of the limit again - it sat at
+         the floor pumping 0.603, 0.620, 0.603, 0.614...
+         Now the zoom is the zoom at the start times the whole spread since
+         (so past a limit it simply waits there), and the gap has slack:
+         it must move ZOOM_SLACK past where it last settled before the
+         zoom follows. Replayed, that took one recording from 117
+         reversals to 4 with the same reach. */
+      if (!gesture.zd0) { gesture.zd0 = gesture.zd = d; gesture.z0 = zoom; }
+      else if (d > gesture.zd + SC.ZOOM_SLACK) gesture.zd = d - SC.ZOOM_SLACK;
+      else if (d < gesture.zd - SC.ZOOM_SLACK) gesture.zd = d + SC.ZOOM_SLACK;
+      var raw = gesture.z0 * gesture.zd / gesture.zd0;
+      if (raw < Z_MIN || raw > Z_MAX) {
+        /* Past a limit, the limit becomes where the fingers are now, so the
+           first move back the other way zooms at once instead of first
+           having to undo everything pinched past the limit. The slack is
+           what keeps this from pumping: a wobble never moves zd. */
+        gesture.z0 = lim(raw, Z_MIN, Z_MAX);
+        gesture.zd0 = gesture.zd;
+      }
+      var target = lim(gesture.z0 * gesture.zd / gesture.zd0, Z_MIN, Z_MAX);
+      /* one frame never moves the zoom by much, so a single bad reading
+         cannot flash the page - it just gets there a frame later */
+      var nz = lim(target, zoom * 0.8, zoom * 1.25);
+      if (nz !== zoom) {
+        var ax = (c.x - wrapRect.left) / zoom + scrollX;
+        var ay = (c.y - wrapRect.top) / zoom + scrollY;
+        zoom = nz;
+        scrollX = ax - (c.x - wrapRect.left) / zoom;
+        scrollY = ay - (c.y - wrapRect.top) / zoom;
+      }
     }
     gesture.lastD = d;
   }
@@ -5630,6 +5702,18 @@ function gestureMemberEnd(now) {
   var vx = gesture ? gesture.vx : 0;
   var vy = gesture ? gesture.vy : 0;
   traceGesture('end', ms.length, 0, now);
+  if (gesture && gesture.kind === 'pinch' && zoom !== 1 && Math.abs(zoom - 1) < SC.ZOOM_SNAP) {
+    /* close to actual size is meant as actual size: settle there, keeping
+       what was under the fingers under the fingers */
+    var zsx = gesture.lastCx - wrapRect.left, zsy = gesture.lastCy - wrapRect.top;
+    var zax = zsx / zoom + scrollX, zay = zsy / zoom + scrollY;
+    zoom = 1;
+    scrollX = zax - zsx;
+    scrollY = zay - zsy;
+    clampScroll();
+    updateScrollPill();
+    requestRender();
+  }
   gesture = null;
   /* the selection's bar was hidden while the page moved under it */
   if (selection.length) { selBBox = selUnionBBox(); positionSelBar(); }
@@ -7731,11 +7815,17 @@ function onTouchMove(e) {
   }
   rigidGroupCheck(now);
   detectGesture(now);
-  applyGesture(now);
+  /* Applied once a frame, in render, not once per event. iOS sends a move
+     for one finger at a time in 38% of events during a two-finger gesture,
+     so per event the gap was measured with one finger moved and the other
+     not yet - up, then back - which the page showed as shaking. */
+  if (gesture) { gestureDirty = true; requestRender(); }
 }
 function onTouchEnd(e) {
   e.preventDefault();
   var now = Date.now();
+  /* the last movement belongs to the gesture before a finger leaves it */
+  if (gestureDirty) { gestureDirty = false; applyGesture(now); }
   var cancelled = (e.type === 'touchcancel');
   var ch = e.changedTouches;
   for (var i = 0; i < ch.length; i++) { traceTouch(cancelled ? 3 : 2, ch[i], now); endTouch(ch[i], now, cancelled); }

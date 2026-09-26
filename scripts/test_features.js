@@ -1256,6 +1256,79 @@ gsPair(gw3, 20, function (i) { return [300 + i * 6, 420 + 4 * Math.sin(i)]; },
 check('...but a pen writing beside a still contact far away does not',
       Math.abs(gw3.geom().zoom - 1) < 0.01, 'zoom ' + gw3.geom().zoom.toFixed(2));
 
+/* ---------- zoom that does not shake ----------
+ * Recorded: one 9.8 second zoom reversed direction 375 times in 720
+ * updates - the page shaking in and out - and sat at the 60% floor
+ * pumping 0.603, 0.620, 0.603, 0.614... */
+function zoomTrail(a, pa, pb, frames) {
+  var zs = [], i;
+  a.down(1, pa(0)[0], pa(0)[1]); a.tick(20); a.down(2, pb(0)[0], pb(0)[1]);
+  for (i = 1; i <= frames; i++) {
+    a.tick(16); a.moveTo(1, pa(i)[0], pa(i)[1]); a.moveTo(2, pb(i)[0], pb(i)[1]);
+    a.flushFrames(); zs.push(a.geom().zoom);
+  }
+  a.tick(16); a.up(1); a.up(2); a.tick(300); a.flushFrames();
+  return zs;
+}
+function reversals(zs) {
+  var rev = 0, dir = 0, prev = zs[0], k, dz, nd;
+  for (k = 1; k < zs.length; k++) {
+    dz = zs[k] - prev;
+    if (Math.abs(dz) < 0.002) continue;
+    nd = dz > 0 ? 1 : -1;
+    if (dir && nd !== dir) rev++;
+    dir = nd; prev = zs[k];
+  }
+  return rev;
+}
+/* a spread, then the fingers carry on moving together with their gap
+   wobbling a few pixels, as real fingers do */
+var zw1 = gsApp();
+var zw1z = zoomTrail(zw1,
+  function (i) { return i < 10 ? [400 - i * 6, 420] : [340 - (i - 10) * 3, 420 + (i - 10) * 6 + 4 * Math.sin(i * 1.7)]; },
+  function (i) { return i < 10 ? [520 + i * 6, 420] : [580 - (i - 10) * 3, 420 + (i - 10) * 6 - 4 * Math.sin(i * 1.3)]; }, 40);
+check('a zoom whose fingers wobble does not shake the page',
+      reversals(zw1z) <= 1 && zw1.geom().zoom > 1.1,
+      reversals(zw1z) + ' reversals, zoom ' + zw1.geom().zoom.toFixed(2));
+
+/* pinched far past the 60% floor, then wobbling: it stays put... */
+var zf = gsApp(), zfz = zoomTrail(zf,
+  function (i) { return i < 15 ? [200 + i * 18, 420] : [470 + 3 * Math.sin(i), 420]; },
+  function (i) { return i < 15 ? [800 - i * 18, 420] : [530 - 3 * Math.sin(i * 1.3), 420]; }, 40);
+check('at the 60% limit, wobbling fingers do not pump the zoom',
+      reversals(zfz.slice(15)) === 0 && Math.abs(zf.geom().zoom - 0.6) < 0.01,
+      reversals(zfz.slice(15)) + ' reversals, zoom ' + zf.geom().zoom.toFixed(2));
+/* ...but the first real spread back zooms in at once */
+var zb = gsApp(), zbz = zoomTrail(zb,
+  function (i) { return i < 15 ? [200 + i * 18, 420] : [470 - (i - 15) * 4, 420]; },
+  function (i) { return i < 15 ? [800 - i * 18, 420] : [530 + (i - 15) * 4, 420]; }, 25);
+check('...and spreading back from the limit zooms in straight away',
+      zbz[14] < 0.61 && zb.geom().zoom > 0.66, 'at the limit ' + zbz[14].toFixed(2) +
+      ', after 10 frames of spreading ' + zb.geom().zoom.toFixed(2));
+
+/* and the recording itself, replayed with the screen redrawing each frame */
+(function () {
+  var fs = require('fs'), p = require('path').join(__dirname, '..', 'traces', 'live-20260926-150201.json');
+  if (!fs.existsSync(p)) { console.log('  --   live-20260926-150201 missing, skipped'); return; }
+  var t = JSON.parse(fs.readFileSync(p, 'utf8'));
+  var a = H.load({ quiet: true, dpr: 2, viewW: t.viewW, viewH: t.viewH,
+    seed: { mathnotes_v4: JSON.stringify({ v: 4,
+      notebooks: [{ id: 'nb1', title: 'R', color: '#0381FE', notes: ['n1'] }],
+      notes: { n1: { id: 'n1', title: 'R', cr: 1, mod: 1, scroll: 0, strokes: [] } },
+      cur: { nb: 0, note: 'n1' }, set: { palmLevel: t.palmLevel, hand: 0 } }) } });
+  a.flushFrames();
+  var lastT = 0, next = 16.7, zs = [], i, r;
+  for (i = 0; i < t.samples.length; i++) {
+    r = t.samples[i];
+    if (typeof r[0] !== 'number') continue;
+    while (next <= r[4]) { a.tick(next - lastT); lastT = next; next += 16.7; a.flushFrames(); zs.push(a.geom().zoom); }
+    if (r[4] > lastT) { a.tick(r[4] - lastT); lastT = r[4]; }
+    if (r[0] === 0) a.down(r[1], r[2], r[3]); else if (r[0] === 1) a.moveTo(r[1], r[2], r[3]); else a.up(r[1], r[0] === 3);
+  }
+  check('the recorded shaking zoom replays without shaking (was 159 reversals)',
+        reversals(zs) <= 8, reversals(zs) + ' reversals');
+})();
+
 /* ---------- infinite page: it keeps going sideways too ---------- */
 function infApp() {
   var a = gsApp();

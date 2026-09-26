@@ -69,7 +69,8 @@ var z2 = zoomOf(p2);
 p2.stroke({ id: 1, x0: 200, y0: 500, x1: 320, y1: 500, speed: 0.35, keepDown: true });
 p2.down(10, 300, 200);
 p2.down(11, 500, 200);
-for (i = 1; i <= 25; i++) { p2.tick(16); p2.moveTo(10, 300 - i * 4, 200); p2.moveTo(11, 500 + i * 4, 200); }
+/* the page redraws every frame; a gesture moves the page once per frame */
+for (i = 1; i <= 25; i++) { p2.tick(16); p2.moveTo(10, 300 - i * 4, 200); p2.moveTo(11, 500 + i * 4, 200); p2.flushFrames(); }
 check('pinch works even while a stroke owns the pen', Math.abs(zoomOf(p2) - z2) > 0.02,
       z2 + ' -> ' + zoomOf(p2));
 p2.up(1); p2.up(10); p2.up(11);
