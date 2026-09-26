@@ -1329,6 +1329,34 @@ check('...and spreading back from the limit zooms in straight away',
         reversals(zs) <= 8, reversals(zs) + ' reversals');
 })();
 
+/* ---------- only the page with ink past its sides is wider ----------
+ * Written out past the edge on the infinite canvas, then back to pages:
+ * every page came out as wide as the one line that ran off the side. */
+function pgApp(strokes, endless) {
+  var a = H.load({ quiet: true, dpr: 2, viewW: 1024, viewH: 712,
+    seed: { mathnotes_v4: JSON.stringify({ v: 4,
+      notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
+      notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, endless: endless ? 1 : 0, strokes: strokes } },
+      cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
+  a.flushFrames();
+  return a;
+}
+function line(id, x0, x1, y) {
+  return { id: id, pen: 0, w: 2, color: '#000000', a: 1, ord: 1, pts: [[x0, y, 0], [(x0 + x1) / 2, y + 4, 16], [x1, y, 16]] };
+}
+var pw1 = pgApp([line('a', 100, 1900, 300), line('b', 100, 600, 1300), line('c', 100, 500, 2400)]);
+var pw1W = pw1.geom().pageW;
+check('back on pages, only the page with ink past its side is wider',
+      pw1W[0] > 1900 && pw1W[1] === 1024 && pw1W[2] === 1024, JSON.stringify(pw1W));
+check('...and sideways scrolling still reaches it', pw1.geom().docW > 1900, 'docW ' + pw1.geom().docW);
+var pw2 = pgApp([line('a', 100, 600, 300), line('b', -400, 500, 1300)]);
+check('...on whichever side the ink went',
+      pw2.geom().pageW[0] === 1024 && pw2.geom().pageW[1] > 1400, JSON.stringify(pw2.geom().pageW));
+var pw3 = pgApp([line('a', 100, 1900, 300), line('b', 100, 600, 1300)], true);
+pw3.clickMenu('Page type');
+check('switching an infinite note back to pages stretches just that page',
+      pw3.geom().pageW[0] > 1900 && pw3.geom().pageW[1] === 1024, JSON.stringify(pw3.geom().pageW));
+
 /* ---------- infinite page: it keeps going sideways too ---------- */
 function infApp() {
   var a = gsApp();
