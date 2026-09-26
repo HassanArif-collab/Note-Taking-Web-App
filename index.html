@@ -7661,6 +7661,44 @@ canvasWrap.addEventListener('touchend', onTouchEnd, false);
 canvasWrap.addEventListener('touchcancel', onTouchEnd, false);
 document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
 
+/* EVERY BUTTON ANSWERS WHEN THE FINGER LIFTS.
+ *
+ * iOS holds a tap for about 300ms before it becomes a click, waiting to
+ * see whether a second tap makes it a double-tap zoom. The viewport says
+ * the page cannot zoom, which is meant to switch that wait off, but a web
+ * app launched from the home screen on iOS 9 keeps it - so picking a tool
+ * landed a beat after the finger had already left: "it gets selected a
+ * bit late". Selecting the lasso does nothing slower than swapping a few
+ * class names; the delay was never the app's work.
+ *
+ * So a tap that lifts where it landed clicks its button right then, and
+ * the late synthetic click is cancelled. One listener covers every button,
+ * including the ones built later (menu rows, the wheel, favourites). A
+ * finger that travelled - scrolling a menu, dragging the wheel's bubble -
+ * is not a tap and is left alone. */
+var fastTap = null;
+function buttonOf(el) {
+  while (el && el !== document) {
+    if (el.tagName === 'BUTTON') return el;
+    el = el.parentNode;
+  }
+  return null;
+}
+document.addEventListener('touchstart', function (e) {
+  var b = e.touches.length === 1 ? buttonOf(e.target) : null;
+  var t = e.changedTouches[0];
+  fastTap = b ? { b: b, x: t.clientX, y: t.clientY, t: Date.now() } : null;
+}, false);
+document.addEventListener('touchend', function (e) {
+  var ft = fastTap, t = e.changedTouches[0];
+  fastTap = null;
+  if (!ft || !t || Date.now() - ft.t > 700) return;
+  if (Math.abs(t.clientX - ft.x) > 10 || Math.abs(t.clientY - ft.y) > 10) return;
+  if (buttonOf(document.elementFromPoint(t.clientX, t.clientY)) !== ft.b) return;
+  e.preventDefault();
+  ft.b.click();
+}, false);
+
 /* mouse support for desktop testing (no palm rejection) */
 var mouseId = 'mouse';
 canvasWrap.addEventListener('mousedown', function (e) {
@@ -8239,8 +8277,8 @@ function buildWheel() {
   more.addEventListener('click', function () {
     setWheel(false);
     if (tool !== 'pen') setTool('pen');
-    applyPenUI();
     penPalette.style.display = 'block';
+    applyPenUI();
     syncScrim();
   });
   disc.appendChild(more);
@@ -8310,6 +8348,7 @@ function initWheel() {
   /* drag the bubble up or down to where the hand rests */
   bub.addEventListener('touchstart', function (e) {
     var t = e.changedTouches[0];
+    pwDragged = false;   /* a drag leaves no click behind to swallow any more */
     pwDrag = { y0: t.clientY, top0: parseFloat(byId('penWheel').style.top) || 0, moved: false };
   });
   bub.addEventListener('touchmove', function (e) {
@@ -8379,8 +8418,8 @@ function useSlot(i) {
       return;
     }
     closePanels();
-    applyPenUI();
     penPalette.style.display = 'block';
+    applyPenUI();
     syncScrim();
     return;
   }
@@ -8406,6 +8445,14 @@ function applyPenUI() {
     settings.penCfg[settings.pen].c = settings.color;
     settings.penCfg[settings.pen].w = settings.widthStep;
   }
+  penBadge.style.background = settings.color;
+  paintSlots();
+  paintWheel();
+  /* The panel is six small drawings - five pen previews and the stroke
+     preview - and this runs on every pen change, including picking the pen
+     up, while the panel is shut. They are drawn when it can be seen: the
+     places that open it show it first and then call this. */
+  if (penPalette.style.display !== 'block') return;
   var chips = penChips.children;
   for (var i = 0; i < chips.length; i++) {
     chips[i].className = 'pen-chip' + (i === settings.pen ? ' on' : '');
@@ -8416,10 +8463,7 @@ function applyPenUI() {
   for (var k = 0; k < sws.length; k++) {
     sws[k].className = 'sw' + (sws[k].getAttribute('data-color') === settings.color ? ' on' : '');
   }
-  penBadge.style.background = settings.color;
   paintThickDots();
-  paintSlots();
-  paintWheel();
   drawSquiggle(previewCanvas, settings.pen, currentPenWidth(), settings.color);
   applyShapeUI();
 }
@@ -8695,8 +8739,8 @@ penBtn.addEventListener('click', function () {
     syncScrim();
     return;
   }
-  applyPenUI();
   penPalette.style.display = 'block';
+  applyPenUI();
   syncScrim();
 });
 selectBtn.addEventListener('click', function () { setTool('select'); });
