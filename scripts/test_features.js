@@ -1191,12 +1191,25 @@ check('Glove mode: two fingers dragged up scroll the page', gs.geom().scrollY > 
 check('...and leave no line behind', gs.strokes().length === gs0,
       gs0 + ' -> ' + gs.strokes().length + ' strokes');
 
+/* recorded scrolls drift apart by up to 43px on a 292px pair */
 var gd = gsApp();
-gsPair(gd, 30, function (i) { return [400 - i * 2, 600 - i * 10]; },
-               function (i) { return [650 + i * 2, 600 - i * 10]; }, 25);
-check('...a scroll whose fingers drift apart still only scrolls',
+gsPair(gd, 30, function (i) { return [400 - i * 0.8, 600 - i * 10]; },
+               function (i) { return [700 + i * 0.8, 600 - i * 10]; }, 25);
+check('...a scroll whose fingers drift apart as much as real ones still only scrolls',
       gd.geom().scrollY > 100 && Math.abs(gd.geom().zoom - 1) < 0.01,
       'scrollY ' + Math.round(gd.geom().scrollY) + ', zoom ' + gd.geom().zoom.toFixed(2));
+
+/* ...but spreading the fingers mid-scroll zooms, like every tablet app */
+var gsz = gsApp();
+gsPair(gsz, 30, function (i) { return i <= 12 ? [400, 600 - i * 10] : [400 - (i - 12) * 7, 480]; },
+                function (i) { return i <= 12 ? [700, 600 - i * 10] : [700 + (i - 12) * 7, 480]; }, 28);
+check('spreading two fingers in the middle of a scroll zooms in',
+      gsz.geom().scrollY > 50 && gsz.geom().zoom > 1.1,
+      'scrollY ' + Math.round(gsz.geom().scrollY) + ', zoom ' + gsz.geom().zoom.toFixed(2));
+var gsc = gsApp();
+gsPair(gsc, 30, function (i) { return i <= 12 ? [300, 600 - i * 10] : [300 + (i - 12) * 8, 480]; },
+                function (i) { return i <= 12 ? [800, 600 - i * 10] : [800 - (i - 12) * 8, 480]; }, 28);
+check('...and closing them zooms out', gsc.geom().zoom < 0.9, 'zoom ' + gsc.geom().zoom.toFixed(2));
 
 /* writing along the line with the hand gliding with the pen: the palm sits
    115-309px below the nib in the recordings, 180 here */

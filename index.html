@@ -225,17 +225,23 @@ body.dark #nbActions button { color: #F2F3F5; }
   -webkit-align-items: center; align-items: center;
   -webkit-justify-content: center; justify-content: center;
 }
-/* Centred by the button itself, not by flex. Safari 9 cannot make a
-   <button> a flex container (WebKit fixed it in Safari 11), so on the iPad
-   every dot here sat at the left of its button while the highlight circle
-   was drawn round the middle - the "offset" highlight. An inline-block in
-   a zero-height line is centred by any browser's own button layout. */
-.pw-it, .pslot, .tdot { font-size: 0; line-height: 0; text-align: center; }
-.pw-it i { display: inline-block; vertical-align: middle; border-radius: 50%; }
+/* CENTRED BY POSITION, NOT BY THE BUTTON'S OWN LAYOUT.
+   Safari 9 lays out a <button>'s insides its own way: it cannot be a flex
+   container (WebKit fixed that in Safari 11), and relying on its text
+   centring instead still left the dots and icons off-centre on the iPad
+   while every desktop browser drew them dead centre. Pinned at 50%/50% of
+   the button and pulled back by half their own size, they land in the same
+   place in every browser - no flex, no line box, no text alignment involved. */
+.pslot, .tdot { position: relative; }
+.pw-it i, .pslot i, .tdot i {
+  position: absolute; left: 50%; top: 50%; display: block; border-radius: 50%;
+  -webkit-transform: translate(-50%, -50%); transform: translate(-50%, -50%);
+}
+.tb-btn svg { position: absolute; left: 50%; top: 50%; margin: -12px 0 0 -12px; }
 .pw-col i { width: 26px; height: 26px; box-shadow: 0 0 0 1px rgba(255,255,255,0.28); }
 .pw-col.on i { box-shadow: 0 0 0 2px #202227, 0 0 0 4px #FFFFFF; }
 .pw-pen.on, .pw-w.on { background: rgba(255,255,255,0.16); }
-.pw-pen canvas { width: 30px; height: 18px; vertical-align: middle; }
+.pw-pen canvas { position: absolute; left: 50%; top: 50%; width: 30px; height: 18px; margin: -9px 0 0 -15px; }
 .pw-more i {
   width: 26px; height: 26px;
   background: -webkit-linear-gradient(45deg, #E2231A, #F5D300, #36C0A1, #0381FE, #8E50E6);
@@ -284,10 +290,7 @@ body.dark #nbActions button { color: #F2F3F5; }
   border-radius: 10px;
 }
 .pslot:active { background: #EFF0F2; }
-.pslot i {
-  display: inline-block; vertical-align: middle; border-radius: 50%;
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.12);
-}
+.pslot i { box-shadow: 0 0 0 1px rgba(0,0,0,0.12); }
 /* the one you are writing with wears a ring in its own colour, so the
    toolbar says what the next stroke will look like before you make it */
 .pslot.on i { box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4px currentColor; }
@@ -355,7 +358,7 @@ body.dark .pslot.on i { box-shadow: 0 0 0 2px #1D1E22, 0 0 0 4px currentColor; }
   -webkit-justify-content: center; justify-content: center; padding: 0;
 }
 .tdot.on { background: rgba(3,129,254,0.12); }
-.tdot i { display: inline-block; vertical-align: middle; border-radius: 50%; }
+
 body.dark .tdot.on { background: rgba(97,168,255,0.18); }
 #thickLbl { font-size: 12px; color: #8C8C8C; margin-bottom: 2px; }
 #previewCanvas { display: block; margin: 4px auto 0 auto; }
@@ -1616,7 +1619,9 @@ var SC = {
   GPAN_LEVEL:      110,    /* sideways: the two no more than this far apart vertically */
   PINCH_BOTH:      12,     /* a wide pinch zooms only if BOTH contacts moved this far */
   AUTO_PINCH:      30,     /* hand/lasso/eraser/text: the gap changed this much = zoom */
-  AUTO_PAN:        40      /* ...the fingers travelled this far first = scroll */
+  AUTO_PAN:        40,     /* ...the fingers travelled this far first = scroll */
+  PAN_ZOOM_PX:     60,     /* a scroll starts zooming once the gap changes by this */
+  PAN_ZOOM_FRAC:   0.2     /* ...or by this share of the gap, whichever is larger */
 };
 
 /* ---------- element handles ---------- */
@@ -5559,6 +5564,19 @@ function applyGesture(now) {
       if (spread >= SC.AUTO_PINCH && spread > gesture.sumC * 0.6) gesture.kind = 'pinch';
       else if (gesture.sumC >= SC.AUTO_PAN) gesture.kind = 'pan';
     }
+    /* A scroll whose fingers then spread or close zooms from there, the way
+       every tablet app does. The old reason it could not - a resting hand's
+       contacts swapping under the gesture looked like a spread - is handled
+       now: a change of members rebases baseD above. The dead zone is wider
+       than any drift in the recorded scrolls (at most 59px, or 24% of a
+       close pair), so a plain scroll still only scrolls. */
+    if (gesture.kind === 'pan' && gesture.baseD > 30 &&
+        Math.abs(d - gesture.baseD) > Math.max(SC.PAN_ZOOM_PX, gesture.baseD * SC.PAN_ZOOM_FRAC)) {
+      gesture.kind = 'pinch';
+      gesture.wide = false;     /* a scroll had both fingers moving to begin with */
+      gesture.lastD = d;        /* zoom from here: no jump for the spread so far */
+      traceGesture('pan-zoom', Math.round(gesture.baseD), Math.round(d), now);
+    }
     /* Two fingers dragging the page apart by a few pixels is not a pinch.
        A scroll engages through the pan branch, and zoom used to be applied
        from any change in separation at all - so every two-finger scroll
@@ -7079,6 +7097,34 @@ function traceUpload(obj, done) {
   } catch (e2) { done(false); }
 }
 
+/* WHERE THINGS LANDED, MEASURED ON THE DEVICE ITSELF.
+ * Safari 9 lays out a button's insides differently from every browser the
+ * app can be checked in on the PC, and "it is moved to the right" cannot
+ * be fixed from a description. Opened from the test server, the page
+ * measures its own toolbar, favourites, width dots and pen wheel once each
+ * and sends the numbers: every item's box, and how far its contents sit
+ * from that box's centre (dx, dy - both 0 when centred). */
+var layoutSent = {};
+function layoutReport(where) {
+  if (!canUpload() || layoutSent[where] || !document.querySelectorAll) return;
+  var out = [], list = document.querySelectorAll('.tb-btn, .pslot, .tdot, .pw-it'), i, b, c, rb, rc;
+  for (i = 0; i < list.length; i++) {
+    b = list[i];
+    c = b.querySelector('svg') || b.querySelector('canvas') || b.querySelector('i');
+    rb = b.getBoundingClientRect();
+    if (!c || !rb.width) continue;
+    rc = c.getBoundingClientRect();
+    out.push([b.id || b.className, Math.round(rb.left), Math.round(rb.top),
+              Math.round(rb.width), Math.round(rb.height),
+              Math.round(rc.left + rc.width / 2 - rb.left - rb.width / 2),
+              Math.round(rc.top + rc.height / 2 - rb.top - rb.height / 2)]);
+  }
+  if (!out.length) return;          /* not on screen yet: try again next time */
+  layoutSent[where] = 1;
+  traceUpload({ label: 'layout-' + where, ua: navigator.userAgent, dpr: window.devicePixelRatio || 1,
+                w: window.innerWidth, h: window.innerHeight, items: out }, function () {});
+}
+
 function drillBanner(txt, cls) {
   var b = byId('trainBanner');
   if (!b) return;
@@ -7902,6 +7948,7 @@ function openNote(id) {
   resizeView();
   applyPalmUI();
   saveSoon();
+  setTimeout(function () { layoutReport('toolbar'); }, 1200);
 }
 
 function goHome() {
@@ -8376,6 +8423,7 @@ function setWheel(open) {
   pwOpen = !!open;
   pwLayout();
   paintWheel();
+  if (pwOpen) setTimeout(function () { layoutReport('wheel'); }, 500);
 }
 
 /* where the wheel sits: the margin away from the writing hand, at the
@@ -8505,6 +8553,7 @@ function applyPenUI() {
      up, while the panel is shut. They are drawn when it can be seen: the
      places that open it show it first and then call this. */
   if (penPalette.style.display !== 'block') return;
+  setTimeout(function () { layoutReport('palette'); }, 300);
   var chips = penChips.children;
   for (var i = 0; i < chips.length; i++) {
     chips[i].className = 'pen-chip' + (i === settings.pen ? ' on' : '');
