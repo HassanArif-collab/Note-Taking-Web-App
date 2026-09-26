@@ -20,10 +20,15 @@ thickness, with 24 colours to choose from.
 
 - **Three favourite pens** sit in the toolbar, each holding pen, colour and
   width together. Tap one to write with it; tap the one you hold to change it.
-- **The pen wheel** — the dark bubble at the page edge (Samsung's "pens in
-  pop-up view"). Tap it: pens, six widths and colours on one disc, one tap
-  each. Start writing and it closes; a tap on the page just closes it. Drag
-  the bubble up or down. It sits on the side away from your writing hand.
+- **Pen pop-up** — hold the pen still for a moment (Glove mode) and a disc
+  opens at the nib, like Samsung's S Pen button: the pen in the middle, its
+  colour on the right, its width on the left, eraser and lasso below. Tap the
+  middle to fan out the pens, the colour for a ring of colours (drag round to
+  turn it), the width for the widths. Drag it to a side and it docks there
+  and stays while you write. "Hold pen for pop-up" in the menu turns it off.
+- **Pen panel** — the pen button opens Samsung's layout: the pens standing in
+  a rack with a sample of the stroke above the one in hand, a size slider
+  with - and +, and a row of colours with dots for more pages.
 - **Scribble to erase** — scratch back and forth over writing and it goes.
   Undo once to get it back with the scribble kept as ink; twice to remove
   the scribble too. Shading under a curve does not erase the curve.

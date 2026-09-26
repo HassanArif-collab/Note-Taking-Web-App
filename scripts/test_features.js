@@ -1005,8 +1005,7 @@ check('tapping the favourite you are using opens it for editing',
 
 /* and a change made there belongs to that favourite from then on */
 (function () {
-  var dots = fp.els.thickDots;
-  dots.children[5]._fire("click", {});
+  for (var fq = 0; fq < 5; fq++) fp.els.sizeMore._fire("click", {});
   var after = fp.pen();
   check('a width chosen in the panel is kept by that favourite',
         after.slots[2].w === 5 && after.w === 5,
@@ -1437,41 +1436,94 @@ check('eraser tool: two fingers scroll, and rub nothing out',
       le.geom().scrollY > 150 && le.strokes().length === le0,
       'scrollY ' + Math.round(le.geom().scrollY) + ', ' + (le0 - le.strokes().length) + ' erased');
 
-/* ---------- pen wheel (Samsung's "pens in pop-up view") ----------
- * Pens on the inner ring, six widths in the middle, colours on the rim:
- * children 0-4, 5-10, 11-21, then the all-colours button. */
+/* ---------- pen pop-up: hold the pen still (Samsung's S Pen button) ---------- */
+function holdOpen(a, id, x, y) { a.down(id, x, y); a.tick(650); a.win.__mnHold(); a.flushFrames(); }
+function discDrag(a, x0, y0, x1, y1) {
+  var d = a.els.ppDisc, ev = function (x, y) {
+    return { changedTouches: [{ clientX: x, clientY: y }], target: d, preventDefault: function () {} };
+  };
+  d._fire('touchstart', ev(x0, y0));
+  d._fire('touchmove', ev((x0 + x1) / 2, (y0 + y1) / 2));
+  d._fire('touchmove', ev(x1, y1));
+  d._fire('touchend', ev(x1, y1));
+}
 
-var pw = scApp();
-pw.els.pwBubble._fire('click', {});
-check('the pen wheel opens from its bubble at the page edge',
-      /open/.test(pw.els.penWheel.className), pw.els.penWheel.className);
-check('...with every pen, six widths and the colours on it',
-      pw.els.pwDisc.children.length === 5 + 6 + 11 + 1,
-      pw.els.pwDisc.children.length + ' items');
-pw.els.pwDisc.children[13]._fire('click', {});           /* red */
-pw.els.pwDisc.children[10]._fire('click', {});           /* thickest */
-check('a colour and a width are one tap each, and the wheel stays open for both',
-      pw.pen().color === '#E2231A' && pw.pen().w === 5 && /open/.test(pw.els.penWheel.className),
-      pw.pen().color + ' width ' + pw.pen().w + ' ' + pw.els.penWheel.className);
-var pw0 = pw.strokes().length;
-scPath(pw, 5, [[300, 500], [340, 520], [380, 505], [420, 530]]);
-check('writing closes the wheel and the stroke still lands, in the new colour',
-      !/open/.test(pw.els.penWheel.className) && pw.strokes().length === pw0 + 1 &&
-      pw.strokes()[pw0].color === '#E2231A',
-      pw.els.penWheel.className + ', ' + pw.strokes().length + ' strokes');
+var pp = scApp(), pp0 = pp.strokes().length;
+holdOpen(pp, 1, 500, 400);
+check('holding the pen still opens the pen pop-up at the nib',
+      pp.pen().pop === 'float' && pp.els.penPop.style.left === '500px' && pp.els.penPop.style.top === '400px',
+      pp.pen().pop + ' at ' + pp.els.penPop.style.left + ',' + pp.els.penPop.style.top);
+pp.up(1); pp.tick(60); pp.flushFrames();
+check('...and lifting the pen leaves no dot behind', pp.strokes().length === pp0 && pp.pen().pop === 'float',
+      (pp.strokes().length - pp0) + ' marks, pop ' + pp.pen().pop);
+pp.els.ppCol._fire('click', {});
+check('the colour dot opens the ring of colours', pp.pen().pop === 'float col', pp.pen().pop);
+pp.els.ppCols.children[4]._fire('click', {});
+check('...one tap picks a colour and folds the ring away, the pop-up stays',
+      pp.pen().color === '#E2231A' && pp.pen().pop === 'float', pp.pen().color + ' ' + pp.pen().pop);
+pp.els.ppSize._fire('click', {});
+pp.els.ppWs.children[5]._fire('click', {});
+check('the width dot opens the widths, one tap each', pp.pen().w === 5 && pp.pen().pop === 'float', 'w ' + pp.pen().w);
+pp.els.ppCore._fire('click', {});
+check('the pen in the middle fans out the pens', pp.pen().pop === 'float pens', pp.pen().pop);
+pp.els.ppPens.children[3]._fire('click', {});
+check('...and a pen from the fan is the one in hand', pp.pen().pen === 3, 'pen ' + pp.pen().pen);
+var pp1 = pp.strokes().length;
+scPath(pp, 5, [[300, 500], [340, 520], [380, 505], [420, 530]]);
+check('writing closes the floating pop-up and the stroke still lands',
+      pp.pen().pop === '' && pp.strokes().length === pp1 + 1, pp.pen().pop + ', ' + (pp.strokes().length - pp1) + ' strokes');
 
-pw.els.pwBubble._fire('click', {});
-var pwT = pw.strokes().length;
-pw.down(6, 600, 400); pw.tick(80); pw.up(6); pw.tick(500); pw.flushFrames();
-check('a tap on the page just closes the wheel - no dot to undo',
-      !/open/.test(pw.els.penWheel.className) && pw.strokes().length === pwT,
-      pw.strokes().length - pwT + ' dots left');
+var pd = scApp(), pd0 = pd.strokes().length;
+pd.down(1, 400, 400); pd.tick(450); pd.win.__mnHold(); pd.up(1); pd.tick(400); pd.flushFrames();
+check('a dot held for 450ms is still a dot, not the pop-up', pd.pen().pop === '' && pd.strokes().length === pd0 + 1,
+      pd.pen().pop + ', ' + (pd.strokes().length - pd0) + ' marks');
+holdOpen(pd, 2, 300, 450);
+for (var pk = 1; pk <= 8; pk++) { pd.tick(16); pd.moveTo(2, 300 + pk * 10, 450 + pk * 3); }
+pd.tick(16); pd.up(2); pd.tick(150); pd.flushFrames();
+var pdS = pd.strokes()[pd.strokes().length - 1];
+check('a pause before writing: the pop-up gives way and the whole stroke is kept',
+      pd.pen().pop === '' && pd.strokes().length === pd0 + 2 && pdS && pdS.pts[0][0] < 305,
+      pd.pen().pop + ', ' + (pd.strokes().length - pd0) + ' marks, starts at ' + (pdS ? Math.round(pdS.pts[0][0]) : '-'));
 
-pw.els.pwBubble._fire('click', {});
-pw.els.pwDisc.children[3]._fire('click', {});
-check('a pen type from the wheel', pw.pen().pen === 3, 'pen ' + pw.pen().pen);
+var pm = scApp({ palmLevel: 2 });
+holdOpen(pm, 1, 500, 400);
+check('with palm rejection on, a still contact does not open it (a resting palm would)', pm.pen().pop === '', pm.pen().pop);
 
-check('the wheel sits on the side away from a left hand', /right/.test(scApp({ hand: 1 }).els.penWheel.className));
+var pe = scApp();
+holdOpen(pe, 1, 500, 400); pe.up(1); pe.tick(50);
+pe.els.ppErase._fire('click', {});
+check('eraser from the pop-up, which then gets out of the way', pe.pen().tool === 'eraser' && pe.pen().pop === '',
+      pe.pen().tool + ' ' + pe.pen().pop);
+
+var pk2 = scApp();
+holdOpen(pk2, 1, 500, 400); pk2.up(1); pk2.tick(50);
+discDrag(pk2, 500, 400, 30, 420);
+check('dragged to the left edge it docks there', pk2.pen().pop === 'dock1' && pk2.els.penPop.style.left === '34px',
+      pk2.pen().pop + ' at ' + pk2.els.penPop.style.left);
+var pk3 = pk2.strokes().length;
+scPath(pk2, 7, [[400, 500], [440, 520], [480, 505], [520, 530]]);
+check('...and stays up while you write', pk2.pen().pop === 'dock1' && pk2.strokes().length === pk3 + 1,
+      pk2.pen().pop + ', ' + (pk2.strokes().length - pk3) + ' strokes');
+discDrag(pk2, 34, 420, 520, 420);
+check('dragged back out it floats again', pk2.pen().pop === 'float', pk2.pen().pop);
+
+/* the toolbar's pen panel, laid out as Samsung's */
+var pl = scApp();
+pl.els.penBtn._fire('click', {});
+check('the pen button opens the pen panel', pl.pen().palette === 'block', pl.pen().palette);
+check('...the pen in hand stands raised in the rack', /on/.test(pl.els.penRack.children[0].className) &&
+      !/on/.test(pl.els.penRack.children[1].className), pl.els.penRack.children[0].className);
+pl.els.sizeMore._fire('click', {}); pl.els.sizeMore._fire('click', {});
+check('+ steps the width up, and the knob shows it', pl.pen().w === 4 && String(pl.els.sizeKnob.textContent) === '5',
+      'w ' + pl.pen().w + ', knob ' + pl.els.sizeKnob.textContent);
+pl.els.sizeLess._fire('click', {});
+check('- steps it back down', pl.pen().w === 3, 'w ' + pl.pen().w);
+pl.els.penRack.children[3]._fire('click', {});
+check('a pen from the rack', pl.pen().pen === 3 && /on/.test(pl.els.penRack.children[3].className), 'pen ' + pl.pen().pen);
+pl.els.colorPages.children[2]._fire('click', {});
+check('the colour dots turn to another page of colours',
+      pl.els.colorRow.children[16].style.display === '' && pl.els.colorRow.children[0].style.display === 'none',
+      pl.els.colorRow.children[16].style.display + '/' + pl.els.colorRow.children[0].style.display);
 
 /* ---------- copy, cut and paste ---------- */
 function lassoAround(a, x0, y0, x1, y1) {
