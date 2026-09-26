@@ -1234,6 +1234,49 @@ gsPair(gw3, 20, function (i) { return [300 + i * 6, 420 + 4 * Math.sin(i)]; },
 check('...but a pen writing beside a still contact far away does not',
       Math.abs(gw3.geom().zoom - 1) < 0.01, 'zoom ' + gw3.geom().zoom.toFixed(2));
 
+/* ---------- scrolling and zooming with the other tools ----------
+ * The hand tool threw on every move (a path it does not have), so it could
+ * not scroll; and with the lasso, eraser or text tool the gesture engine
+ * never ran, so the page could not be moved without changing tools. */
+
+function toolApp(btn) {
+  var a = gsApp();
+  a.els[btn]._fire('click', {});
+  return a;
+}
+var th = toolApp('handBtn');
+th.down(1, 450, 600);
+for (var thi = 1; thi <= 20; thi++) { th.tick(16); th.moveTo(1, 450, 600 - thi * 12); th.flushFrames(); }
+th.tick(16); th.up(1); th.tick(300); th.flushFrames();
+check('the hand tool drags the page again', th.geom().scrollY > 150,
+      'scrollY ' + Math.round(th.geom().scrollY));
+
+var tz = toolApp('handBtn');
+gsPair(tz, 20, function (i) { return [450 - i * 6, 420]; },
+               function (i) { return [560 + i * 6, 420]; }, 20);
+check('...and two fingers spread with it zoom', tz.geom().zoom > 1.1, 'zoom ' + tz.geom().zoom.toFixed(2));
+
+var ls = toolApp('selectBtn'), ls0 = ls.strokes().length;
+gsPair(ls, 25, function (i) { return [400, 600 - i * 14]; },
+               function (i) { return [520, 600 - i * 14]; }, 20);
+check('lasso tool: two fingers scroll the page', ls.geom().scrollY > 150 &&
+      Math.abs(ls.geom().zoom - 1) < 0.01, 'scrollY ' + Math.round(ls.geom().scrollY) +
+      ', zoom ' + ls.geom().zoom.toFixed(2));
+var lz = toolApp('selectBtn');
+gsPair(lz, 25, function (i) { return [450 - i * 6, 420]; },
+               function (i) { return [560 + i * 6, 420]; }, 20);
+check('lasso tool: two fingers spreading zoom', lz.geom().zoom > 1.1, 'zoom ' + lz.geom().zoom.toFixed(2));
+lassoAround(lz, 10, 110, 1010, 760);
+check('...and one finger still draws a lasso', lz.els.selBar.style.display === 'block',
+      'selection bar ' + lz.els.selBar.style.display);
+
+var le = toolApp('eraserBtn'), le0 = le.strokes().length;
+gsPair(le, 25, function (i) { return [240, 600 - i * 14]; },
+               function (i) { return [330, 600 - i * 14]; }, 20);
+check('eraser tool: two fingers scroll, and rub nothing out',
+      le.geom().scrollY > 150 && le.strokes().length === le0,
+      'scrollY ' + Math.round(le.geom().scrollY) + ', ' + (le0 - le.strokes().length) + ' erased');
+
 /* ---------- pen wheel (Samsung's "pens in pop-up view") ----------
  * Pens on the inner ring, six widths in the middle, colours on the rim:
  * children 0-4, 5-10, 11-21, then the all-colours button. */

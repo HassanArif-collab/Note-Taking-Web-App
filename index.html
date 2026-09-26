@@ -1606,7 +1606,9 @@ var SC = {
   GPAN_COS:        0.85,   /* ...in the same direction, within ~30 degrees */
   GPAN_RATIO:      1.8,    /* ...and about as far as each other */
   GPAN_STRAIGHT:   0.75,   /* ...along nearly straight paths */
-  PINCH_BOTH:      12      /* a wide pinch zooms only if BOTH contacts moved this far */
+  PINCH_BOTH:      12,     /* a wide pinch zooms only if BOTH contacts moved this far */
+  AUTO_PINCH:      30,     /* hand/lasso/eraser/text: the gap changed this much = zoom */
+  AUTO_PAN:        40      /* ...the fingers travelled this far first = scroll */
 };
 
 /* ---------- element handles ---------- */
@@ -4309,11 +4311,17 @@ function beginTouch(touch, now, burst) {
     if (!gesture) {
       gesture = {
         lastCx: touch.clientX, lastCy: touch.clientY,
-        lastD: 0, lastT: now, vx: 0, vy: 0, fromHand: true
+        lastD: 0, lastT: now, vx: 0, vy: 0, fromHand: true, sumC: 0
       };
+    } else if (gesture.fromHand && liveTouchCount() === 2) {
+      /* a second finger: from here it is a scroll or a zoom, by how it moves */
+      gesture.kind = 'auto';
+      gesture.sumC = 0;
     }
     return;
   }
+
+  if ((tool === 'select' || tool === 'text' || tool === 'eraser') && toolTwoFinger(touch, now)) return;
 
   /* TEXT TOOL: record a tap candidate; the editor opens on
      touchend only if it was a quick, small, deliberate tap. */
@@ -4379,7 +4387,7 @@ function beginTouch(touch, now, burst) {
   if (tool === 'eraser') {
     /* eraser is movement-gated so a resting palm cannot erase: it
        becomes live after 3 px of travel (a deliberate wipe) */
-    touchStates[id] = { kind: 'erase', id: id, x: pt.x, y: pt.y, sx: pt.x, sy: pt.y, cx: touch.clientX, cy: touch.clientY, live: false };
+    touchStates[id] = { kind: 'erase', id: id, x: pt.x, y: pt.y, sx: pt.x, sy: pt.y, cx: touch.clientX, cy: touch.clientY, live: false, t0: now };
     eraserTouchId = id;
     return;
   }
@@ -4452,6 +4460,50 @@ function beginTouch(touch, now, burst) {
 
   if (st.state === 'ink') startInkRecord(st, now);
   else if (st.state === 'probe' && settings.guideDots) showPendingDot(id, pt.x, pt.y);
+}
+
+/* TWO FINGERS SCROLL OR ZOOM, WHATEVER TOOL IS IN HAND.
+ *
+ * With the lasso, text or eraser tool every contact was that tool's -
+ * a lasso, a drag of the selection, a rub - and the gesture engine only
+ * ever ran for the pen, so the page could not be moved or zoomed without
+ * changing tools first. Fingers that land together (recorded two-finger
+ * gestures land 20-34ms apart) are a gesture instead; what the first one
+ * had started is dropped, since in that time it cannot have done much. */
+function toolTwoFinger(touch, now) {
+  var other = null, n = 0, k;
+  for (k in touchStates) {
+    if (!touchStates.hasOwnProperty(k)) continue;
+    other = touchStates[k];
+    n++;
+  }
+  if (gesture && !gesture.fromHand) {
+    /* a third finger joins the gesture rather than starting a lasso */
+    touchStates[touch.identifier] = { kind: 'gesture', id: touch.identifier,
+                                      cx: touch.clientX, cy: touch.clientY, t0: now };
+    return true;
+  }
+  if (n !== 1 || gesture || !other.t0 || now - other.t0 > SC.GPAN_LAND) return false;
+  if (lassoId === other.id) lassoId = null;
+  if (eraserTouchId === other.id) eraserTouchId = null;
+  if (selDrag === other) selDrag = null;
+  if (selScale === other) selScale = null;
+  if (other.live && (other.kind === 'selmove' || other.kind === 'selscale')) unhideSelectedFromTiles();
+  other.kind = 'gesture';
+  touchStates[touch.identifier] = { kind: 'gesture', id: touch.identifier,
+                                    cx: touch.clientX, cy: touch.clientY, t0: now };
+  var d = dist(other.cx, other.cy, touch.clientX, touch.clientY);
+  gesture = {
+    lastCx: (other.cx + touch.clientX) / 2, lastCy: (other.cy + touch.clientY) / 2,
+    lastD: d, baseD: d, lastT: now, sumD: 0, sumC: 0,
+    kind: 'auto', wide: false, vx: 0, vy: 0, fromHand: false, key: null
+  };
+  gesture.key = gestureMemberKey();
+  hideSelBar();
+  hidePasteBar();
+  traceGesture('engage', 2, Math.round(d), now);
+  requestRender();
+  return true;
 }
 
 function startInkRecord(st, now) {
@@ -5079,7 +5131,10 @@ function shortMark(st, age) {
 
 /* ---------- gesture engine: pan + pinch-zoom + momentum ---------- */
 function recentVec(o, now) {
-  var p = o.path, m = p.length;
+  /* hand-tool contacts are gestures from birth and carry no path. Reading
+     one's length threw on every move, from inside the move handler, before
+     the page was moved - so the hand tool could not scroll at all */
+  var p = o.path, m = p ? p.length : 0;
   if (m < 2) return null;
   var i = m - 1;
   while (i > 0 && now - p[i - 1][2] < 120) i--;
@@ -5436,6 +5491,16 @@ function applyGesture(now) {
          under the centroid stays under the centroid. --- */
   if (ms.length >= 2) {
     var d = dist(ms[0].cx, ms[0].cy, ms[1].cx, ms[1].cy);
+    /* a two-finger gesture from a tool other than the pen has no detector
+       in front of it, so it decides here: a pinch changes the gap between
+       the fingers more than it moves them, a scroll moves them without
+       changing the gap. Until then it scrolls, and it never zooms after
+       deciding it is a scroll. */
+    if (gesture.kind === 'auto') {
+      var spread = Math.abs(d - gesture.baseD);
+      if (spread >= SC.AUTO_PINCH && spread > gesture.sumC * 0.6) gesture.kind = 'pinch';
+      else if (gesture.sumC >= SC.AUTO_PAN) gesture.kind = 'pan';
+    }
     /* Two fingers dragging the page apart by a few pixels is not a pinch.
        A scroll engages through the pan branch, and zoom used to be applied
        from any change in separation at all - so every two-finger scroll
@@ -5490,6 +5555,8 @@ function gestureMemberEnd(now) {
   var vy = gesture ? gesture.vy : 0;
   traceGesture('end', ms.length, 0, now);
   gesture = null;
+  /* the selection's bar was hidden while the page moved under it */
+  if (selection.length) { selBBox = selUnionBBox(); positionSelBar(); }
   saveSoon();
   if (Math.abs(vy) > 0.06 || Math.abs(vx) > 0.06) startMomentum(vx, vy);
 }
