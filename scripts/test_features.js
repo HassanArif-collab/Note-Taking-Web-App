@@ -1220,6 +1220,20 @@ gsPair(gp, 30, function (i) { return [450, 500 - i * 5]; },
 check('Glove mode: spreading two fingers still zooms', gp.geom().zoom > 1.1,
       'zoom ' + gp.geom().zoom.toFixed(2));
 
+/* 28 recorded attempts with the thumbs at opposite edges, 457-893px apart,
+   and not one of them zoomed: the "too wide" rule, meant for a pen and a
+   palm, was applied without checking that the palm was the one not moving */
+var gw2 = gsApp();
+gsPair(gw2, 20, function (i) { return [180 - i * 4, 420]; },
+                function (i) { return [880 + i * 4, 440]; }, 20);
+check('Glove mode: thumbs at opposite edges zoom too', gw2.geom().zoom > 1.1,
+      'zoom ' + gw2.geom().zoom.toFixed(2));
+var gw3 = gsApp();
+gsPair(gw3, 20, function (i) { return [300 + i * 6, 420 + 4 * Math.sin(i)]; },
+                function (i) { return [900, 640]; }, 20);
+check('...but a pen writing beside a still contact far away does not',
+      Math.abs(gw3.geom().zoom - 1) < 0.01, 'zoom ' + gw3.geom().zoom.toFixed(2));
+
 /* ---------- pen wheel (Samsung's "pens in pop-up view") ----------
  * Pens on the inner ring, six widths in the middle, colours on the rim:
  * children 0-4, 5-10, 11-21, then the all-colours button. */

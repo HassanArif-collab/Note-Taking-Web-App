@@ -1605,7 +1605,8 @@ var SC = {
   GPAN_MIN:        12,     /* ...each has travelled this far (screen px) */
   GPAN_COS:        0.85,   /* ...in the same direction, within ~30 degrees */
   GPAN_RATIO:      1.8,    /* ...and about as far as each other */
-  GPAN_STRAIGHT:   0.75    /* ...along nearly straight paths */
+  GPAN_STRAIGHT:   0.75,   /* ...along nearly straight paths */
+  PINCH_BOTH:      12      /* a wide pinch zooms only if BOTH contacts moved this far */
 };
 
 /* ---------- element handles ---------- */
@@ -5245,8 +5246,16 @@ function tryPinch(now) {
      already holding the pen, and the reason "the palm draws" and "it will
      not zoom" stopped being the same complaint. It has its own separation
      test above and is every bit as much a pinch as the inline one; left
-     untagged it defaulted to 'pan' and silently stopped zooming. */
-  engageGesture([a.id, b.id], now, d, 'pinch');
+     untagged it defaulted to 'pan' and silently stopped zooming.
+     Whether BOTH contacts travelled is what lets a wide pair zoom (see
+     engageGesture). It was never passed from here, so every two-thumb
+     pinch in Glove mode - which only ever comes through this path - was
+     refused as too wide: 28 recorded attempts, 457 to 893px apart, none of
+     them zoomed. Both thumbs had moved 17px or more in every one; in the
+     pen-and-palm pairs the rule exists for, the palm had moved 0 to 6. */
+  var both = dist(a.csx, a.csy, a.cx, a.cy) >= SC.PINCH_BOTH &&
+             dist(b.csx, b.csy, b.cx, b.cy) >= SC.PINCH_BOTH;
+  engageGesture([a.id, b.id], now, d, 'pinch', both);
   pinchTrack = null;
   return true;
 }
