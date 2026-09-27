@@ -51,16 +51,23 @@ Build one at a time, copying how Samsung Notes does it.
 - Changing the page colour tints the whole interface to match.
 
 ## Menus and home screen
-- Replace the three-line menu with a proper **Settings screen in sections**,
+- ~~Replace the three-line menu with a proper **Settings screen in sections**,
   each setting explained, grouped like Samsung's (Writing / Page / Home /
-  About).
-- **Home screen like Samsung's** (reference: the user's "Folders" screenshot):
-  big "Folders" title with counts, folder cards (count and name, coloured tab),
-  a "Folders > ..." path, sort by title, and a grid of **note previews**
-  showing what is written in each note, not a plain list.
-- **Rename a note from the home screen.**
+  About).~~ **Done** — the ⋮ button opens a settings screen in six sections
+  (Writing / Page / Note / Display / Advanced / About), every row labelled,
+  valued and explained in a line under it.
+- ~~**Home screen like Samsung's**: a grid of **note previews** showing what
+  is written in each note, not a plain list.~~ **Done** — each card carries a
+  miniature of the note's first page, drawn from the same paper and strokes.
+- ~~**Rename a note from the home screen.**~~ **Done** — a pencil on the card.
+- **Sort** the home list (favourites / title / date) and a **grid/list** toggle.
+  **Done** — both in the header, remembered.
 - **Folders** open with Samsung's scale-up animation (the scale animation is
-  for folders, not pages).
+  for folders, not pages). **Done** — opening a folder scales the notes up into
+  place.
+- A **"Folders > ..." path** and folder cards (count and name, coloured tab)
+  on the home screen — the notebooks drawer covers most of this; a breadcrumb
+  path under the title is still missing.
 
 ## Research finds worth copying
 - **Sort pages**: long-press a thumbnail and drag it into order.
