@@ -766,6 +766,36 @@ body.dark .pslot.on i { box-shadow: 0 0 0 2px #1D1E22, 0 0 0 4px currentColor; }
 }
 .ep-size.on { background: #0381FE; outline: 2px solid rgba(3,129,254,0.25); }
 
+/* ---------- page view popover ---------- */
+/* Samsung's "page template & settings": the scroll direction as three icons
+   with the chosen one named underneath, then the paper colours as swatches
+   with a tick on the one in use. It was two rows in the three-line menu,
+   where trying three paper colours meant three trips to the dots. */
+#pageView {
+  position: absolute; top: 108px; left: 50%; margin-left: -140px;
+  width: 280px; background: #FFFFFF; border-radius: 20px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+  padding: 14px 16px 12px 16px; display: none; z-index: 22;
+  -webkit-box-sizing: border-box; box-sizing: border-box;
+}
+#pageView .pv-h { font-size: 12px; color: #8C8C8C; margin-bottom: 8px; }
+#pvDirs { display: -webkit-flex; display: flex; }
+.pv-dir {
+  -webkit-flex: 1; flex: 1; height: 58px; border-radius: 12px;
+  border: 0; padding: 0; background: #F4F6F8; color: #5F6368;
+  margin-right: 8px;
+}
+.pv-dir:last-child { margin-right: 0; }
+.pv-dir svg { display: block; margin: 0 auto; }
+.pv-dir.on { background: rgba(3,129,254,0.12); color: #0381FE; }
+#pvDirName { font-size: 13px; color: #5F6368; text-align: center; margin-top: 6px; }
+#pvColors { height: 36px; margin-top: 8px; white-space: nowrap; overflow: hidden; }
+body.dark #pageView { background: #1D1E22; }
+body.dark #pageView .pv-h { color: #8C8C8C; }
+body.dark .pv-dir { background: #26282C; color: #C4C7CC; }
+body.dark .pv-dir.on { background: rgba(61,140,255,0.18); color: #61A8FF; }
+body.dark #pvDirName { color: #A8ADB5; }
+
 /* ---------- more (kebab) menu ---------- */
 #moreMenu {
   position: absolute; top: 60px; right: 8px; width: 268px;
@@ -853,6 +883,48 @@ body.dark .pslot.on i { box-shadow: 0 0 0 2px #1D1E22, 0 0 0 4px currentColor; }
 body.dark #pagesBox { background: #23272E; }
 body.dark #pagesTitle { color: #F2F3F5; }
 body.dark .pg-cell canvas { border-color: #3A414A; }
+
+/* ---------- template gallery ---------- */
+/* Samsung's page-template picker: a folder of templates, each shown as a
+   picture of what it will look like, not a row of names. Picking one then
+   choosing where it goes - this page or all of them. */
+#tplBox {
+  max-width: 620px; margin: 0 auto; background: #FFFFFF; border-radius: 14px;
+  padding: 14px; text-align: left; max-height: 80%; overflow: hidden;
+}
+#tplTitle { font-size: 18px; font-weight: 700; color: #1A1A1A; }
+#tplHint { font-size: 13px; color: #5A6270; margin: 2px 0 10px 0; }
+#tplGrid {
+  max-height: 52vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  text-align: left; padding-bottom: 4px;
+}
+.tpl-cell {
+  display: inline-block; vertical-align: top; position: relative;
+  margin: 0 10px 12px 0; padding: 0; border: 0; background: none;
+}
+.tpl-cell canvas {
+  display: block; border: 1px solid #DDE1E6; border-radius: 5px; background: #FFFFFF;
+}
+.tpl-cell.cur canvas { border-color: #0381FE; box-shadow: 0 0 0 2px rgba(3,129,254,0.30); }
+.tpl-num {
+  display: block; text-align: center; font-size: 12px; font-weight: 600;
+  color: #6A7178; margin-top: 4px;
+}
+.tpl-cell.cur .tpl-num { color: #0381FE; }
+#tplActions { border-top: 1px solid #ECEFF2; padding-top: 10px; }
+#tplActions button {
+  font-size: 15px; font-weight: 600; color: #0381FE; background: #F2F6FB;
+  border: 0; border-radius: 10px; padding: 10px 14px; margin-right: 8px;
+}
+#tplCloseBtn {
+  margin-top: 14px; color: #FFFFFF; font-size: 15px; font-weight: 600;
+  background: rgba(255,255,255,0.16); border-radius: 18px; padding: 10px 26px; border: 0;
+}
+body.dark #tplBox { background: #23272E; }
+body.dark #tplTitle { color: #F2F3F5; }
+body.dark .tpl-cell canvas { border-color: #3A414A; }
+body.dark #tplActions { border-top-color: #2F3033; }
+body.dark #tplActions button { background: #26282C; color: #C4C7CC; }
 #trainBox {
   max-width: 560px; margin: 0 auto; background: #FFFFFF; border-radius: 12px;
   padding: 14px; text-align: left; max-height: 82%; overflow: hidden;
@@ -1228,7 +1300,7 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
 
 <!-- ============ EDITOR ============ -->
 <div id="drawView" class="view">
-  <div class="hdr">
+  <div class="hdr" id="hdr">
     <button id="backBtn" class="ibtn" aria-label="Back to notes">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
         <path d="M14.5 5 L7 12 l7.5 7"/>
@@ -1445,6 +1517,12 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
         <path d="M20 9.5 H9.5 a5 5 0 0 0 0 10 H14"/>
       </svg>
     </button>
+    <button id="pageViewBtn" class="tb-btn" aria-label="Page view">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="4" y="5" width="7" height="14" rx="1.2"/>
+        <rect x="13" y="5" width="7" height="14" rx="1.2"/>
+      </svg>
+    </button>
   </div>
 
   <!-- pen palette -->
@@ -1486,6 +1564,34 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
     </div>
     <div class="ep-h" style="margin-top:12px">Size</div>
     <div id="sizeRow"></div>
+  </div>
+
+  <!-- page view popover: which way the pages turn and what colour they are,
+       the two things Samsung keeps in its "page template & settings" -->
+  <div id="pageView">
+    <div class="pv-h" id="pvDirHead">Scroll direction</div>
+    <div id="pvDirs">
+      <button class="pv-dir" id="pvDown" aria-label="One page down the screen">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+          <rect x="7" y="3" width="10" height="18" rx="1.5"/>
+        </svg>
+      </button>
+      <button class="pv-dir" id="pvAcross" aria-label="One page across the screen">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+          <rect x="3" y="7" width="18" height="10" rx="1.5"/>
+        </svg>
+      </button>
+      <button class="pv-dir" id="pvSpread" aria-label="Two pages at a time">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+          <rect x="3" y="5" width="8" height="14" rx="1.5"/>
+          <rect x="13" y="5" width="8" height="14" rx="1.5"/>
+        </svg>
+      </button>
+    </div>
+    <div id="pvDirName">One page down the screen</div>
+    <div class="pv-h" style="margin-top:14px">Background colour</div>
+    <div id="pvColors"></div>
+    <div id="pvColorPages"></div>
   </div>
 
   <!-- selection action bar (lasso tool) -->
@@ -1553,6 +1659,22 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
       </div>
     </div>
     <button id="pagesCloseBtn">Close</button>
+  </div>
+
+  <!-- template gallery: each template as a picture, applied to a page or all -->
+  <div id="tplOverlay" class="overlay">
+    <div id="tplBox">
+      <div id="tplHead">
+        <div id="tplTitle">Page template</div>
+        <div id="tplHint">Pick a template, then where it goes</div>
+      </div>
+      <div id="tplGrid"></div>
+      <div id="tplActions">
+        <button id="tplThisBtn">This page</button>
+        <button id="tplAllBtn">All pages</button>
+      </div>
+    </div>
+    <button id="tplCloseBtn">Close</button>
   </div>
 
   <!-- testing drills -->
@@ -1681,16 +1803,20 @@ var MARGIN_X = 46;     /* the left channel on ruled paper */
 var MAX_TILES = 64;    /* tile canvases kept alive - blank tiles cost none */
 var FIRST_BASE = 56;   /* first ruled line distance from page top */
 
-var TPL_RULED = 0, TPL_GRID = 1, TPL_DOTTED = 2, TPL_BLANK = 3;
-var TPL_NAMES = ['Ruled', 'Grid', 'Dotted', 'Blank'];
+var TPL_RULED = 0, TPL_GRID = 1, TPL_DOTTED = 2, TPL_BLANK = 3,
+    TPL_TODO = 4, TPL_CALENDAR = 5;
+var TPL_NAMES = ['Ruled', 'Grid', 'Dotted', 'Blank', 'To-do', 'Calendar'];
 
 /* paper colors (Samsung Notes paper options) */
+/* each paper carries the desk it sits on and the chrome it tints, so
+   choosing a page colour recolours the whole interface - the desk around
+   the pages and the bar above them - the way Samsung's does */
 var PAPERS = [
-  { name: 'White',  bg: '#FFFFFF', line: '#D8DDE3', dot: '#D0D4D9', num: '#A0A0A0', margin: 'rgba(226,35,26,0.26)', dark: false },
-  { name: 'Cream',  bg: '#FBF6E7', line: '#E3DCC4', dot: '#D9D0B4', num: '#B3A97F', margin: 'rgba(196,60,40,0.26)', dark: false },
-  { name: 'Yellow', bg: '#FCF6D5', line: '#E2D79E', dot: '#D8CC92', num: '#B0A26A', margin: 'rgba(196,60,40,0.26)', dark: false },
-  { name: 'Mint',   bg: '#ECF4EE', line: '#CCDFD2', dot: '#C2D5C7', num: '#93A899', margin: 'rgba(60,140,90,0.30)',  dark: false },
-  { name: 'Dark',   bg: '#20242A', line: '#3A434C', dot: '#47515C', num: '#6A7178', margin: 'rgba(226,90,80,0.32)',  dark: true  }
+  { name: 'White',  bg: '#FFFFFF', line: '#D8DDE3', dot: '#D0D4D9', num: '#A0A0A0', margin: 'rgba(226,35,26,0.26)', dark: false, desk: '#E8EAED', ui: '#F0F1F3' },
+  { name: 'Cream',  bg: '#FBF6E7', line: '#E3DCC4', dot: '#D9D0B4', num: '#B3A97F', margin: 'rgba(196,60,40,0.26)', dark: false, desk: '#E2D8BC', ui: '#EFE7D0' },
+  { name: 'Yellow', bg: '#FCF6D5', line: '#E2D79E', dot: '#D8CC92', num: '#B0A26A', margin: 'rgba(196,60,40,0.26)', dark: false, desk: '#E3DA9E', ui: '#F0E7B8' },
+  { name: 'Mint',   bg: '#ECF4EE', line: '#CCDFD2', dot: '#C2D5C7', num: '#93A899', margin: 'rgba(60,140,90,0.30)',  dark: false, desk: '#C9DFD0', ui: '#DDEDE1' },
+  { name: 'Dark',   bg: '#20242A', line: '#3A434C', dot: '#47515C', num: '#6A7178', margin: 'rgba(226,90,80,0.32)',  dark: true,  desk: '#141414', ui: '#1D1E22' }
 ];
 
 /* shape assist modes */
@@ -2185,6 +2311,8 @@ var sizeTrack = byId('sizeTrack');
 var colorRow = byId('colorRow'), penBadge = byId('penBadge');
 var eraserPanel = byId('eraserPanel'), sizeRow = byId('sizeRow');
 var moreMenu = byId('moreMenu'), toastEl = byId('toast'), warningEl = byId('warning');
+var pageView = byId('pageView'), pvDown = byId('pvDown'), pvAcross = byId('pvAcross'),
+    pvSpread = byId('pvSpread'), pvDirName = byId('pvDirName'), pvColors = byId('pvColors');
 var drawer = byId('drawer'), drawerBackdrop = byId('drawerBackdrop'), nbList = byId('nbList');
 var exportOverlay = byId('exportOverlay'), exportImg = byId('exportImg');
 var traceOverlay = byId('traceOverlay'), traceText = byId('traceText');
@@ -3136,20 +3264,17 @@ function drawPaperPages(c, y0, y1, x0, x1) {
   }
 }
 
-/* one sheet: where it stands (p, top) and how far it reaches sideways
-   (its own ink decided that, so two pages need not be the same width) */
-function drawPaperRect(c, p, top, y0, y1) {
-  var P = PAPERS[settings.paperColor] || PAPERS[0];
-  var px0 = pageLeft(p), px1 = pageRight(p);
-  var mx = horiz() ? px0 + MARGIN_X : MARGIN_X;
-  c.fillStyle = P.bg;
-  c.fillRect(px0, top, px1 - px0, PAGE_H);
-  var tpl = settings.template;
+/* the pattern on one sheet. Drawn between x0 and x1, from top a pageH tall,
+   with the margin channel at mx - shared by the page itself, the thumbnails
+   and the template gallery, so a picture of a template cannot drift from
+   the thing it is a picture of. */
+function drawTplPattern(c, tpl, P, x0, top, x1, mx) {
+  var y, x, gy;
   if (tpl === TPL_RULED) {
     c.strokeStyle = P.line; c.lineWidth = 1;
     c.beginPath();
-    for (var y = top + FIRST_BASE; y <= top + PAGE_H - 16; y += settings.spacing) {
-      c.moveTo(px0 < 0 ? px0 : mx, y + 0.5); c.lineTo(px1, y + 0.5);
+    for (y = top + FIRST_BASE; y <= top + PAGE_H - 16; y += settings.spacing) {
+      c.moveTo(x0 < 0 ? x0 : mx, y + 0.5); c.lineTo(x1, y + 0.5);
     }
     c.stroke();
     /* the margin rule. Ruled lines running wall to wall is the one thing
@@ -3166,15 +3291,50 @@ function drawPaperRect(c, p, top, y0, y1) {
   } else if (tpl === TPL_GRID) {
     c.strokeStyle = P.line; c.lineWidth = 1;
     c.beginPath();
-    for (var gx = Math.max(24, Math.ceil(px0 / 24) * 24); gx < px1; gx += 24) { c.moveTo(gx + 0.5, top); c.lineTo(gx + 0.5, top + PAGE_H); }
-    for (var gy = top + 24; gy <= top + PAGE_H - 8; gy += 24) { c.moveTo(px0, gy + 0.5); c.lineTo(px1, gy + 0.5); }
+    for (x = Math.max(24, Math.ceil(x0 / 24) * 24); x < x1; x += 24) { c.moveTo(x + 0.5, top); c.lineTo(x + 0.5, top + PAGE_H); }
+    for (gy = top + 24; gy <= top + PAGE_H - 8; gy += 24) { c.moveTo(x0, gy + 0.5); c.lineTo(x1, gy + 0.5); }
     c.stroke();
   } else if (tpl === TPL_DOTTED) {
     c.fillStyle = P.dot;
-    for (var dy = top + 20; dy <= top + PAGE_H - 12; dy += 24) {
-      for (var dx = Math.ceil((px0 - 12) / 24) * 24 + 12; dx < px1; dx += 24) c.fillRect(dx - 1, dy - 1, 2, 2);
+    for (y = top + 20; y <= top + PAGE_H - 12; y += 24) {
+      for (x = Math.ceil((x0 - 12) / 24) * 24 + 12; x < x1; x += 24) c.fillRect(x - 1, y - 1, 2, 2);
     }
+  } else if (tpl === TPL_TODO) {
+    /* ruled lines, each with a checkbox in the margin channel */
+    c.strokeStyle = P.line; c.lineWidth = 1;
+    c.beginPath();
+    for (y = top + FIRST_BASE; y <= top + PAGE_H - 16; y += settings.spacing) {
+      c.moveTo(mx + 26, y + 0.5); c.lineTo(x1, y + 0.5);
+    }
+    c.stroke();
+    for (y = top + FIRST_BASE; y <= top + PAGE_H - 16; y += settings.spacing) {
+      c.strokeRect(mx + 2, y - 7, 13, 13);
+    }
+  } else if (tpl === TPL_CALENDAR) {
+    /* a month: seven day-columns, a header band, then the week rows */
+    var cw = (x1 - x0) / 7;
+    c.strokeStyle = P.line; c.lineWidth = 1;
+    c.beginPath();
+    for (x = x0; x <= x1 + 1; x += cw) { c.moveTo(x + 0.5, top); c.lineTo(x + 0.5, top + PAGE_H); }
+    c.stroke();
+    c.fillStyle = P.dot;
+    c.fillRect(x0, top, x1 - x0, 34);
+    c.strokeStyle = P.line;
+    c.beginPath();
+    for (y = top + 34; y <= top + PAGE_H; y += 84) { c.moveTo(x0, y + 0.5); c.lineTo(x1, y + 0.5); }
+    c.stroke();
   }
+}
+
+/* one sheet: where it stands (p, top) and how far it reaches sideways
+   (its own ink decided that, so two pages need not be the same width) */
+function drawPaperRect(c, p, top, y0, y1) {
+  var P = PAPERS[settings.paperColor] || PAPERS[0];
+  var px0 = pageLeft(p), px1 = pageRight(p);
+  var mx = horiz() ? px0 + MARGIN_X : MARGIN_X;
+  c.fillStyle = P.bg;
+  c.fillRect(px0, top, px1 - px0, PAGE_H);
+  drawTplPattern(c, tplFor(activeNote(), p), P, px0, top, px1, mx);
   c.fillStyle = P.num;
   c.font = '12px Helvetica, Arial, sans-serif';
   c.textAlign = 'center';
@@ -3350,10 +3510,13 @@ function recomputeDoc(depth) {
 function clampScroll() {
   /* visible doc-space viewport = viewW/zoom x viewH/zoom.
    * When the content is smaller than the viewport it is centred
-   * (negative scroll allowed). */
+   * (negative scroll allowed).
+   * A pull past the end lifts the whole sheet by pullY, so the clamp
+   * leaves room for that overshoot - the gap it opens is where the
+   * add-page circle shows. */
   var vh = viewH / zoom, vw = viewW / zoom;
-  var yMax = Math.max(0, docH - vh), yMin = Math.min(0, docH - vh);
-  var xMax = Math.max(docX0, docW - vw), xMin = Math.min(docX0, docW - vw);
+  var yMax = Math.max(0, docH - vh) + pullY, yMin = Math.min(0, docH - vh);
+  var xMax = Math.max(docX0, docW - vw) + pullY, xMin = Math.min(docX0, docW - vw);
   /* side by side, one page is the whole height: when the screen is taller
      than the page is, the page stands in the middle of it rather than
      pinned to the top, and there is no vertical scrolling left to do */
@@ -3390,7 +3553,7 @@ function render() {
   ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -dpr * zoom * scrollX, -dpr * zoom * scrollY);
   var P = PAPERS[settings.paperColor] || PAPERS[0];
   if (!isEndless() || scrollY < 0) {
-    ctx.fillStyle = P.dark ? '#141414' : '#F1F2F4';
+    ctx.fillStyle = P.desk;
     ctx.fillRect(scrollX - 8, scrollY - 8, viewW / zoom + 16, viewH / zoom + 16);
   }
   drawPaperPages(ctx, scrollY - 8, scrollY + viewH / zoom + 8, scrollX - 8, scrollX + viewW / zoom + 8);
@@ -3511,7 +3674,7 @@ function drawZoomWindow(c) {
   /* the strip itself */
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   var P = PAPERS[settings.paperColor] || PAPERS[0];
-  c.fillStyle = P.dark ? '#141414' : '#FFFFFF';
+  c.fillStyle = P.desk;
   c.fillRect(0, g.top, g.w, g.h);
 
   c.save();
@@ -3603,6 +3766,14 @@ function pageOrigin(p) { return horiz() ? p * pageSpan() : 0; }
 
 function pageCount() {
   return Math.max(1, Math.ceil((horiz() ? docW : docH) / pageSpan()));
+}
+
+/* a page's template: its own if it has one, the note's otherwise. A note
+   remembers per-page templates in n.tpl so one page can be grid while the
+   rest are ruled, the way Samsung lets you set a template per page. */
+function tplFor(n, p) {
+  if (n && n.tpl && n.tpl[p] !== undefined && n.tpl[p] !== null) return n.tpl[p];
+  return settings.template;
 }
 
 function currentPage() {
@@ -3724,56 +3895,95 @@ function toggleLayout() {
 }
 
 /* ---------- pulling a new page into being ----------
- * The last page ends in blank paper, and dragging past that end should
- * offer one more, the way every pad of paper does: the sheet stops at
- * its own edge, the rest of the drag STRETCHES it, and a disc in the
- * stretched part says what letting go will do. Scroll clamping throws
- * the overshoot away, so the stretch is gathered one frame at a time
- * in pullPan, before clampScroll gets its hands on it. */
-var pullY = 0;              /* how far the end has been stretched, in doc units */
+ * The last page ends in blank paper, and dragging past that end lifts the
+ * whole sheet, the way Samsung's does: the page rises with the pull and
+ * the gap it leaves behind is where the add-page circle shows. Scroll
+ * clamping throws the overshoot away, so the lift is gathered one frame
+ * at a time in pullPan, before clampScroll gets its hands on it - and
+ * clampScroll leaves room for it, so the gap is real desk rather than a
+ * disc floating past the edge. */
+var pullY = 0;              /* how far the sheet has been lifted, in doc units */
 var PULL_MAX = 170;         /* past this the sheet has nothing more to give */
 var PULL_ARM = 78;          /* release past here and the page is made */
+var pullBack = null, pullBackRAF = 0;   /* the lift springing back to nothing */
+
+/* the lift is the scroll sitting past the edge by pullY: the whole sheet -
+ * paper and ink and all - rises with it, and the gap opens at the end */
+function applyPullScroll() {
+  if (isEndless() || pullY <= 0) return;
+  var h = horiz();
+  var edge = h ? Math.max(0, docW - viewW / zoom) : Math.max(0, docH - viewH / zoom);
+  if (h) scrollX = edge + pullY; else scrollY = edge + pullY;
+}
 
 function pullPan() {
   if (isEndless()) { pullY = 0; return; }   /* an infinite note never runs out */
   var h = horiz();
   var edge = h ? Math.max(0, docW - viewW / zoom) : Math.max(0, docH - viewH / zoom);
   var over = h ? (scrollX - edge) : (scrollY - edge);
-  /* The stretch is remembered between frames, not measured afresh each
-     one: a held pull stays held, going back inside the page takes it
-     away, and only then. Resistance is what makes it feel like paper. */
+  /* The lift is remembered between frames, not measured afresh each one:
+     a held pull stays held, going back inside the page takes it away, and
+     only then. Resistance is what makes it feel like paper. */
   if (over > 0) {
     var give = Math.max(0.16, 1 - pullY / PULL_MAX);
     pullY = lim(pullY + over * give, 0, PULL_MAX);
-    if (h) scrollX = edge; else scrollY = edge;
+    applyPullScroll();
     requestRender();
   } else if (over < 0) {
     pullY = 0;
   }
 }
 
+/* a pull that did not reach the mark springs back: the sheet settles onto
+   the desk again and the gap closes, over a sixth of a second */
+function startPullSettle() {
+  stopMomentum();
+  if (pullY <= 0.5) { pullY = 0; applyPullScroll(); requestRender(); return; }
+  pullBack = { from: pullY, t0: Date.now() };
+  if (!pullBackRAF) pullBackRAF = window.requestAnimationFrame(pullSettleStep);
+}
+function pullSettleStep() {
+  pullBackRAF = 0;
+  if (!pullBack) return;
+  var e = (Date.now() - pullBack.t0) / 160;
+  if (e >= 1) {
+    pullY = 0;
+    pullBack = null;
+  } else {
+    var t = 1 - Math.pow(1 - e, 3);
+    pullY = pullBack.from * (1 - t);
+  }
+  applyPullScroll();
+  requestRender();
+  if (pullBack) pullBackRAF = window.requestAnimationFrame(pullSettleStep);
+}
+
 function pullRelease() {
   var armed = pullY >= PULL_ARM;
-  pullY = 0;
-  if (armed) addPageAtEnd();
-  else requestRender();
+  if (armed) { addPageAtEnd(); return; }
+  startPullSettle();
 }
 
 /* a blank page at the very end: unlike insertPageAt, nothing on the page
    above moves, so it is the note's floor that grows (minPages), not a
    slide of the ink - and minPages is remembered with the note, so an empty
-   last page is still there after a reload */
+   last page is still there after a reload.
+   The arrival is animated: the lift is dropped, the page is made, and the
+   view glides down the new sheet the way a page turn does. */
 function addPageAtEnd() {
   var n = activeNote();
   if (!n || isEndless()) { requestRender(); return; }
   stopMomentum();
+  pageTween = null;                            /* the glide below owns the view */
+  pullY = 0;                                   /* the lift is over: the sheet settles */
   var want = pageCount() + 1;
   pushUndo({ t: 'page-add', to: want, from: Math.max(want - 1, n.minPages || 1) });
   n.minPages = Math.max(n.minPages || 1, want);
   invalidateAll();
   recomputeDoc();
   saveSoon();
-  goToPage(want);
+  if (horiz()) goToPage(want);                 /* across glides on its own */
+  else startPageTweenY((want - 1) * pageSpan());
   toast('Page ' + want + ' added');
 }
 
@@ -3881,6 +4091,79 @@ function openPageMenu() {
     ? 'Tap a page to go there \u00b7 showing the first ' + shown
     : 'Tap a page to go there';
   byId('pagesOverlay').className = 'overlay on';
+}
+
+/* ---------- template gallery ----------
+ * A template used to be a menu row that cycled Ruled, Grid, Dotted, Blank
+ * on every tap, with no idea what any of them looked like until the page
+ * changed under you. Samsung shows them as pictures in a folder, and lets
+ * you put one on a single page or on all of them. */
+var tplSel = -1;
+
+/* one template drawn small, from the same pattern the page itself uses */
+function tplThumb(tpl, w) {
+  var P = PAPERS[settings.paperColor] || PAPERS[0];
+  var cv = document.createElement('canvas');
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(w * PAGE_H / PAGE_W_MIN * dpr);
+  cv.style.width = w + 'px';
+  cv.style.height = Math.round(w * PAGE_H / PAGE_W_MIN) + 'px';
+  var c = cv.getContext('2d');
+  if (!c) return cv;
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.fillStyle = P.bg;
+  c.fillRect(0, 0, w, w * PAGE_H / PAGE_W_MIN);
+  drawTplPattern(c, tpl, P, 0, 0, w, MARGIN_X);
+  return cv;
+}
+
+function openTplGallery() {
+  closePanels();
+  if (isEndless()) { toast('An infinite note is one blank sheet - no pages to template'); return; }
+  var n = activeNote();
+  if (!n) return;
+  tplSel = tplFor(n, currentPage() - 1);
+  buildTplGrid();
+  byId('tplOverlay').className = 'overlay on';
+}
+
+function buildTplGrid() {
+  var grid = byId('tplGrid');
+  grid.innerHTML = '';
+  for (var t = 0; t < TPL_NAMES.length; t++) {
+    (function (ti) {
+      var cell = document.createElement('button');
+      cell.className = 'tpl-cell' + (ti === tplSel ? ' cur' : '');
+      cell.appendChild(tplThumb(ti, 104));
+      var lab = document.createElement('span');
+      lab.className = 'tpl-num';
+      lab.innerHTML = TPL_NAMES[ti];
+      cell.appendChild(lab);
+      cell.addEventListener('click', function () { tplSel = ti; buildTplGrid(); });
+      grid.appendChild(cell);
+    })(t);
+  }
+}
+
+/* scope is 'page' or 'all': one sheet gets the template, or the note does */
+function applyTpl(scope) {
+  var n = activeNote();
+  if (!n || tplSel < 0) return;
+  if (scope === 'all') {
+    pushUndo({ t: 'tpl', all: 1, from: settings.template, to: tplSel });
+    settings.template = tplSel;
+    n.tpl = null;                          /* one template for every page */
+  } else {
+    var p = currentPage() - 1;
+    pushUndo({ t: 'tpl', page: p, from: tplFor(n, p), to: tplSel });
+    if (!n.tpl) n.tpl = [];
+    n.tpl[p] = tplSel;
+  }
+  invalidateAll();
+  recomputeDoc();
+  saveSoon();
+  afterSettingChange();
+  toast(TPL_NAMES[tplSel] + (scope === 'all' ? ' on every page' : ' on this page'));
 }
 
 /* ---------- page strip ----------
@@ -4761,6 +5044,19 @@ function applyOp(op, reverse) {
     /* the note turned side to side: undo turns it back, mark for mark */
     applyLayout(n, reverse ? !op.horiz : op.horiz);
     zoom = n.horiz ? fitZoom() : 1;
+    invalidateAll();
+    recomputeDoc();
+    requestRender();
+  } else if (op.t === 'tpl') {
+    /* a template put on one page or all of them: undo takes it off again */
+    if (op.all) {
+      settings.template = reverse ? op.from : op.to;
+      n.tpl = null;
+    } else {
+      if (!n.tpl) n.tpl = [];
+      n.tpl[op.page] = reverse ? op.from : op.to;
+      if (reverse && n.tpl[op.page] === settings.template) n.tpl[op.page] = null;
+    }
     invalidateAll();
     recomputeDoc();
     requestRender();
@@ -6686,6 +6982,7 @@ function applyGesture(now) {
 
   /* --- pan: the paper follows the centroid --- */
   pageTween = null;          /* a hand on the glass takes over the view */
+  pageTweenY = null;
   scrollX -= dx / zoom;
   scrollY -= dy / zoom;
 
@@ -7616,6 +7913,7 @@ function updateScrollPill() {
  * is the page turn this layout asks for. Down the roll nothing has to
  * travel sideways, so it stays the instant jump it always was. */
 var pageTween = null, pageTweenRAF = 0;
+var pageTweenY = null, pageTweenYRAF = 0;   /* the same glide, down the roll */
 
 /* where a view starts for the page asked for: at its origin, or at the
    head of the pair it belongs to when two are shown together */
@@ -7656,6 +7954,39 @@ function pageTweenStep() {
   requestRender();
   if (pageTween) pageTweenRAF = window.requestAnimationFrame(pageTweenStep);
 }
+/* down the roll a page turn is a glide down, not across - the same ease,
+   on the other axis, so a pulled page arrives the way a turned one does */
+function startPageTweenY(to) {
+  var vh = viewH / zoom;
+  var yMax = Math.max(0, docH - vh), yMin = Math.min(0, docH - vh);
+  to = lim(to, yMin, yMax);
+  stopMomentum();
+  if (Math.abs(to - scrollY) < 1) {
+    pageTweenY = null;
+    scrollY = to;
+    clampScroll();
+    requestRender();
+    return;
+  }
+  pageTweenY = { from: scrollY, to: to, t0: Date.now() };
+  if (!pageTweenYRAF) pageTweenYRAF = window.requestAnimationFrame(pageTweenYStep);
+}
+function pageTweenYStep() {
+  pageTweenYRAF = 0;
+  if (!pageTweenY) return;                 /* a hand took the view over */
+  var e = (Date.now() - pageTweenY.t0) / 260;
+  if (e >= 1) {
+    scrollY = pageTweenY.to;
+    pageTweenY = null;
+  } else {
+    var t = 1 - Math.pow(1 - e, 3);
+    scrollY = pageTweenY.from + (pageTweenY.to - pageTweenY.from) * t;
+  }
+  clampScroll();
+  updateScrollPill();
+  requestRender();
+  if (pageTweenY) pageTweenYRAF = window.requestAnimationFrame(pageTweenYStep);
+}
 
 /* a flick across the screen is a turn of the page: the view settles on
    the next one along rather than coming to rest wherever it stops */
@@ -7665,11 +7996,14 @@ function turnPage(vx) {
 }
 
 /* how far a page fills the screen: one sheet, or two when the view is
-   opened out. On a phone the pair runs past the edge and is scrolled to,
-   since the pinch is allowed no smaller than the floor that suits it. */
+   opened out. Fitting the pair by width left them small and lost in desk
+   above and below on any screen but the widest. Filling the height makes
+   them as large as the screen allows - on a wide screen the pair still
+   fits across, and on a narrow one it runs past the edge and is scrolled
+   to, the way a book's spread does on a phone. */
 function fitZoom() {
-  var w = settings.spread ? (2 * pageSpan() - GAP_X) : pwOf();
-  return lim(viewW / Math.max(w, 1), zMin(), Z_MAX);
+  if (settings.spread) return lim(viewH / Math.max(PAGE_H, 1), zMin(), Z_MAX);
+  return lim(viewW / Math.max(pwOf(), 1), zMin(), Z_MAX);
 }
 function resetZoom() {
   if (horiz()) {
@@ -7698,6 +8032,8 @@ function resetTouchTracking() {
   gesture = null;
   momentum = null;
   pageTween = null;
+  pageTweenY = null;
+  pullBack = null;
   twoTap = null;
   threeTap = null;
   pullY = 0;
@@ -8869,8 +9205,31 @@ window.__mnPages = function () {
            x: Math.round(scrollX), y: Math.round(scrollY),
            zoom: zoom, docW: Math.round(docW), docH: Math.round(docH),
            tween: !!pageTween, spread: !!settings.spread,
-           grid: byId('pagesGrid').children.length,
-           exp: exportOverlay.className };
+            grid: byId('pagesGrid').children.length,
+            exp: exportOverlay.className };
+};
+window.__mnPageView = function () {
+  return { open: pageView.style.display === 'block', dir: pageDirNow(),
+           label: pvDirName.textContent, paper: settings.paperColor,
+           swatches: pvColors.children.length,
+           onDown: /on/.test(pvDown.className), onAcross: /on/.test(pvAcross.className),
+           onSpread: /on/.test(pvSpread.className),
+           dirHidden: byId('pvDirHead').style.display === 'none' };
+};
+window.__mnTpl = function () {
+  var n = activeNote();
+  return { open: byId('tplOverlay').className === 'overlay on',
+           sel: tplSel, cells: byId('tplGrid').children.length,
+           cur: n ? tplFor(n, currentPage() - 1) : 0,
+           global: settings.template,
+           perPage: n && n.tpl ? n.tpl.slice() : null };
+};
+window.__mnTint = function () {
+  var P = PAPERS[settings.paperColor] || PAPERS[0];
+  return { paper: settings.paperColor, desk: P.desk, ui: P.ui,
+           dark: settings.uiDark || P.dark,
+           hdr: byId('hdr').style.background,
+           toolbar: byId('toolbar').style.background };
 };
 window.__mnHold = function () { holdCheck(); };
 window.__mnTidy = function () { return tidyRun(); };
@@ -10521,9 +10880,9 @@ function buildMoreMenu() {
       } },
     { leave: true, lbl: 'Backup and restore', val: countNotes() + ' notes', act: openBackup },
     { leave: true, lbl: 'Export PNG', val: '', act: exportPNG },
-    { lbl: 'Template', val: TPL_NAMES[settings.template], act: function () { settings.template = (settings.template + 1) % 4; afterSettingChange(); } },
+    { leave: true, lbl: 'Template', val: TPL_NAMES[settings.template], act: openTplGallery },
     { lbl: 'Line spacing', val: settings.spacing + ' px', act: function () { settings.spacing = settings.spacing === 32 ? 38 : (settings.spacing === 38 ? 44 : 32); afterSettingChange(); } },
-    { lbl: 'Paper color', val: (PAPERS[settings.paperColor] || PAPERS[0]).name, act: function () { settings.paperColor = (settings.paperColor + 1) % PAPERS.length; afterSettingChange(); } },
+    { leave: true, lbl: 'Paper color', val: (PAPERS[settings.paperColor] || PAPERS[0]).name, act: togglePageView },
     { lbl: 'Theme', val: settings.uiDark ? 'Dark' : 'Light', act: function () {
         settings.uiDark = !settings.uiDark;
         if (settings.uiDark && settings.paperColor === 0) settings.paperColor = 4;
@@ -10621,13 +10980,92 @@ function afterSettingChange() {
   moreMenu.scrollTop = keep;
   syncStripTab();
   popPaint();
+  applyPaperTint();
   requestRender();
   saveSoon();
+}
+
+/* ---------- page view popover ---------- */
+/* Which way the pages turn and what colour they are. Both were rows in the
+   three-line menu, where trying three paper colours meant: three dots,
+   scroll, tap, look, three dots, scroll, tap, look. They get a popover of
+   their own, laid out as Samsung's "page template & settings". */
+function buildPageView() {
+  var i, sw;
+  for (i = 0; i < PAPERS.length; i++) {
+    (function (idx) {
+      sw = document.createElement('button');
+      sw.className = 'sw';
+      sw.style.background = PAPERS[idx].bg;
+      sw.setAttribute('aria-label', PAPERS[idx].name + ' paper');
+      sw.addEventListener('click', function () {
+        settings.paperColor = idx;
+        settings.uiDark = !!PAPERS[idx].dark;   /* a dark page takes the dark chrome */
+        updatePageView();
+        afterSettingChange();
+        toast(PAPERS[idx].name + ' paper');
+      });
+      pvColors.appendChild(sw);
+    })(i);
+  }
+}
+function pageDirNow() {
+  if (settings.spread && horiz()) return 'spread';
+  return horiz() ? 'across' : 'down';
+}
+function updatePageView() {
+  var cur = pageDirNow(), i, sws = pvColors.children;
+  pvDown.className = 'pv-dir' + (cur === 'down' ? ' on' : '');
+  pvAcross.className = 'pv-dir' + (cur === 'across' ? ' on' : '');
+  pvSpread.className = 'pv-dir' + (cur === 'spread' ? ' on' : '');
+  pvDirName.textContent = cur === 'down' ? 'One page down the screen'
+                         : cur === 'across' ? 'One page across the screen'
+                         : 'Two pages at a time';
+  /* an infinite note has no pages to turn, so the direction means nothing */
+  var hide = isEndless() ? 'none' : '';
+  byId('pvDirHead').style.display = hide;
+  pvDown.style.display = hide;
+  pvAcross.style.display = hide;
+  pvSpread.style.display = hide;
+  pvDirName.style.display = hide;
+  for (i = 0; i < sws.length; i++) {
+    sws[i].className = 'sw' + (i === settings.paperColor ? ' on' : '');
+  }
+}
+function setPageDir(dir) {
+  var n = activeNote();
+  if (!n || isEndless() || settings.reading) return;
+  var p = currentPage();
+  if (dir === 'down') {
+    if (settings.spread) { settings.spread = false; zoom = 1; goToPage(p); }
+    if (horiz()) toggleLayout();
+  } else if (dir === 'across') {
+    if (settings.spread) { settings.spread = false; zoom = fitZoom(); goToPage(p); }
+    if (!horiz()) toggleLayout();
+  } else {
+    if (!horiz()) toggleLayout();          /* the pair needs the note across */
+    if (!settings.spread) { settings.spread = true; zoom = fitZoom(); goToPage(p); }
+  }
+  updatePageView();
+  afterSettingChange();
 }
 
 /* ---------- dark theme ---------- */
 function applyTheme() {
   applyReadingUI();
+  applyPaperTint();
+}
+
+/* the page colour tints the whole interface: the bar above the page takes
+   the paper's own chrome colour, so a yellow page sits under a warm bar
+   and a mint one under a greenish one. A dark paper (or the dark theme)
+   takes the dark chrome instead. */
+function applyPaperTint() {
+  var P = PAPERS[settings.paperColor] || PAPERS[0];
+  var dark = settings.uiDark || P.dark;
+  var chrome = dark ? '#1B1C1F' : P.ui;
+  byId('hdr').style.background = chrome;
+  byId('toolbar').style.background = dark ? 'rgba(29,30,34,0.97)' : chrome;
 }
 
 /* ---------- reading mode ----------
@@ -10686,6 +11124,7 @@ function closePanels() {
   penPalette.style.display = 'none';
   eraserPanel.style.display = 'none';
   moreMenu.style.display = 'none';
+  pageView.style.display = 'none';
   byId('favGrid').style.display = 'none';
   byId('favGrid').className = '';
   byId('favEdit').style.display = 'none';
@@ -10706,6 +11145,7 @@ function syncScrim() {
   var open = penPalette.style.display === 'block' ||
              eraserPanel.style.display === 'block' ||
              moreMenu.style.display === 'block' ||
+             pageView.style.display === 'block' ||
              byId('favGrid').style.display === 'block' ||
              byId('favEdit').style.display === 'block';
   byId('panelScrim').className = open ? 'on' : '';
@@ -10749,6 +11189,18 @@ byId('moreBtn').addEventListener('click', function () {
   else { buildMoreMenu(); moreMenu.style.display = 'block'; penPalette.style.display = 'none'; eraserPanel.style.display = 'none'; }
   syncScrim();
 });
+function togglePageView() {
+  if (settings.reading) { toast('Reading mode - the page cannot be changed'); return; }
+  if (pageView.style.display === 'block') { pageView.style.display = 'none'; syncScrim(); return; }
+  closePanels();
+  updatePageView();
+  pageView.style.display = 'block';
+  syncScrim();
+}
+byId('pageViewBtn').addEventListener('click', togglePageView);
+pvDown.addEventListener('click', function () { setPageDir('down'); });
+pvAcross.addEventListener('click', function () { setPageDir('across'); });
+pvSpread.addEventListener('click', function () { setPageDir('spread'); });
 
 /* Coming back to the pen from the eraser or the lasso opened the colour
    panel every single time, so every switch back to writing cost a second
@@ -10853,6 +11305,17 @@ byId('pagesDeleteBtn').addEventListener('click', function () {
   if (settings.reading) return;
   deletePageAt(currentPage());
 });
+byId('tplCloseBtn').addEventListener('click', function () {
+  byId('tplOverlay').className = 'overlay';
+});
+byId('tplThisBtn').addEventListener('click', function () {
+  byId('tplOverlay').className = 'overlay';
+  applyTpl('page');
+});
+byId('tplAllBtn').addEventListener('click', function () {
+  byId('tplOverlay').className = 'overlay';
+  applyTpl('all');
+});
 byId('refNextBtn').addEventListener('click', refDone);
 byId('refRedoBtn').addEventListener('click', refRedo);
 byId('refSkipBtn').addEventListener('click', refSkip);
@@ -10883,6 +11346,7 @@ byId('backupImportBtn').addEventListener('click', doImport);
 function init() {
   loadAll();
   buildPalette();
+  buildPageView();
   initPop();
   initSidebar();
   initFavs();

@@ -214,11 +214,44 @@ q2.moveTo(1, 384, 540); q2.tick(20); q2.flushFrames();
 var q2pull = q2.pages().pull;
 check('a shorter pull still stretches the end', q2pull > 0 && q2pull < 78,
       'pull ' + Math.round(q2pull));
-q2.up(1); q2.flushFrames();
+q2.up(1); q2.tick(200); q2.flushFrames();
 check('letting go early puts the sheet back', q2.pages().pull === 0,
       'pull ' + q2.pages().pull);
 check('...and no page is made', q2.pages().total === q2tot,
       q2.pages().total + ' pages');
+
+/* the lift is the whole sheet rising: the scroll sits past the edge by the
+   pull, so the gap the circle shows is real desk, not a disc past the page */
+var q4 = fresh();
+write(q4, 51);
+q4.els.handBtn._fire('click', {});
+q4.down(1, 384, 700); q4.tick(20);
+q4.moveTo(1, 384, 690); q4.tick(20); q4.flushFrames();   /* first move only takes the grip */
+q4.moveTo(1, 384, 540); q4.tick(20); q4.flushFrames();   /* up to the end and a little past */
+var q4pull = q4.pages().pull;
+check('a small pull lifts the sheet without arming it',
+      q4pull > 0 && q4pull < 78, 'pull ' + Math.round(q4pull));
+q4.up(1); q4.tick(200); q4.flushFrames();
+check('released, the lift settles back onto the desk',
+      q4.pages().pull === 0 && q4.pages().total === 1,
+      'pull ' + q4.pages().pull + ', ' + q4.pages().total + ' pages');
+
+/* the arrival is a glide down the new sheet, not a jump */
+var q5 = fresh();
+write(q5, 52);
+q5.els.handBtn._fire('click', {});
+q5.down(1, 384, 760); q5.tick(20);
+q5.moveTo(1, 384, 755); q5.tick(20); q5.flushFrames();
+q5.moveTo(1, 384, 455); q5.tick(20); q5.flushFrames();
+var q5tot = q5.pages().total;
+q5.up(1); q5.flushFrames();
+check('letting go past the mark makes the page at once',
+      q5.pages().total === q5tot + 1, q5.pages().total + ' pages');
+var q5y = q5.pages().y;
+q5.tick(300); q5.flushFrames();
+check('...and the view glides down to it',
+      q5.pages().y > q5y && q5.pages().y >= (q5.pages().total - 1) * 1020 - 1,
+      'y ' + q5y + ' -> ' + q5.pages().y);
 
 var q3 = fresh();
 q3.clickMenu('Page type');                    /* infinite: no end to pull past */
@@ -1924,10 +1957,10 @@ check('the two-page row arrives with pages across',
 l5.flushFrames();
 var l5p = l5.pages();
 check('two pages fill the screen',
-      l5p.spread === true && Math.abs(l5p.zoom - 768 / (2 * SPAN_H - 44)) < 0.01,
+      l5p.spread === true && Math.abs(l5p.zoom - 872 / 1000) < 0.01,
       'spread ' + l5p.spread + ', zoom ' + l5p.zoom);
-check('...which is further out than the pinch is ever allowed to go',
-      l5p.zoom < 0.6, 'zoom ' + l5p.zoom);
+check('...as large as the screen allows them to be',
+      l5p.zoom > 0.6, 'zoom ' + l5p.zoom);
 glide(l5);
 var l5x = l5.pages().x;
 check('the view sits at the head of the pair',
@@ -1961,6 +1994,138 @@ var l8 = fresh();
 l8.clickMenu('Reading mode'); l8.flushFrames();
 check('in reading mode the layout row is not offered',
       l8.clickMenu('Page layout') === false, 'row offered');
+
+/* ---------- the page view popover ---------- */
+var pv1 = fresh();
+pv1.els.pageViewBtn._fire('click', {});
+check('the page view button opens the popover', pv1.pageView().open === true,
+      'open ' + pv1.pageView().open);
+check('...and the scrim is up with it', pv1.els.panelScrim.className === 'on',
+      'scrim "' + pv1.els.panelScrim.className + '"');
+check('three directions, the first chosen for a note down the page',
+      pv1.pageView().dir === 'down' && pv1.pageView().onDown &&
+      !pv1.pageView().onAcross && !pv1.pageView().onSpread,
+      pv1.pageView().dir + ' / ' + pv1.pageView().label);
+check('the paper swatches are there, white ticked',
+      pv1.pageView().swatches === 5 && pv1.pageView().paper === 0 &&
+      /on/.test(pv1.els.pvColors.children[0].className),
+      pv1.pageView().swatches + ' swatches, paper ' + pv1.pageView().paper);
+
+pv1.els.pvAcross._fire('click', {});
+check('across turns the note side by side',
+      pv1.pageView().dir === 'across' && pv1.pageView().onAcross &&
+      pv1.pages().across === true,
+      pv1.pageView().dir + ', across ' + pv1.pages().across);
+pv1.undo();
+check('...and it is one undo back', pv1.pages().across === false,
+      'across ' + pv1.pages().across);
+
+pv1.els.pvSpread._fire('click', {});
+check('two pages at a time',
+      pv1.pageView().dir === 'spread' && pv1.pageView().onSpread &&
+      pv1.pages().spread === true,
+      pv1.pageView().dir + ', spread ' + pv1.pages().spread);
+pv1.els.pvDown._fire('click', {});
+check('and back down the page again',
+      pv1.pageView().dir === 'down' && pv1.pages().across === false &&
+      !pv1.pages().spread,
+      pv1.pageView().dir + ', across ' + pv1.pages().across);
+
+/* the paper colour is chosen, not cycled */
+var pv2 = fresh();
+pv2.els.pageViewBtn._fire('click', {});
+pv2.els.pvColors.children[2]._fire('click', {});
+check('a swatch picks that paper', pv2.pageView().paper === 2 &&
+      /on/.test(pv2.els.pvColors.children[2].className) &&
+      !/on/.test(pv2.els.pvColors.children[0].className),
+      'paper ' + pv2.pageView().paper);
+pv2.els.pvColors.children[4]._fire('click', {});
+check('and another swatch moves the tick', pv2.pageView().paper === 4 &&
+      /on/.test(pv2.els.pvColors.children[4].className),
+      'paper ' + pv2.pageView().paper);
+
+/* an infinite note has no direction to choose */
+var pv3 = fresh();
+pv3.clickMenu('Page type');
+pv3.els.moreBtn._fire('click', {});
+pv3.els.pageViewBtn._fire('click', {});
+check('an infinite note hides the direction', pv3.pageView().dirHidden === true,
+      'dirHidden ' + pv3.pageView().dirHidden);
+check('...but still offers the paper colour', pv3.pageView().swatches === 5,
+      pv3.pageView().swatches + ' swatches');
+
+/* the scrim tap closes it, and reading mode refuses it */
+pv3.els.panelScrim._fire('click', {});
+check('the scrim tap closes the popover', pv3.pageView().open === false,
+      'open ' + pv3.pageView().open);
+var pv4 = fresh();
+pv4.clickMenu('Reading mode');
+pv4.els.moreBtn._fire('click', {});
+pv4.els.pageViewBtn._fire('click', {});
+check('reading mode refuses the popover', pv4.pageView().open === false,
+      'open ' + pv4.pageView().open);
+
+/* ---------- the template gallery ---------- */
+var tg = fresh();
+write(tg, 80);
+tg.clickMenu('Template');
+check('the Template row opens the gallery', tg.tpl().open === true, 'open ' + tg.tpl().open);
+check('...with a picture of each template', tg.tpl().cells === 6, tg.tpl().cells + ' cells');
+check('the template in use is the one selected', tg.tpl().sel === 0 && tg.tpl().cur === 0,
+      'sel ' + tg.tpl().sel + ', cur ' + tg.tpl().cur);
+
+tg.els.tplGrid.children[1]._fire('click', {});   /* grid */
+check('tapping a picture selects it', tg.tpl().sel === 1, 'sel ' + tg.tpl().sel);
+tg.els.tplThisBtn._fire('click', {});
+check('this page puts it on that page only',
+      tg.tpl().perPage && tg.tpl().perPage[0] === 1 && tg.tpl().global === 0,
+      'perPage ' + JSON.stringify(tg.tpl().perPage) + ', global ' + tg.tpl().global);
+tg.undo();
+check('one undo takes it off the page', tg.tpl().cur === 0, 'cur ' + tg.tpl().cur);
+
+tg.clickMenu('Template');
+tg.els.tplGrid.children[4]._fire('click', {});   /* to-do */
+tg.els.tplAllBtn._fire('click', {});
+check('all pages puts it on every page',
+      tg.tpl().global === 4 && !tg.tpl().perPage,
+      'global ' + tg.tpl().global + ', perPage ' + JSON.stringify(tg.tpl().perPage));
+tg.undo();
+check('and undo takes it back off', tg.tpl().global === 0 && !tg.tpl().perPage,
+      'global ' + tg.tpl().global + ', perPage ' + JSON.stringify(tg.tpl().perPage));
+
+/* an infinite note has no pages to template */
+var tg2 = fresh();
+tg2.clickMenu('Page type');
+tg2.clickMenu('Template');
+check('an infinite note refuses the gallery', tg2.tpl().open === false, 'open ' + tg2.tpl().open);
+
+/* ---------- the page colour tints the whole interface ---------- */
+var tn = fresh();
+check('a white page sits on a light grey desk under a pale bar',
+      tn.tint().paper === 0 && tn.tint().desk === '#E8EAED' && tn.tint().hdr === '#F0F1F3',
+      'desk ' + tn.tint().desk + ', hdr ' + tn.tint().hdr);
+
+tn.els.pageViewBtn._fire('click', {});
+tn.els.pvColors.children[2]._fire('click', {});   /* yellow */
+check('a yellow page tints the desk',
+      tn.tint().paper === 2 && tn.tint().desk === '#E3DA9E',
+      'paper ' + tn.tint().paper + ', desk ' + tn.tint().desk);
+check('...and warms the chrome above it',
+      tn.tint().hdr === '#F0E7B8' && tn.tint().toolbar === '#F0E7B8',
+      'hdr ' + tn.tint().hdr + ', toolbar ' + tn.tint().toolbar);
+
+tn.els.pageViewBtn._fire('click', {});
+tn.els.pvColors.children[4]._fire('click', {});   /* dark */
+check('a dark page takes the dark chrome',
+      tn.tint().dark === true && tn.tint().hdr === '#1B1C1F' && tn.tint().desk === '#141414',
+      'dark ' + tn.tint().dark + ', hdr ' + tn.tint().hdr + ', desk ' + tn.tint().desk);
+
+/* the menu row opens the picker rather than cycling at random */
+var tn3 = fresh();
+tn3.clickMenu('Paper color');
+check('the Paper colour row opens the picker',
+      tn3.pageView().open === true && tn3.tint().paper === 0,
+      'open ' + tn3.pageView().open + ', paper ' + tn3.tint().paper);
 
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
