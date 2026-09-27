@@ -83,6 +83,20 @@ body.reading #readChip { display: block; }
   padding: 12px 4px; overflow-y: auto; -webkit-overflow-scrolling: touch;
   text-align: center;
 }
+/* opening a folder scales the notes up into place, the way Samsung's
+   folder opens - the grid grows from a smaller, faded-in state to full */
+@-webkit-keyframes homeScaleUp {
+  from { -webkit-transform: scale(0.82); transform: scale(0.82); opacity: 0.3; }
+  to { -webkit-transform: scale(1); transform: scale(1); opacity: 1; }
+}
+@keyframes homeScaleUp {
+  from { -webkit-transform: scale(0.82); transform: scale(0.82); opacity: 0.3; }
+  to { -webkit-transform: scale(1); transform: scale(1); opacity: 1; }
+}
+#notesGrid.scale-up {
+  -webkit-animation: homeScaleUp 0.34s cubic-bezier(0.22, 0.9, 0.32, 1);
+  animation: homeScaleUp 0.34s cubic-bezier(0.22, 0.9, 0.32, 1);
+}
 .note-card {
   position: relative;
   display: inline-block; width: 46%; margin: 1.6%;
@@ -9346,7 +9360,8 @@ window.__mnHome = function () {
     titles.push(c.children[1] && c.children[1].children[0] ? c.children[1].children[0].textContent : '');
   }
   return { cards: cards.length, previews: prevs, renames: renames,
-           list: notesGrid.className === 'list', sort: settings.homeSort, titles: titles };
+           list: notesGrid.className.indexOf('list') >= 0,
+           sort: settings.homeSort, titles: titles };
 };
 window.__mnHold = function () { holdCheck(); };
 window.__mnTidy = function () { return tidyRun(); };
@@ -9838,6 +9853,13 @@ function drawerRow(i, depth) {
       curNotebook = idx;
       closeDrawer();
       renderHome();
+      /* opening a folder scales the notes up into place, the way Samsung's
+         folder opens - the grid grows from a smaller, faded-in state */
+      notesGrid.className = (settings.homeList ? 'list ' : '') + 'scale-up';
+      notesGrid.addEventListener('animationend', function h() {
+        notesGrid.removeEventListener('animationend', h);
+        notesGrid.className = settings.homeList ? 'list' : '';
+      });
       saveSoon();
     });
   })(i);

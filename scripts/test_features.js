@@ -2164,5 +2164,29 @@ check('the view control switches to one note to a row', hm.home().list === true,
 hm.els.homeViewBtn._fire('click', {});
 check('...and back to a grid', hm.home().list === false, 'list ' + hm.home().list);
 
+/* opening a folder scales the notes up into place */
+var hm3 = fresh();
+hm3.confirmAll(true);
+(function () {
+  var mk = hm3.els.newNbBtn;
+  hm3.answer('Physics'); mk._fire('click', {});
+  hm3.els.fabNew._fire('click', {}); hm3.flushFrames();
+  hm3.els.backBtn._fire('click', {}); hm3.flushFrames();
+})();
+hm3.els.menuBtn._fire('click', {});          /* open the notebooks drawer */
+hm3.flushFrames();
+var nbItems = hm3.els.nbList.children, nbTarget = null;
+for (var k = 0; k < nbItems.length; k++) {
+  var rowEl = nbItems[k].children[0];
+  if (rowEl && String(rowEl.innerHTML).indexOf('Physics') >= 0) {
+    nbTarget = rowEl;                          /* the row itself */
+    break;
+  }
+}
+if (nbTarget) nbTarget._fire('click', {});
+check('opening a folder scales the notes up',
+      hm3.els.notesGrid.className.indexOf('scale-up') >= 0,
+      'class "' + hm3.els.notesGrid.className + '"');
+
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
