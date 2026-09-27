@@ -87,12 +87,25 @@ body.reading #readChip { display: block; }
   position: relative;
   display: inline-block; width: 46%; margin: 1.6%;
   background: #FFFFFF; border-radius: 16px;
-  padding: 14px 16px; text-align: left;
+  padding: 0; text-align: left;
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-  vertical-align: top; min-height: 96px;
-  cursor: pointer;
+  vertical-align: top; cursor: pointer; overflow: hidden;
 }
 .note-card:active { background: #F7F9FB; }
+/* the preview: the note's first page drawn small, so a card shows what
+   is in the note the way Samsung's grid of miniatures does */
+.note-card .nc-prev {
+  display: block; width: 100%; height: 128px; overflow: hidden;
+  background: #FFFFFF; border-bottom: 1px solid #ECEFF2;
+}
+.note-card .nc-prev canvas { display: block; width: 100%; height: auto; }
+.note-card .nc-body { padding: 10px 14px 12px 14px; }
+.note-card .nc-title {
+  font-size: 16px; font-weight: 600; color: #1B1B1B;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.note-card .nc-sub { font-size: 13px; color: #8C8C8C; margin-top: 4px; }
+.note-card .nc-date { font-size: 12px; color: #A8A8A8; margin-top: 6px; }
 .star-btn {
   position: absolute; right: 6px; top: 6px;
   width: 38px; height: 38px;
@@ -104,12 +117,25 @@ body.reading #readChip { display: block; }
 .star-btn:active { background: #F0F2F5; }
 .star-btn.on { color: #F58300; }
 .star-btn.on svg path { fill: #F58300; }
-.note-card .nc-title {
-  font-size: 16px; font-weight: 600; color: #1B1B1B;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.nc-rename {
+  position: absolute; right: 6px; bottom: 6px;
+  width: 34px; height: 34px; border-radius: 50%;
+  display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center;
+  -webkit-justify-content: center; justify-content: center;
+  color: #9AA0A8; border: 0; background: none;
 }
-.note-card .nc-sub { font-size: 13px; color: #8C8C8C; margin-top: 6px; }
-.note-card .nc-date { font-size: 12px; color: #A8A8A8; margin-top: 10px; }
+.nc-rename:active { background: #F0F2F5; }
+.nc-rename.on { color: #0381FE; }
+/* list mode: one note to a row, a small preview on the left */
+#notesGrid.list .note-card { display: -webkit-flex; display: flex; width: auto; margin: 0 0 10px 0; }
+#notesGrid.list .note-card .nc-prev {
+  width: 96px; height: 96px; -webkit-flex: 0 0 96px; flex: 0 0 96px;
+  border-bottom: 0; border-right: 1px solid #ECEFF2;
+}
+#notesGrid.list .note-card .nc-body { -webkit-flex: 1; flex: 1; }
+body.dark .note-card .nc-prev { background: #101114; border-bottom-color: #2A2E34; }
+body.dark #notesGrid.list .note-card .nc-prev { border-right-color: #2A2E34; }
 #emptyHint {
   position: absolute; top: 40%; left: 0; right: 0;
   text-align: center; color: #A8A8A8; font-size: 15px; display: none;
@@ -1312,6 +1338,20 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
       </svg>
     </button>
     <div class="ttl left" id="homeTitle">Notes</div>
+    <button id="homeSortBtn" class="ibtn" aria-label="Sort notes">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 7 h13"/><path d="M4 12 h9"/><path d="M4 17 h5"/>
+        <path d="M18.5 9.5 v8"/><path d="M16 15 l2.5 2.5 L21 15"/>
+      </svg>
+    </button>
+    <button id="homeViewBtn" class="ibtn" aria-label="Grid or list">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="4" y="4" width="7" height="7" rx="1.2"/>
+        <rect x="13" y="4" width="7" height="7" rx="1.2"/>
+        <rect x="4" y="13" width="7" height="7" rx="1.2"/>
+        <rect x="13" y="13" width="7" height="7" rx="1.2"/>
+      </svg>
+    </button>
     <button id="searchBtn" class="ibtn" aria-label="Search notes">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
         <circle cx="11" cy="11" r="6.2"/><path d="M15.6 15.6 L20 20"/>
@@ -2420,6 +2460,8 @@ var settings = {
   reading: false,             /* reading mode: scroll, zoom and turn pages,
                                  but nothing on the page can be marked */
   spread: false,              /* two pages side by side on the screen */
+  homeSort: 'fav',            /* home order: fav, title or date */
+  homeList: false,            /* home shows one note to a row, not a grid */
   popDock: 0,                 /* pen pop-up docked: 0 no, 1 left edge, 2 right edge */
   popY: 0.5,                  /* ...and how far down that edge */
   margin: true,
@@ -2604,6 +2646,8 @@ function applyStoredSettings(set) {
     if (typeof data.set.hold === 'boolean') settings.hold = data.set.hold;
     if (typeof data.set.reading === 'boolean') settings.reading = data.set.reading;
     if (typeof data.set.spread === 'boolean') settings.spread = data.set.spread;
+    if (typeof data.set.homeSort === 'string') settings.homeSort = data.set.homeSort;
+    if (typeof data.set.homeList === 'boolean') settings.homeList = data.set.homeList;
     if (typeof data.set.popDock === 'number') settings.popDock = lim(Math.round(data.set.popDock), 0, 2);
     if (typeof data.set.popY === 'number') settings.popY = lim(data.set.popY, 0, 1);
     if (typeof data.set.scrollHintShown === 'boolean') settings.scrollHintShown = data.set.scrollHintShown;
@@ -9288,6 +9332,22 @@ window.__mnTint = function () {
            hdr: byId('hdr').style.background,
            toolbar: byId('toolbar').style.background };
 };
+window.__mnHome = function () {
+  var cards = notesGrid.children, i, c, k, prevs = 0, renames = 0, titles = [];
+  for (i = 0; i < cards.length; i++) {
+    c = cards[i];
+    var hasPrev = false, hasRename = false;
+    for (k = 0; k < c.children.length; k++) {
+      if (c.children[k].className === 'nc-prev') hasPrev = true;
+      if (c.children[k].className === 'nc-rename') hasRename = true;
+    }
+    if (hasPrev) prevs++;
+    if (hasRename) renames++;
+    titles.push(c.children[1] && c.children[1].children[0] ? c.children[1].children[0].textContent : '');
+  }
+  return { cards: cards.length, previews: prevs, renames: renames,
+           list: notesGrid.className === 'list', sort: settings.homeSort, titles: titles };
+};
 window.__mnHold = function () { holdCheck(); };
 window.__mnTidy = function () { return tidyRun(); };
 window.__mnZW = function () { var g = zwGeom(); return { on: zw.on, x: zw.x, y: zw.y, bw: g.bw, bh: g.bh, top: g.top }; };
@@ -9503,9 +9563,36 @@ function escapeHtml(s) {
 }
 
 /* ---------- home (search + favorites + cards) ---------- */
+/* a note's first page drawn small, for the home grid's preview. The same
+   paper and the same strokes the page itself uses, so the miniature cannot
+   drift from the note it stands for. */
+function noteThumb(n, w) {
+  var P = PAPERS[settings.paperColor] || PAPERS[0];
+  var pw = Math.max(n.pw || PAGE_W_MIN, PAGE_W_MIN);
+  var cv = document.createElement('canvas');
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(w * PAGE_H / pw * dpr);
+  var c = cv.getContext('2d');
+  if (!c) return cv;
+  var k = (w / pw) * dpr;
+  c.setTransform(k, 0, 0, k, 0, 0);
+  c.fillStyle = P.bg;
+  c.fillRect(0, 0, pw, PAGE_H);
+  drawTplPattern(c, tplFor(n, 0), P, 0, 0, pw, MARGIN_X);
+  var i, s, bb;
+  for (i = 0; i < n.strokes.length; i++) {
+    s = n.strokes[i];
+    bb = strokeBBox(s);
+    if (n.horiz ? (bb.x1 < -8 || bb.x0 > pw + 8) : (bb.y1 < -8 || bb.y0 > PAGE_H + 8)) continue;
+    renderStrokeFull(c, s);
+  }
+  return cv;
+}
+
 function renderHome(filterText) {
   var nb = notebooks[curNotebook];
   homeTitle.textContent = nb ? nb.title : 'Notes';
+  notesGrid.className = settings.homeList ? 'list' : '';
   notesGrid.innerHTML = '';
   var q = (filterText === undefined ? searchInputEl.value : filterText);
   q = String(q || '').toLowerCase();
@@ -9517,12 +9604,19 @@ function renderHome(filterText) {
     if (q && (nt.title || 'Untitled').toLowerCase().indexOf(q) < 0) continue;
     shown.push(ids[i]);
   }
-  /* favorites first, then most recently modified */
+  /* the order the notes are listed in: favourites, title or date */
+  var sort = settings.homeSort;
   shown.sort(function (a, b) {
     var na = notes[a], nbv = notes[b];
-    var fa = na && na.fav ? 1 : 0, fb = nbv && nbv.fav ? 1 : 0;
-    if (fa !== fb) return fb - fa;
-    return (nbv && nbv.mod || 0) - (na && na.mod || 0);
+    if (sort === 'title') {
+      var ta = (na.title || 'Untitled').toLowerCase(), tb = (nbv.title || 'Untitled').toLowerCase();
+      if (ta !== tb) return ta < tb ? -1 : 1;
+    }
+    if (sort !== 'date') {
+      var fa = na.fav ? 1 : 0, fb = nbv.fav ? 1 : 0;
+      if (fa !== fb) return fb - fa;
+    }
+    return (nbv.mod || 0) - (na.mod || 0);
   });
   var j = 0;
   for (i = 0; i < shown.length; i++) {
@@ -9530,10 +9624,20 @@ function renderHome(filterText) {
     var card = document.createElement('div');
     card.className = 'note-card';
 
+    /* the preview: the note's first page drawn small, so a card shows what
+       is in the note the way Samsung's grid of miniatures does */
+    var prev = document.createElement('div');
+    prev.className = 'nc-prev';
+    prev.appendChild(noteThumb(n, 240));
+    card.appendChild(prev);
+
+    var body = document.createElement('div');
+    body.className = 'nc-body';
+
     var titleEl = document.createElement('div');
     titleEl.className = 'nc-title';
     titleEl.textContent = n.title || 'Untitled';
-    card.appendChild(titleEl);
+    body.appendChild(titleEl);
 
     var subEl = document.createElement('div');
     subEl.className = 'nc-sub';
@@ -9552,12 +9656,13 @@ function renderHome(filterText) {
     var pages = n.strokes.length ? Math.max(1, Math.ceil((n.horiz ? maxX : maxY) / pSpan)) : 0;
     subEl.textContent = !n.strokes.length ? 'Empty'
       : (pages === 1 ? '1 page' : pages + ' pages');
-    card.appendChild(subEl);
+    body.appendChild(subEl);
 
     var dateEl = document.createElement('div');
     dateEl.className = 'nc-date';
     dateEl.textContent = (n.mod ? fmtDate(n.mod) : fmtDate(n.cr));
-    card.appendChild(dateEl);
+    body.appendChild(dateEl);
+    card.appendChild(body);
 
     var star = document.createElement('button');
     star.className = 'star-btn' + (n.fav ? ' on' : '');
@@ -9573,6 +9678,26 @@ function renderHome(filterText) {
       });
     })(n, star);
     card.appendChild(star);
+
+    /* rename without opening the note - the title is right there */
+    var rename = document.createElement('button');
+    rename.className = 'nc-rename';
+    rename.innerHTML =
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M4 16.5 L15 5.5 a2.3 2.3 0 0 1 3.6 3.6 L7.5 20 H4 v-3.5 z"/><path d="M13.5 7 l3.5 3.5"/></svg>';
+    (function (note, el) {
+      el.addEventListener('click', function (ev) {
+        if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+        var name = window.prompt('Note name', note.title || 'Untitled');
+        if (name !== null && name !== '') {
+          note.title = name;
+          note.mod = Date.now();
+          saveSoon();
+          renderHome();
+        }
+      });
+    })(n, rename);
+    card.appendChild(rename);
 
     (function (id) {
       card.addEventListener('click', function () { openNote(id); });
@@ -11411,6 +11536,22 @@ searchBtn.addEventListener('click', function () {
   setTimeout(function () {
     if (searchBarEl.style.display === 'block' && typeof searchInputEl.focus === 'function') searchInputEl.focus();
   }, 60);
+});
+/* the order the notes are listed in: favourites, then title, then date */
+byId('homeSortBtn').addEventListener('click', function () {
+  settings.homeSort = settings.homeSort === 'fav' ? 'title'
+                   : settings.homeSort === 'title' ? 'date' : 'fav';
+  saveSoon();
+  renderHome();
+  toast('Sorted by ' + (settings.homeSort === 'fav' ? 'favourites'
+                     : settings.homeSort === 'title' ? 'title' : 'date'));
+});
+/* a grid of previews, or one note to a row */
+byId('homeViewBtn').addEventListener('click', function () {
+  settings.homeList = !settings.homeList;
+  saveSoon();
+  renderHome();
+  toast(settings.homeList ? 'One note to a row' : 'A grid of previews');
 });
 function hideSearch() {
   searchBarEl.style.display = 'none';

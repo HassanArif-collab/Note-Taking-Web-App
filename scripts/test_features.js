@@ -2127,5 +2127,42 @@ check('the Paper colour row opens the picker',
       tn3.pageView().open === true && tn3.tint().paper === 0,
       'open ' + tn3.pageView().open + ', paper ' + tn3.tint().paper);
 
+/* ---------- the home screen ---------- */
+var hm = fresh();
+hm.confirmAll(true);
+(function () {
+  var mk = hm.els.newNbBtn;
+  hm.answer('Physics'); mk._fire('click', {});
+  hm.els.fabNew._fire('click', {}); hm.flushFrames();
+  hm.els.backBtn._fire('click', {}); hm.flushFrames();
+  hm.els.fabNew._fire('click', {}); hm.flushFrames();
+  hm.els.backBtn._fire('click', {}); hm.flushFrames();
+  hm.els.fabNew._fire('click', {}); hm.flushFrames();
+  hm.els.backBtn._fire('click', {}); hm.flushFrames();
+})();
+check('the home grid shows a card for each note', hm.home().cards === 3, hm.home().cards + ' cards');
+check('...each with a preview of the note', hm.home().previews === 3, hm.home().previews + ' previews');
+check('...and a way to rename it there', hm.home().renames === 3, hm.home().renames + ' rename buttons');
+
+/* rename without opening the note */
+hm.answer('Mechanics');
+var hmCards = hm.els.notesGrid.children;
+hmCards[0].children[3]._fire('click', {});   /* prev, body, star, rename */
+hm.flushFrames();
+check('a note can be renamed from the home screen',
+      hm.home().titles[0] === 'Mechanics', hm.home().titles[0]);
+
+/* sort by title */
+hm.els.homeSortBtn._fire('click', {});   /* favourites -> title */
+check('the sort control orders by title', hm.home().sort === 'title', hm.home().sort);
+var hmTitles = hm.home().titles;
+check('...alphabetically', hmTitles[0] === 'Mechanics', hmTitles.join(', '));
+
+/* list mode */
+hm.els.homeViewBtn._fire('click', {});
+check('the view control switches to one note to a row', hm.home().list === true, 'list ' + hm.home().list);
+hm.els.homeViewBtn._fire('click', {});
+check('...and back to a grid', hm.home().list === false, 'list ' + hm.home().list);
+
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

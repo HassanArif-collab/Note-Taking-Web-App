@@ -319,6 +319,7 @@ App.prototype.pages = function () { return this.win.__mnPages(); };
 App.prototype.pageView = function () { return this.win.__mnPageView(); };
 App.prototype.tpl = function () { return this.win.__mnTpl(); };
 App.prototype.tint = function () { return this.win.__mnTint(); };
+App.prototype.home = function () { return this.win.__mnHome(); };
 App.prototype.nb = function () { return this.win.__mnNb; };
 App.prototype.ref = function () { return this.win.__mnRef; };
 App.prototype.loadInk = function (list) { var n = this.win.__mnLoadInk(list); this.flushFrames(); return n; };
