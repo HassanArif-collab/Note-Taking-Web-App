@@ -16,15 +16,15 @@ Build one at a time, copying how Samsung Notes does it.
   with a smooth page-turn animation.~~ **Done** — ⋮ menu → Page layout → Across
   lays the pages across the screen (the note's own layout, saved with it, one
   undo back), and turning to a page or flicking across glides to it.
-- **Two-page view — built, but it looks bad on screen.** Redo it Samsung's
-  way (recording frame 20): two full pages side by side filling the view, a
-  thin clean gutter, the note's own background colour, a stable comfortable
-  zoom, and the page pill counting pairs (`1 / 4  50%`).
-- **Add a page the Samsung way** (replaces the plain pull): on the last page,
-  scroll up a little and the **page lifts to reveal a "+" circle underneath**;
-  keep pulling past a mark and the new page **drops in with an animation**.
-  The stretch-and-disc exists but the lift, the circle and the arrival
-  animation do not — the user reports "there is nothing like this".
+- **Two-page view — removed.** It looked bad on screen; the user asked for it
+  gone. Pages still move horizontally (Page layout → Across) and turn with a
+  glide, but there is no two-pages-to-a-screen view any more.
+- ~~**Add a page the Samsung way**: the last page lifts to reveal a "+"
+  circle, and past a mark the new page drops in with an animation.~~ **Done,
+  reworked** — the lift is the scroll sitting past the edge, so the page
+  follows the finger directly; the disc is a **ring that fills** as you pull
+  and turns blue with a "Release to add" label when it is full. Pulling back
+  down lets the lift fall, so releasing on the way down makes no page.
 - ~~**Page sidebar**: thumbnails of every page in a side strip to scroll and jump.~~
   **Done** — the tab on the left edge opens a strip of thumbnails; the paper
   slides aside for it. Reshape it to Samsung's panel (frame 0): page count,

@@ -253,6 +253,25 @@ check('...and the view glides down to it',
       q5.pages().y > q5y && q5.pages().y >= (q5.pages().total - 1) * 1020 - 1,
       'y ' + q5y + ' -> ' + q5.pages().y);
 
+/* the pull-back fix: pull past the mark, then pull back down and let go.
+   The lift falls back and NO page is made - releasing on the way down is
+   not the same as releasing at the top. */
+var q6 = fresh();
+write(q6, 53);
+q6.els.handBtn._fire('click', {});
+q6.down(1, 384, 700); q6.tick(20);
+q6.moveTo(1, 384, 690); q6.tick(20); q6.flushFrames();   /* first move only takes the grip */
+q6.moveTo(1, 384, 455); q6.tick(20); q6.flushFrames();   /* up past the mark */
+var q6pull = q6.pages().pull;
+check('a long pull lifts the sheet past the mark', q6pull >= 85, 'pull ' + Math.round(q6pull));
+q6.moveTo(1, 384, 640); q6.tick(20); q6.flushFrames();   /* back down */
+check('pulling back down lets the lift fall',
+      q6.pages().pull < q6pull, q6pull + ' -> ' + Math.round(q6.pages().pull));
+q6.up(1); q6.tick(200); q6.flushFrames();
+check('...and releasing on the way down makes no page',
+      q6.pages().pull === 0 && q6.pages().total === 1,
+      'pull ' + q6.pages().pull + ', ' + q6.pages().total + ' pages');
+
 var q3 = fresh();
 q3.clickMenu('Page type');                    /* infinite: no end to pull past */
 q3.flushFrames();
@@ -1941,30 +1960,11 @@ check('...without moving the ink', l3.strokes().length === 1 &&
       l3.strokes().length + ' strokes, at ' + Math.round(firstPt(l3)[0]) + ',' +
       Math.round(firstPt(l3)[1]));
 
-/* two pages to a screen */
+/* an infinite note offers no layout to change */
 var l4 = fresh();
-check('there is no two-page row on a note laid down the page',
-      l4.clickMenu('Two pages') === false, 'row offered');
 l4.clickMenu('Page type'); l4.flushFrames();                /* infinite now */
-check('nor is there a layout row on an infinite note',
+check('there is no layout row on an infinite note',
       l4.clickMenu('Page layout') === false, 'row offered');
-
-var l5 = fresh();
-write(l5, 74);
-l5.clickMenu('Page layout'); l5.flushFrames();
-check('the two-page row arrives with pages across',
-      l5.clickMenu('Two pages') === true, 'no Two pages row');
-l5.flushFrames();
-var l5p = l5.pages();
-check('two pages fill the screen',
-      l5p.spread === true && Math.abs(l5p.zoom - 872 / 1000) < 0.01,
-      'spread ' + l5p.spread + ', zoom ' + l5p.zoom);
-check('...as large as the screen allows them to be',
-      l5p.zoom > 0.6, 'zoom ' + l5p.zoom);
-glide(l5);
-var l5x = l5.pages().x;
-check('the view sits at the head of the pair',
-      Math.abs(l5x - 0) < 4 || Math.abs(l5x - 2 * SPAN_H) < 4, 'x ' + l5x);
 
 /* the layout is the note's own, so it goes into the note's record */
 var l6 = fresh();
@@ -2020,15 +2020,9 @@ pv1.undo();
 check('...and it is one undo back', pv1.pages().across === false,
       'across ' + pv1.pages().across);
 
-pv1.els.pvSpread._fire('click', {});
-check('two pages at a time',
-      pv1.pageView().dir === 'spread' && pv1.pageView().onSpread &&
-      pv1.pages().spread === true,
-      pv1.pageView().dir + ', spread ' + pv1.pages().spread);
 pv1.els.pvDown._fire('click', {});
 check('and back down the page again',
-      pv1.pageView().dir === 'down' && pv1.pages().across === false &&
-      !pv1.pages().spread,
+      pv1.pageView().dir === 'down' && pv1.pages().across === false,
       pv1.pageView().dir + ', across ' + pv1.pages().across);
 
 /* the paper colour is chosen, not cycled */

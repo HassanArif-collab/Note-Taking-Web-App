@@ -1681,12 +1681,6 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
           <rect x="3" y="7" width="18" height="10" rx="1.5"/>
         </svg>
       </button>
-      <button class="pv-dir" id="pvSpread" aria-label="Two pages at a time">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-          <rect x="3" y="5" width="8" height="14" rx="1.5"/>
-          <rect x="13" y="5" width="8" height="14" rx="1.5"/>
-        </svg>
-      </button>
     </div>
     <div id="pvDirName">One page down the screen</div>
     <div class="pv-h" style="margin-top:14px">Background colour</div>
@@ -1936,10 +1930,7 @@ var SHAPE_NAMES = ['Off', 'Line', 'Shapes'];
 
 /* zoom limits (screen scale) */
 var Z_MIN = 0.6, Z_MAX = 2.6;
-/* two pages to a screen is asking for less than half a page each, so the
-   floor drops with it - otherwise the pair could never be shown at once */
-var SPREAD_Z_MIN = 0.32;
-function zMin() { return (horiz() && settings.spread) ? SPREAD_Z_MIN : Z_MIN; }
+function zMin() { return Z_MIN; }
 
 var HAND_R = 0, HAND_L = 1, HAND_BOTH = 2;
 var HAND_NAMES = ['Right', 'Left', 'Both'];
@@ -2423,7 +2414,7 @@ var colorRow = byId('colorRow'), penBadge = byId('penBadge');
 var eraserPanel = byId('eraserPanel'), sizeRow = byId('sizeRow');
 var moreMenu = byId('moreMenu'), toastEl = byId('toast'), warningEl = byId('warning');
 var pageView = byId('pageView'), pvDown = byId('pvDown'), pvAcross = byId('pvAcross'),
-    pvSpread = byId('pvSpread'), pvDirName = byId('pvDirName'), pvColors = byId('pvColors');
+    pvDirName = byId('pvDirName'), pvColors = byId('pvColors');
 var drawer = byId('drawer'), drawerBackdrop = byId('drawerBackdrop'), nbList = byId('nbList');
 var exportOverlay = byId('exportOverlay'), exportImg = byId('exportImg');
 var traceOverlay = byId('traceOverlay'), traceText = byId('traceText');
@@ -2473,7 +2464,6 @@ var settings = {
   hold: true,                 /* holding the pen still opens the pen pop-up */
   reading: false,             /* reading mode: scroll, zoom and turn pages,
                                  but nothing on the page can be marked */
-  spread: false,              /* two pages side by side on the screen */
   homeSort: 'fav',            /* home order: fav, title or date */
   homeList: false,            /* home shows one note to a row, not a grid */
   popDock: 0,                 /* pen pop-up docked: 0 no, 1 left edge, 2 right edge */
@@ -2659,7 +2649,6 @@ function applyStoredSettings(set) {
     if (typeof data.set.endless === 'boolean') settings.endless = data.set.endless;
     if (typeof data.set.hold === 'boolean') settings.hold = data.set.hold;
     if (typeof data.set.reading === 'boolean') settings.reading = data.set.reading;
-    if (typeof data.set.spread === 'boolean') settings.spread = data.set.spread;
     if (typeof data.set.homeSort === 'string') settings.homeSort = data.set.homeSort;
     if (typeof data.set.homeList === 'boolean') settings.homeList = data.set.homeList;
     if (typeof data.set.popDock === 'number') settings.popDock = lim(Math.round(data.set.popDock), 0, 2);
@@ -3630,8 +3619,11 @@ function clampScroll() {
    * leaves room for that overshoot - the gap it opens is where the
    * add-page circle shows. */
   var vh = viewH / zoom, vw = viewW / zoom;
-  var yMax = Math.max(0, docH - vh) + pullY, yMin = Math.min(0, docH - vh);
-  var xMax = Math.max(docX0, docW - vw) + pullY, xMin = Math.min(docX0, docW - vw);
+  /* a pull past the end lifts the sheet, so the clamp leaves room for the
+     overshoot - but only in the axis being pulled, and only by the lift:
+     sideways scrolling on a down-the-page note still stops at the edge */
+  var yMax = Math.max(0, docH - vh) + (horiz() ? 0 : pullY), yMin = Math.min(0, docH - vh);
+  var xMax = Math.max(docX0, docW - vw) + (horiz() ? pullY : 0), xMin = Math.min(docX0, docW - vw);
   /* side by side, one page is the whole height: when the screen is taller
      than the page is, the page stands in the middle of it rather than
      pinned to the top, and there is no vertical scrolling left to do */
@@ -4018,16 +4010,20 @@ function toggleLayout() {
  * clampScroll leaves room for it, so the gap is real desk rather than a
  * disc floating past the edge. */
 var pullY = 0;              /* how far the sheet has been lifted, in doc units */
-var PULL_MAX = 170;         /* past this the sheet has nothing more to give */
-var PULL_ARM = 78;          /* release past here and the page is made */
+var PULL_MAX = 180;         /* past this the sheet has nothing more to give */
+var PULL_ARM = 85;          /* release past here and the page is made */
+var PULL_EASE = 0.6;        /* how fast the lift follows the finger: paper, not lag */
 var pullBack = null, pullBackRAF = 0;   /* the lift springing back to nothing */
 
 /* the lift is the scroll sitting past the edge by pullY: the whole sheet -
- * paper and ink and all - rises with it, and the gap opens at the end */
+ * paper and ink and all - rises with it, and the gap opens at the end.
+ * Only the spring-back uses this - the pull itself leaves the scroll where
+ * the pan put it, so the lift always matches the finger exactly */
 function applyPullScroll() {
-  if (isEndless() || pullY <= 0) return;
+  if (isEndless()) return;
   var h = horiz();
   var edge = h ? Math.max(0, docW - viewW / zoom) : Math.max(0, docH - viewH / zoom);
+  if (pullY <= 0) { if (h) scrollX = edge; else scrollY = edge; return; }
   if (h) scrollX = edge + pullY; else scrollY = edge + pullY;
 }
 
@@ -4036,17 +4032,13 @@ function pullPan() {
   var h = horiz();
   var edge = h ? Math.max(0, docW - viewW / zoom) : Math.max(0, docH - viewH / zoom);
   var over = h ? (scrollX - edge) : (scrollY - edge);
-  /* The lift is remembered between frames, not measured afresh each one:
-     a held pull stays held, going back inside the page takes it away, and
-     only then. Resistance is what makes it feel like paper. */
-  if (over > 0) {
-    var give = Math.max(0.16, 1 - pullY / PULL_MAX);
-    pullY = lim(pullY + over * give, 0, PULL_MAX);
-    applyPullScroll();
-    requestRender();
-  } else if (over < 0) {
-    pullY = 0;
-  }
+  /* The lift is exactly how far past the edge the page is. Pulling up
+     lifts it, holding still keeps it there, and pulling back down lets it
+     fall back - the page follows the finger directly, so the ring fills
+     precisely with the pull and releasing on the way down is not the same as
+     releasing at the top. */
+  pullY = lim(over, 0, PULL_MAX);
+  requestRender();
 }
 
 /* a pull that did not reach the mark springs back: the sheet settles onto
@@ -4102,16 +4094,21 @@ function addPageAtEnd() {
   toast('Page ' + want + ' added');
 }
 
+/* the add-page disc, drawn as a ring that fills as you pull. The stroke
+ * grows round the circle with the lift, so the disc reads as a progress
+ * ring: empty when you start, full the moment it will make the page, and
+ * the label under it says which of the two your release will do. */
 function drawPullAdd(c) {
   var P = PAPERS[settings.paperColor] || PAPERS[0];
   var dark = !!P.dark;
-  var armed = pullY >= PULL_ARM;
   var h = horiz();
   var cx = h ? (docW + pullY / 2) : (scrollX + viewW / zoom / 2);
   var cy = h ? (scrollY + viewH / zoom / 2) : (docH + pullY / 2);
-  var r = Math.max(7, Math.min(34, pullY / 2 - 8));
+  var frac = lim(pullY / PULL_ARM, 0, 1);      /* how full the ring is */
+  var armed = frac >= 1;
+  var r = 23 + frac * 8;                        /* it grows a little as it fills */
   c.save();
-  /* the end of the last sheet, seen from underneath as it is stretched */
+  /* the end of the last sheet, seen from underneath as it is lifted */
   c.strokeStyle = dark ? '#3A4048' : '#C9D1DA';
   c.lineWidth = 1;
   c.beginPath();
@@ -4123,23 +4120,42 @@ function drawPullAdd(c) {
     c.lineTo(scrollX + viewW / zoom + 8, docH);
   }
   c.stroke();
+  /* a soft disc behind the + so it reads as a button sitting on the desk */
+  c.beginPath();
+  c.arc(cx, cy, r + 8, 0, Math.PI * 2);
+  c.fillStyle = dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.045)';
+  c.fill();
+  /* the track the ring fills */
   c.beginPath();
   c.arc(cx, cy, r, 0, Math.PI * 2);
-  if (armed) { c.fillStyle = '#0381FE'; c.fill(); }
-  else { c.strokeStyle = dark ? '#5A6270' : '#AAB2BD'; c.lineWidth = 2; c.stroke(); }
-  c.strokeStyle = armed ? '#FFFFFF' : (dark ? '#98A0AC' : '#6B7482');
-  c.lineWidth = 2;
+  c.strokeStyle = dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.10)';
+  c.lineWidth = 4;
+  c.stroke();
+  /* the fill: a stroke that grows round the circle as you pull */
+  if (frac > 0.01) {
+    c.beginPath();
+    c.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
+    c.strokeStyle = armed ? (dark ? '#61A8FF' : '#0381FE')
+                           : (dark ? '#8A92A0' : '#6A7482');
+    c.lineWidth = 4.5;
+    c.lineCap = 'round';
+    c.stroke();
+  }
+  /* the + in the middle */
+  c.strokeStyle = armed ? (dark ? '#61A8FF' : '#0381FE') : (dark ? '#98A0AC' : '#6B7482');
+  c.lineWidth = 2.4;
   c.lineCap = 'round';
   c.beginPath();
-  c.moveTo(cx - r * 0.42, cy); c.lineTo(cx + r * 0.42, cy);
-  c.moveTo(cx, cy - r * 0.42); c.lineTo(cx, cy + r * 0.42);
+  c.moveTo(cx - r * 0.4, cy); c.lineTo(cx + r * 0.4, cy);
+  c.moveTo(cx, cy - r * 0.4); c.lineTo(cx, cy + r * 0.4);
   c.stroke();
-  if (pullY > 56) {
-    c.font = '13px Helvetica, Arial, sans-serif';
+  /* the label says which way your release will go */
+  if (pullY > 40) {
+    c.font = (armed ? '600 ' : '') + '13px Helvetica, Arial, sans-serif';
     c.textAlign = 'center';
     c.textBaseline = 'top';
     c.fillStyle = armed ? (dark ? '#61A8FF' : '#0381FE') : (dark ? '#98A0AC' : '#5A6473');
-    c.fillText('Add page', cx, cy + r + 7);
+    c.fillText(armed ? 'Release to add' : 'Add page', cx, cy + r + 10);
   }
   c.restore();
 }
@@ -8034,7 +8050,6 @@ var pageTweenY = null, pageTweenYRAF = 0;   /* the same glide, down the roll */
    head of the pair it belongs to when two are shown together */
 function viewXFor(p) {
   var i = Math.max(0, (p || 1) - 1);
-  if (horiz() && settings.spread) i = Math.floor(i / 2) * 2;
   return i * pageSpan();
 }
 
@@ -8106,18 +8121,12 @@ function pageTweenYStep() {
 /* a flick across the screen is a turn of the page: the view settles on
    the next one along rather than coming to rest wherever it stops */
 function turnPage(vx) {
-  var step = settings.spread ? 2 : 1;
-  startPageTween(viewXFor(currentPage() + (vx > 0 ? -step : step)));
+  startPageTween(viewXFor(currentPage() + (vx > 0 ? -1 : 1)));
 }
 
-/* how far a page fills the screen: one sheet, or two when the view is
-   opened out. Fitting the pair by width left them small and lost in desk
-   above and below on any screen but the widest. Filling the height makes
-   them as large as the screen allows - on a wide screen the pair still
-   fits across, and on a narrow one it runs past the edge and is scrolled
-   to, the way a book's spread does on a phone. */
+/* how far a page fills the screen: one sheet laid across, fit to the width
+   so the whole page is always on screen */
 function fitZoom() {
-  if (settings.spread) return lim(viewH / Math.max(PAGE_H, 1), zMin(), Z_MAX);
   return lim(viewW / Math.max(pwOf(), 1), zMin(), Z_MAX);
 }
 function resetZoom() {
@@ -9318,8 +9327,8 @@ window.__mnPages = function () {
            /* side by side */
            across: horiz(), pw: pwOf(), span: pageSpan(),
            x: Math.round(scrollX), y: Math.round(scrollY),
-           zoom: zoom, docW: Math.round(docW), docH: Math.round(docH),
-           tween: !!pageTween, spread: !!settings.spread,
+            zoom: zoom, docW: Math.round(docW), docH: Math.round(docH),
+            tween: !!pageTween,
             grid: byId('pagesGrid').children.length,
             exp: exportOverlay.className };
 };
@@ -9328,7 +9337,6 @@ window.__mnPageView = function () {
            label: pvDirName.textContent, paper: settings.paperColor,
            swatches: pvColors.children.length,
            onDown: /on/.test(pvDown.className), onAcross: /on/.test(pvAcross.className),
-           onSpread: /on/.test(pvSpread.className),
            dirHidden: byId('pvDirHead').style.display === 'none' };
 };
 window.__mnTpl = function () {
@@ -11115,16 +11123,6 @@ var SET_SECTIONS = [
       show: function () { return !isEndless(); },
       v: function () { return (activeNote() && activeNote().horiz) ? 'Across' : 'Down'; },
       act: toggleLayout },
-    { lbl: 'Two pages', hint: 'Two pages side by side in one view',
-      show: function () { return !isEndless() && horiz(); },
-      v: function () { return settings.spread ? 'On' : 'Off'; },
-      act: function () {
-        settings.spread = !settings.spread;
-        zoom = fitZoom();
-        startPageTween(viewXFor(currentPage()));
-        afterSettingChange();
-        toast(settings.spread ? 'Two pages at a time' : 'One page at a time');
-      } },
     { lbl: 'Template', hint: 'Ruled, grid, dotted, to-do and more', leave: true,
       v: function () { return TPL_NAMES[settings.template]; }, act: openTplGallery },
     { lbl: 'Paper color', hint: 'The colour of the paper and the bar', leave: true,
@@ -11284,23 +11282,19 @@ function buildPageView() {
   }
 }
 function pageDirNow() {
-  if (settings.spread && horiz()) return 'spread';
   return horiz() ? 'across' : 'down';
 }
 function updatePageView() {
   var cur = pageDirNow(), i, sws = pvColors.children;
   pvDown.className = 'pv-dir' + (cur === 'down' ? ' on' : '');
   pvAcross.className = 'pv-dir' + (cur === 'across' ? ' on' : '');
-  pvSpread.className = 'pv-dir' + (cur === 'spread' ? ' on' : '');
   pvDirName.textContent = cur === 'down' ? 'One page down the screen'
-                         : cur === 'across' ? 'One page across the screen'
-                         : 'Two pages at a time';
+                         : 'One page across the screen';
   /* an infinite note has no pages to turn, so the direction means nothing */
   var hide = isEndless() ? 'none' : '';
   byId('pvDirHead').style.display = hide;
   pvDown.style.display = hide;
   pvAcross.style.display = hide;
-  pvSpread.style.display = hide;
   pvDirName.style.display = hide;
   for (i = 0; i < sws.length; i++) {
     sws[i].className = 'sw' + (i === settings.paperColor ? ' on' : '');
@@ -11311,14 +11305,9 @@ function setPageDir(dir) {
   if (!n || isEndless() || settings.reading) return;
   var p = currentPage();
   if (dir === 'down') {
-    if (settings.spread) { settings.spread = false; zoom = 1; goToPage(p); }
     if (horiz()) toggleLayout();
   } else if (dir === 'across') {
-    if (settings.spread) { settings.spread = false; zoom = fitZoom(); goToPage(p); }
     if (!horiz()) toggleLayout();
-  } else {
-    if (!horiz()) toggleLayout();          /* the pair needs the note across */
-    if (!settings.spread) { settings.spread = true; zoom = fitZoom(); goToPage(p); }
   }
   updatePageView();
   afterSettingChange();
@@ -11481,7 +11470,6 @@ function togglePageView() {
 byId('pageViewBtn').addEventListener('click', togglePageView);
 pvDown.addEventListener('click', function () { setPageDir('down'); });
 pvAcross.addEventListener('click', function () { setPageDir('across'); });
-pvSpread.addEventListener('click', function () { setPageDir('spread'); });
 
 /* Coming back to the pen from the eraser or the lasso opened the colour
    panel every single time, so every switch back to writing cost a second
