@@ -4,14 +4,25 @@ Saved 2026-09-26 from the user's wish list. Build one at a time, copying how
 Samsung Notes does it (research an in-depth Samsung Notes guide first).
 
 ## Gestures and pages
-- **Three-finger tap = redo** (two-finger tap is already undo).
-- **Pages side by side**: scroll pages left to right as well as top to bottom,
-  with a smooth page-turn animation.
-- **Two-page view**: two pages next to each other in one view.
-- **Add a page by pulling past the end**: scroll past the last page, an "add
-  page" circle appears; keep pulling and a page is added.
-- **Page sidebar**: thumbnails of every page in a side strip to scroll and jump.
-- **Reading mode**: view only, no writing.
+- ~~**Three-finger tap = redo** (two-finger tap is already undo).~~ **Done** —
+  a tap with three fingers redoes what the two-finger tap undid; fingers that
+  moved are a drag, never a tap.
+- ~~**Pages side by side**: scroll pages left to right as well as top to bottom,
+  with a smooth page-turn animation.~~ **Done** — ⋮ menu → Page layout → Across
+  lays the pages across the screen (the note's own layout, saved with it, one
+  undo back), and turning to a page or flicking across glides to it.
+- ~~**Two-page view**: two pages next to each other in one view.~~ **Done** —
+  ⋮ menu → Two pages, offered once the note is laid across.
+- ~~**Add a page by pulling past the end**: scroll past the last page, an "add
+  page" circle appears; keep pulling and a page is added.~~ **Done** — the end
+  stretches with a disc reading "Add page" in either layout, and letting go
+  past the mark makes the page.
+- ~~**Page sidebar**: thumbnails of every page in a side strip to scroll and jump.~~
+  **Done** — the tab on the left edge opens a strip of thumbnails; the paper
+  slides aside for it.
+- ~~**Reading mode**: view only, no writing.~~ **Done** — the hand takes the
+  tool, undo, page edits, rename and the rows that change the note are all
+  refused; the Reading chip (or the menu row) is the way out.
 
 ## Page look
 - **Template gallery** with pictures of each template (lined, grid, dotted,

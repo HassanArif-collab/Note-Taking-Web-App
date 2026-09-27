@@ -41,6 +41,196 @@ c.twoFingerTap(300, 500, 480, 520);
 check('a two-finger tap with nothing to undo is harmless',
       c.strokes().length === 0, c.strokes().length + ' strokes');
 
+/* ---------- three-finger tap = redo ---------- */
+var r1 = fresh();
+write(r1, 1); write(r1, 2);
+var r1n = r1.strokes().length;
+r1.twoFingerTap(300, 500, 480, 520);
+check('the undo before it: two strokes written, one undone',
+      r1.strokes().length === r1n - 1, r1.strokes().length + ' strokes');
+r1.threeFingerTap(300, 500, 480, 520, 660, 540);
+check('a three-finger tap redoes what the two-finger tap undid',
+      r1.strokes().length === r1n, r1.strokes().length + ' strokes');
+
+var r2 = fresh();
+write(r2, 1); write(r2, 2);
+r2.twoFingerTap(300, 500, 480, 520);
+var r2n = r2.strokes().length;
+r2.threeFingerTap(300, 500, 480, 520, 660, 540, 40);   /* fingers drift */
+check('three fingers that moved are a drag, not a tap - no redo',
+      r2.strokes().length === r2n, r2.strokes().length + ' strokes');
+
+var r3 = fresh();
+write(r3, 1);
+r3.threeFingerTap(300, 500, 480, 520, 660, 540);
+check('a three-finger tap with nothing to redo is harmless',
+      r3.strokes().length === 1, r3.strokes().length + ' strokes');
+check('...and it does not undo either', r3.strokes().length === 1,
+      r3.strokes().length + ' strokes');
+
+var r4 = fresh();
+write(r4, 1); write(r4, 2); write(r4, 3);
+r4.threeFingerTap(300, 500, 480, 520, 660, 540);
+check('a three-finger tap with an empty redo stack leaves the ink alone',
+      r4.strokes().length === 3, r4.strokes().length + ' strokes');
+
+/* ---------- reading mode: look, but do not write ---------- */
+var d1 = fresh();
+write(d1, 11);
+var d1n = d1.strokes().length;
+check('the Reading mode row is in the menu', d1.clickMenu('Reading mode'));
+check('reading mode is on', d1.pen().reading === true, 'reading ' + d1.pen().reading);
+check('the hand takes the tool, because scrolling is all that is left',
+      d1.pen().tool === 'hand', 'tool ' + d1.pen().tool);
+
+d1.stroke({ id: 19, x0: 250, y0: 520, x1: 430, y1: 560, speed: 0.3, wobble: 3 });
+d1.tick(120);
+check('dragging the pen now marks nothing', d1.strokes().length === d1n,
+      d1.strokes().length + ' strokes');
+
+d1.els.selectBtn._fire('click', {});
+check('the tool buttons will not take you off the hand', d1.pen().tool === 'hand',
+      'tool ' + d1.pen().tool);
+d1.els.penBtn._fire('click', {});
+check('and the pen panel stays shut', d1.pen().palette !== 'block',
+      'palette ' + d1.pen().palette);
+check('the rows that would change the note are not offered',
+      d1.clickMenu('Clear note') === false);
+check('nor is the page type', d1.clickMenu('Page type') === false);
+
+var d2 = fresh();
+write(d2, 21); write(d2, 22);
+d2.twoFingerTap(300, 500, 480, 520);   /* undo, leaving one to redo */
+var d2n = d2.strokes().length;
+d2.clickMenu('Reading mode');
+d2.twoFingerTap(300, 500, 480, 520);
+check('a two-finger tap does not undo while reading', d2.strokes().length === d2n,
+      d2.strokes().length + ' strokes');
+d2.threeFingerTap(300, 500, 480, 520, 660, 540);
+check('...and a three-finger tap does not redo either', d2.strokes().length === d2n,
+      d2.strokes().length + ' strokes');
+
+var d3 = fresh();
+var d3h = d3.geom().docH;
+d3.clickMenu('Reading mode');
+d3.els.pagesInsertBtn._fire('click', {});
+check('a reader cannot add a page', d3.geom().docH === d3h, 'docH ' + d3.geom().docH);
+write(d3, 31);
+var d3n = d3.strokes().length;
+d3.els.pagesDeleteBtn._fire('click', {});
+check('...nor take one away', d3.strokes().length === d3n,
+      d3.strokes().length + ' strokes');
+
+check('the Reading mode row is the way out', d2.clickMenu('Reading mode'));
+check('reading mode is off', d2.pen().reading === false, 'reading ' + d2.pen().reading);
+check('the pen comes back to the hand', d2.pen().tool === 'pen', 'tool ' + d2.pen().tool);
+write(d2, 23);
+check('and writing lands again', d2.strokes().length === d2n + 1,
+      d2.strokes().length + ' strokes');
+
+/* ---------- page strip: the note as a column of pages down the side ---------- */
+var s1 = fresh();
+write(s1, 40);
+s1.clickMenu('Pages');
+s1.els.pagesInsertBtn._fire('click', {});      /* two pages, the marks pushed down */
+s1.flushFrames();
+var sp0 = s1.pages();
+check('the note has pages to show', sp0.total >= 2, sp0.total + ' pages');
+s1.els.stripTab._fire('click', {});
+var sp1 = s1.pages();
+check('the tab opens the page strip', sp1.strip === true, 'strip ' + sp1.strip);
+check('the canvas slides aside to make room for it', sp1.left === '112px',
+      'left ' + sp1.left);
+check('a thumbnail per page is listed', sp1.cells === sp1.total,
+      sp1.cells + ' cells / ' + sp1.total + ' pages');
+check('the tab is out of the way while the strip is up', sp1.tab === 'none',
+      'tab ' + sp1.tab);
+check('the page you are on is the one marked',
+      s1.els.stripList.children[sp1.cur - 1].className.indexOf('cur') >= 0,
+      'cell ' + (sp1.cur - 1) + ' of ' + sp1.cells);
+
+s1.els.stripList.children[1]._fire('click', {});
+s1.flushFrames();
+check('tapping a thumbnail takes you to that page', s1.pages().cur === 2,
+      'page ' + s1.pages().cur);
+check('...and the mark follows you there',
+      s1.els.stripList.children[1].className.indexOf('cur') >= 0,
+      s1.els.stripList.children[1].className);
+check('...while the page you left gives the mark up',
+      s1.els.stripList.children[0].className.indexOf('cur') < 0,
+      s1.els.stripList.children[0].className);
+
+var thumbBefore = s1.els.stripList.children[0].children[0];
+write(s1, 41);
+s1.flushFrames();
+check('the thumbnails are drawn again once the ink changes',
+      s1.els.stripList.children[0].children[0] !== thumbBefore, 'same thumbnail');
+
+s1.els.stripClose._fire('click', {});
+var sp2 = s1.pages();
+check('the close button gives the paper its width back',
+      sp2.strip === false && sp2.left === '', 'strip ' + sp2.strip + ' left "' + sp2.left + '"');
+check('...and the tab comes back', sp2.tab === '', 'tab "' + sp2.tab + '"');
+
+var s2 = fresh();
+s2.clickMenu('Page type');                     /* infinite now */
+s2.flushFrames();
+check('the tab is hidden where there are no pages', s2.pages().tab === 'none',
+      'tab "' + s2.pages().tab + '"');
+s2.els.stripTab._fire('click', {});
+check('an infinite note has no page strip to offer', s2.pages().strip === false,
+      'strip ' + s2.pages().strip);
+
+/* ---------- pulling past the end brings a new page ---------- */
+var q1 = fresh();
+write(q1, 50);
+var q1tot = q1.pages().total;
+q1.els.handBtn._fire('click', {});
+q1.down(1, 384, 760); q1.tick(20);
+q1.moveTo(1, 384, 755); q1.tick(20); q1.flushFrames();   /* first move only takes the grip */
+q1.moveTo(1, 384, 615); q1.tick(20); q1.flushFrames();   /* up to the end of the sheet */
+q1.moveTo(1, 384, 455); q1.tick(20); q1.flushFrames();   /* and past it */
+var q1pull = q1.pages().pull;
+check('the end of the sheet stretches as the hand drags past it',
+      q1pull >= 78, 'pull ' + Math.round(q1pull));
+q1.up(1); q1.flushFrames();
+check('letting go past the mark adds a page', q1.pages().total === q1tot + 1,
+      q1.pages().total + ' pages, was ' + q1tot);
+check('the page it was given is remembered', q1.pages().minPages === q1tot + 1,
+      'minPages ' + q1.pages().minPages);
+check('...and no ink was moved to make room for it', q1.strokes().length === 1,
+      q1.strokes().length + ' strokes');
+q1.undo(); q1.flushFrames();
+check('one undo takes the pulled page away', q1.pages().total === q1tot,
+      q1.pages().total + ' pages');
+
+var q2 = fresh();
+var q2tot = q2.pages().total;
+q2.els.handBtn._fire('click', {});
+q2.down(1, 384, 700); q2.tick(20);
+q2.moveTo(1, 384, 690); q2.tick(20); q2.flushFrames();
+q2.moveTo(1, 384, 590); q2.tick(20); q2.flushFrames();
+q2.moveTo(1, 384, 540); q2.tick(20); q2.flushFrames();
+var q2pull = q2.pages().pull;
+check('a shorter pull still stretches the end', q2pull > 0 && q2pull < 78,
+      'pull ' + Math.round(q2pull));
+q2.up(1); q2.flushFrames();
+check('letting go early puts the sheet back', q2.pages().pull === 0,
+      'pull ' + q2.pages().pull);
+check('...and no page is made', q2.pages().total === q2tot,
+      q2.pages().total + ' pages');
+
+var q3 = fresh();
+q3.clickMenu('Page type');                    /* infinite: no end to pull past */
+q3.flushFrames();
+q3.els.handBtn._fire('click', {});
+q3.down(1, 384, 760); q3.tick(20);
+q3.moveTo(1, 384, 755); q3.tick(20); q3.flushFrames();
+q3.moveTo(1, 384, 455); q3.tick(20); q3.flushFrames();
+q3.up(1); q3.flushFrames();
+check('an infinite note never stretches', q3.pages().pull === 0 && q3.pages().total === 1,
+      'pull ' + q3.pages().pull + ', ' + q3.pages().total + ' pages');
+
 /* ---------- photos ---------- */
 var p = fresh();
 p.pickPhoto('data:image/jpeg;base64,AAAA#3000x2000');
@@ -1587,6 +1777,190 @@ ph.els.selCopyBtn._fire('click', {});
 var phs = ph.strokes();
 check('a duplicated photo keeps its picture', phs.length === 2 && phs[1].src === phs[0].src,
       phs.length + ' items, copy src ' + (phs[1] && String(phs[1].src).slice(0, 20)));
+
+/* ---------- pages side by side, and two to a screen ---------- */
+/* a page is 1024 across with a 44px gutter between neighbours (the view
+   is 768 wide, so the page takes the 1024 floor rather than the screen) */
+var SPAN_H = 1024 + 44;
+function glide(app, steps) {
+  for (var i = 0; i < (steps || 26); i++) { app.tick(20); app.flushFrames(1); }
+  app.flushFrames();
+  return app;
+}
+function firstPt(app) { return app.strokes()[0].pts[0]; }
+
+var l1 = fresh();
+write(l1, 70);
+var l1pre = firstPt(l1);
+l1.clickMenu('Pages');
+l1.els.pagesInsertBtn._fire('click', {});       /* the mark pushed to page two */
+l1.flushFrames();
+var l1a = firstPt(l1);
+check('the mark starts at the top of page two, down the roll',
+      Math.abs(l1a[0] - l1pre[0]) < 6 && Math.abs(l1a[1] - (l1pre[1] + 1020)) < 6,
+      'at ' + Math.round(l1a[0]) + ',' + Math.round(l1a[1]));
+check('the row that turns the note sideways is offered',
+      l1.clickMenu('Page layout') === true, 'no Page layout row');
+l1.flushFrames();
+var l1b = firstPt(l1);
+check('the note is now laid across', l1.pages().across === true,
+      'across ' + l1.pages().across);
+check('...with the same two pages in it', l1.pages().total === 2,
+      l1.pages().total + ' pages');
+check('page two stands beside page one, at its own height again',
+      Math.abs(l1b[0] - (l1a[0] + SPAN_H)) < 6 && Math.abs(l1b[1] - (l1a[1] - 1020)) < 6,
+      'at ' + Math.round(l1b[0]) + ',' + Math.round(l1b[1]));
+
+l1.undo(); l1.flushFrames();
+var l1c = firstPt(l1);
+check('undo turns the note back down the page', l1.pages().across === false,
+      'across ' + l1.pages().across);
+check('...with the mark where it was',
+      Math.abs(l1c[0] - l1a[0]) < 2 && Math.abs(l1c[1] - l1a[1]) < 2,
+      'at ' + Math.round(l1c[0]) + ',' + Math.round(l1c[1]));
+
+l1.clickMenu('Page layout'); l1.flushFrames();
+l1.clickMenu('Page layout'); l1.flushFrames();
+var l1d = firstPt(l1);
+check('aside and back again leaves the note exactly as it was',
+      Math.abs(l1d[0] - l1a[0]) < 2 && Math.abs(l1d[1] - l1a[1]) < 2 &&
+      l1.pages().across === false,
+      'at ' + Math.round(l1d[0]) + ',' + Math.round(l1d[1]));
+
+var l2 = fresh();
+write(l2, 71);
+l2.clickMenu('Pages');
+l2.els.pagesInsertBtn._fire('click', {}); l2.flushFrames();
+l2.els.pagesInsertBtn._fire('click', {}); l2.flushFrames();   /* three pages */
+var l2pre = firstPt(l2);
+l2.clickMenu('Page layout'); l2.flushFrames();
+var l2p = l2.pages();
+check('three pages stand side by side', l2p.across && l2p.total === 3,
+      'across ' + l2p.across + ', ' + l2p.total + ' pages');
+var l2m = firstPt(l2);
+check('the ink came with the page it was on',
+      Math.abs(l2m[0] - (l2pre[0] + 2 * SPAN_H)) < 6 && Math.abs(l2m[1] - (l2pre[1] - 2 * 1020)) < 6,
+      'at ' + Math.round(l2m[0]) + ',' + Math.round(l2m[1]));
+
+l2.els.stripTab._fire('click', {});
+var l2strip = l2.pages();
+check('the strip still lists every page', l2strip.strip && l2strip.cells === 3,
+      l2strip.cells + ' cells');
+l2.els.stripList.children[1]._fire('click', {});
+check('turning to a page glides across rather than jumping',
+      l2.pages().tween === true, 'tween ' + l2.pages().tween);
+glide(l2);
+var l2g = l2.pages();
+check('the view arrives at that page', l2g.cur === 2 && l2g.tween === false,
+      'page ' + l2g.cur + ', tween ' + l2g.tween);
+check('...at the head of it', Math.abs(l2g.x - SPAN_H) < 4, 'x ' + l2g.x);
+check('the page pill counts across, with the zoom it is at',
+      l2.els.scrollPill.textContent === '2 / 3  75%',
+      '"' + l2.els.scrollPill.textContent + '"');
+
+l2.clickMenu('Pages');
+var l2x = firstPt(l2)[0], l2y = firstPt(l2)[1];
+l2.els.pagesInsertBtn._fire('click', {}); l2.flushFrames(); glide(l2);
+check('inserting a page pushes the marks across, not down',
+      Math.abs(firstPt(l2)[0] - (l2x + SPAN_H)) < 6 && Math.abs(firstPt(l2)[1] - l2y) < 6,
+      'at ' + Math.round(firstPt(l2)[0]) + ',' + Math.round(firstPt(l2)[1]));
+check('...and the note has one page more', l2.pages().total === 4,
+      l2.pages().total + ' pages');
+l2.undo(); l2.flushFrames(); glide(l2);
+check('one undo puts them back',
+      Math.abs(firstPt(l2)[0] - l2x) < 6 && l2.pages().total === 3,
+      'x ' + Math.round(firstPt(l2)[0]) + ', ' + l2.pages().total + ' pages');
+
+/* the page the ink is on, taken away */
+l2.els.stripList.children[2]._fire('click', {}); glide(l2);
+check('the page holding the ink is under the view',
+      l2.pages().cur === 3, 'page ' + l2.pages().cur);
+l2.clickMenu('Pages');
+l2.confirmAll(true);
+l2.els.pagesDeleteBtn._fire('click', {}); l2.flushFrames();
+check('deleting across takes that page and its marks with it',
+      l2.pages().total < 3 && l2.strokes().length === 0,
+      l2.pages().total + ' pages, ' + l2.strokes().length + ' strokes');
+l2.undo(); l2.flushFrames(); glide(l2);
+check('one undo brings the page back',
+      l2.pages().total === 3 && l2.strokes().length === 1,
+      l2.pages().total + ' pages, ' + l2.strokes().length + ' strokes');
+
+/* pulling past the side of the last page */
+var l3 = fresh();
+write(l3, 73);
+var l3pre = firstPt(l3);
+l3.clickMenu('Page layout'); l3.flushFrames();
+l3.els.handBtn._fire('click', {});
+l3.down(1, 700, 400); l3.tick(20);
+l3.moveTo(1, 695, 400); l3.tick(20); l3.flushFrames();     /* first move is the grip */
+l3.moveTo(1, 540, 400); l3.tick(20); l3.flushFrames();     /* right to the end */
+l3.moveTo(1, 380, 400); l3.tick(20); l3.flushFrames();     /* and past it */
+l3.moveTo(1, 240, 400); l3.tick(20); l3.flushFrames();     /* ...well past it */
+var l3pull = l3.pages().pull;
+check('the side of the sheet stretches as the hand drags past it',
+      l3pull >= 78, 'pull ' + Math.round(l3pull));
+l3.up(1); l3.flushFrames(); glide(l3);
+check('letting go adds a page to the side', l3.pages().total === 2,
+      l3.pages().total + ' pages');
+check('...without moving the ink', l3.strokes().length === 1 &&
+      Math.abs(firstPt(l3)[0] - l3pre[0]) < 6 && Math.abs(firstPt(l3)[1] - l3pre[1]) < 6,
+      l3.strokes().length + ' strokes, at ' + Math.round(firstPt(l3)[0]) + ',' +
+      Math.round(firstPt(l3)[1]));
+
+/* two pages to a screen */
+var l4 = fresh();
+check('there is no two-page row on a note laid down the page',
+      l4.clickMenu('Two pages') === false, 'row offered');
+l4.clickMenu('Page type'); l4.flushFrames();                /* infinite now */
+check('nor is there a layout row on an infinite note',
+      l4.clickMenu('Page layout') === false, 'row offered');
+
+var l5 = fresh();
+write(l5, 74);
+l5.clickMenu('Page layout'); l5.flushFrames();
+check('the two-page row arrives with pages across',
+      l5.clickMenu('Two pages') === true, 'no Two pages row');
+l5.flushFrames();
+var l5p = l5.pages();
+check('two pages fill the screen',
+      l5p.spread === true && Math.abs(l5p.zoom - 768 / (2 * SPAN_H - 44)) < 0.01,
+      'spread ' + l5p.spread + ', zoom ' + l5p.zoom);
+check('...which is further out than the pinch is ever allowed to go',
+      l5p.zoom < 0.6, 'zoom ' + l5p.zoom);
+glide(l5);
+var l5x = l5.pages().x;
+check('the view sits at the head of the pair',
+      Math.abs(l5x - 0) < 4 || Math.abs(l5x - 2 * SPAN_H) < 4, 'x ' + l5x);
+
+/* the layout is the note's own, so it goes into the note's record */
+var l6 = fresh();
+write(l6, 75);
+l6.clickMenu('Page layout'); l6.flushFrames();
+var l6rec = l6.win.__mnRec();
+check('the note records that it is laid across',
+      l6.pages().across === true && l6rec.horiz === 1,
+      'across ' + l6.pages().across + ', record ' + l6rec.horiz);
+check('...and how wide a page is', l6rec.pw === 1024, 'pw ' + l6rec.pw);
+l6.clickMenu('Page layout'); l6.flushFrames();
+check('a note back down the page says so',
+      l6.win.__mnRec().horiz === 0, 'record ' + l6.win.__mnRec().horiz);
+
+/* exporting a note laid across must still work */
+var l7 = fresh();
+write(l7, 76);
+l7.clickMenu('Page layout'); l7.flushFrames();
+var l7err = '';
+try { l7.clickMenu('Export PNG'); } catch (e) { l7err = String(e); }
+check('exporting pages laid across works',
+      l7.pages().exp === 'overlay on' && !l7err,
+      'overlay "' + l7.pages().exp + '" ' + l7err);
+
+/* a reader is offered no layout to change either */
+var l8 = fresh();
+l8.clickMenu('Reading mode'); l8.flushFrames();
+check('in reading mode the layout row is not offered',
+      l8.clickMenu('Page layout') === false, 'row offered');
 
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

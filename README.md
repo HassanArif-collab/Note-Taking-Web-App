@@ -63,6 +63,8 @@ thickness, with 24 colours to choose from.
 - **Two fingers** — pinch to zoom (60%–260%), drag to scroll. Works in Glove
   mode too: two fingers landing together and moving up or down scroll.
 - **Two-finger tap** — undo. The fastest way to remove a stray palm mark.
+- **Three-finger tap** — redo, the other side of the same gesture. Fingers
+  that moved are a drag, not a tap, so it never fires by accident.
 - **Double-tap with the hand tool** — back to 100%.
 
 ### Pages
@@ -73,12 +75,37 @@ is outlined in blue. **Insert page here** adds a blank page and pushes
 everything below it down; **Delete this page** removes it (it asks first, and
 says how many marks are on it). Each is a single undo.
 
+The **tab on the left edge** opens the same pages as a strip of thumbnails
+down the side of the sheet, so you can see where you are and jump without
+leaving the page. It slides the paper aside rather than over it.
+
+**Drag past the end of the last page** — with the hand tool, or any tool
+when scrolling — and the end stretches like paper, with a disc that says
+*Add page*. Keep pulling past the mark and letting go makes the page, which
+is remembered with the note even if the new page stays blank.
+
+**⋮ menu → Page layout → Across** puts the pages side by side: the note
+scrolls left to right instead of down, every page keeps its marks exactly
+where they were, and turning to a page glides across to it. **Two pages**
+then puts two of them on the screen at once. The layout belongs to the note,
+so it comes back that way whenever the note is opened, and one undo takes it
+back.
+
 **⋮ menu → Page type → Infinite** turns the note into an infinite canvas: no
 page breaks, and it keeps going left, right and down — there is always a
 screen of blank paper beyond your writing. The ruled lines and the margin
 rule carry on across it (Template and Margin line in the menu change them).
 Scroll sideways with two fingers side by side. New notes follow the last
 choice.
+
+### Reading mode
+
+**⋮ menu → Reading mode** (or the **Reading** chip that appears in the top
+bar when it is on) turns the note into something you can only look at: the
+tool is the hand, tapping the pen tools does nothing, the rows that would
+change the note are not offered, and neither undo nor a page can be touched.
+Scroll, zoom and turn pages freely. The chip, or the same menu row, takes it
+back — your pen and its settings come back with it.
 
 ### Notebooks and folders
 
@@ -283,7 +310,7 @@ node scripts/check_es5.js     # Safari 9 gate - run before every push
 node scripts/test_palm.js     # palm-rejection behaviour (60 assertions)
 node scripts/test_recorder.js # recorder, pinch-zoom, drills (46 assertions)
 node scripts/test_backup.js   # storage and backup (20 assertions)
-node scripts/test_features.js # pages, tools, pen pop-up, sidebar (160 assertions)
+node scripts/test_features.js # pages, tools, pen pop-up, sidebar (240 assertions)
 node scripts/test_tidy.js     # writing replayed from real traces (7 assertions)
 node scripts/serve.js         # serve the app to the iPad, collect recordings
 node scripts/score.js         # replay every recording, print a scoreboard

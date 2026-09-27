@@ -67,6 +67,16 @@ input { font: inherit; }
 #palmBtn.maxed { background: rgba(3,129,254,0.12); color: #0381FE; }
 #palmBtn.med { color: #0381FE; }
 
+/* reading mode chip: says the note is read-only and is the way out */
+#readChip {
+  display: none;
+  height: 30px; padding: 0 12px; border-radius: 15px;
+  background: rgba(3,129,254,0.12); color: #0381FE;
+  font-size: 13px; font-weight: 600; margin: 0 2px;
+  white-space: nowrap;
+}
+body.reading #readChip { display: block; }
+
 /* ---------- notes home (Samsung list) ---------- */
 #notesGrid {
   position: absolute; top: 56px; left: 0; right: 0; bottom: 0;
@@ -547,6 +557,57 @@ body.dark #fgTip { background: rgba(232,234,237,0.96); color: #202124; }
 #canvasWrap { position: absolute; top: 102px; left: 0; right: 0; bottom: 0; overflow: hidden; }
 #noteCanvas { position: absolute; top: 0; left: 0; }
 
+/* page strip: the note as a column of thumbnails down the left edge. The
+   canvas moves aside rather than being covered, so the page you are on
+   stays visible next to its own thumbnail. */
+#stripTab {
+  position: absolute; left: 0; top: 176px; width: 22px; height: 82px;
+  padding: 0; border: 0; border-radius: 0 10px 10px 0;
+  background: rgba(3,129,254,0.13); color: #0381FE; z-index: 9;
+}
+#stripTab svg { position: absolute; left: 50%; top: 50%; margin: -13px 0 0 -6px; }
+#stripTab:active { background: rgba(3,129,254,0.32); }
+#pageStrip {
+  display: none; position: absolute; left: 0; top: 102px; bottom: 0; width: 112px;
+  z-index: 9; background: #EEF1F5; border-right: 1px solid #D7DDE5;
+  overflow: hidden;
+}
+#pageStrip.on { display: -webkit-flex; display: flex;
+  -webkit-flex-direction: column; flex-direction: column; }
+#stripBar {
+  -webkit-flex: 0 0 auto; flex: 0 0 auto; height: 34px;
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  border-bottom: 1px solid #DDE2E9; background: #F6F8FA;
+}
+#stripTitle {
+  -webkit-flex: 1; flex: 1; font-size: 12px; font-weight: 600; color: #5A6473;
+  padding-left: 10px; white-space: nowrap;
+}
+#stripClose { width: 34px; height: 33px; border: 0; background: none; color: #5A6473; font-size: 15px; }
+#stripClose:active { background: rgba(3,129,254,0.14); }
+#stripList {
+  -webkit-flex: 1 1 auto; flex: 1 1 auto;
+  overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 4px 0 16px 0;
+}
+.strip-cell {
+  display: block; position: relative; width: 100%;
+  padding: 5px 0; border: 0; background: none;
+}
+.strip-cell canvas { display: block; margin: 0 auto; background: #FFFFFF;
+  border: 1px solid #C9D1DA; }
+.strip-cell.cur canvas { border: 2px solid #0381FE; }
+.strip-num { display: block; text-align: center; font-size: 11px; color: #5A6473;
+  padding-top: 2px; }
+.strip-cell.cur .strip-num { color: #0381FE; font-weight: 600; }
+body.dark #pageStrip { background: #17191D; border-color: #2A2E34; }
+body.dark #stripBar { background: #1E2126; border-color: #2A2E34; }
+body.dark #stripTitle { color: #98A0AC; }
+body.dark #stripClose { color: #98A0AC; }
+body.dark .strip-cell canvas { background: #101114; border-color: #3A4048; }
+body.dark .strip-num { color: #98A0AC; }
+body.dark #stripTab { background: rgba(97,168,255,0.16); color: #61A8FF; }
+
 /* pending-touch guide ring (frozen at touch-down, never moved) */
 #pendingDot {
   position: absolute; width: 22px; height: 22px;
@@ -577,6 +638,9 @@ body.dark #fgTip { background: rgba(232,234,237,0.96); color: #202124; }
   color: #666666; border-radius: 14px;
 }
 .tb-btn:active { background: #EFF0F2; }
+/* reading mode: the tools are dimmed as well as refused in JS, so the
+   state reads at a glance and a tap that lands on one looks pointless */
+body.reading #toolbar .tb-btn { opacity: 0.3; }
 #penSlots { display: -webkit-box; display: -webkit-flex; display: flex;
             -webkit-align-items: center; align-items: center; margin-left: 2px; }
 .pslot {
@@ -1170,13 +1234,31 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
         <path d="M14.5 5 L7 12 l7.5 7"/>
       </svg>
     </button>
-    <button class="ttl" id="noteTitle">Untitled</button>
-    <button id="palmBtn">Palm: Max</button>
+  <button class="ttl" id="noteTitle">Untitled</button>
+  <button id="readChip">Reading</button>
+  <button id="palmBtn">Palm: Max</button>
     <button id="moreBtn" class="ibtn" aria-label="More">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
         <circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/>
       </svg>
     </button>
+  </div>
+
+  <!-- page strip: the whole note as thumbnails, tucked against the left
+       edge of the paper. Tapping the tab slides the canvas aside. -->
+  <button id="stripTab" aria-label="Show page thumbnails">
+    <svg width="13" height="26" viewBox="0 0 13 26" fill="none" stroke="currentColor" stroke-width="1.5">
+      <rect x="1.5" y="1.5" width="10" height="7" rx="1.5"/>
+      <rect x="1.5" y="9.5" width="10" height="7" rx="1.5"/>
+      <rect x="1.5" y="17.5" width="10" height="7" rx="1.5"/>
+    </svg>
+  </button>
+  <div id="pageStrip">
+    <div id="stripBar">
+      <span id="stripTitle">Pages</span>
+      <button id="stripClose" aria-label="Close page thumbnails">&#10005;</button>
+    </div>
+    <div id="stripList"></div>
   </div>
 
   <div id="canvasWrap">
@@ -1617,6 +1699,10 @@ var SHAPE_NAMES = ['Off', 'Line', 'Shapes'];
 
 /* zoom limits (screen scale) */
 var Z_MIN = 0.6, Z_MAX = 2.6;
+/* two pages to a screen is asking for less than half a page each, so the
+   floor drops with it - otherwise the pair could never be shown at once */
+var SPREAD_Z_MIN = 0.32;
+function zMin() { return (horiz() && settings.spread) ? SPREAD_Z_MIN : Z_MIN; }
 
 var HAND_R = 0, HAND_L = 1, HAND_BOTH = 2;
 var HAND_NAMES = ['Right', 'Left', 'Both'];
@@ -2146,6 +2232,9 @@ var settings = {
   scratch: true,
   endless: false,             /* page type for new notes: the last one chosen */
   hold: true,                 /* holding the pen still opens the pen pop-up */
+  reading: false,             /* reading mode: scroll, zoom and turn pages,
+                                 but nothing on the page can be marked */
+  spread: false,              /* two pages side by side on the screen */
   popDock: 0,                 /* pen pop-up docked: 0 no, 1 left edge, 2 right edge */
   popY: 0.5,                  /* ...and how far down that edge */
   margin: true,
@@ -2328,6 +2417,8 @@ function applyStoredSettings(set) {
     if (typeof data.set.scratch === 'boolean') settings.scratch = data.set.scratch;
     if (typeof data.set.endless === 'boolean') settings.endless = data.set.endless;
     if (typeof data.set.hold === 'boolean') settings.hold = data.set.hold;
+    if (typeof data.set.reading === 'boolean') settings.reading = data.set.reading;
+    if (typeof data.set.spread === 'boolean') settings.spread = data.set.spread;
     if (typeof data.set.popDock === 'number') settings.popDock = lim(Math.round(data.set.popDock), 0, 2);
     if (typeof data.set.popY === 'number') settings.popY = lim(data.set.popY, 0, 1);
     if (typeof data.set.scrollHintShown === 'boolean') settings.scrollHintShown = data.set.scrollHintShown;
@@ -2423,6 +2514,10 @@ function deserializeNote(rec) {
 function noteRecord(n) {
   return { id: n.id, title: n.title, cr: n.cr, mod: n.mod,
            scroll: Math.round(n.scroll), fav: n.fav ? 1 : 0, endless: n.endless ? 1 : 0,
+           minPages: n.minPages || 0,
+           /* side by side is the note's own, not the viewer's: a note
+              written across stays across on whatever it is opened on */
+           horiz: n.horiz ? 1 : 0, pw: n.pw || 0,
            strokes: serializeNote(n) };
 }
 
@@ -2901,14 +2996,17 @@ function invalidateRange(y0, y1) {
 }
 function invalidateAll() { tiles = {}; tileOrder = []; }
 
-function sortedStrokesForBand(y0, y1) {
+function sortedStrokesForBand(y0, y1, x0, x1) {
   var list = [], n = activeNote();
   if (!n) return list;
   var st = n.strokes;
   for (var i = 0; i < st.length; i++) {
     if (selHidden[st[i].id]) continue;   /* hidden = being dragged by lasso */
     var bb = strokeBBox(st[i]);
-    if (bb.y1 >= y0 && bb.y0 <= y1) list.push(st[i]);
+    if (bb.y1 < y0 || bb.y0 > y1) continue;
+    /* a page laid side by side is reached across, not down */
+    if (x0 !== undefined && (bb.x1 < x0 || bb.x0 > x1)) continue;
+    list.push(st[i]);
   }
   list.sort(function (a, b) { return a.ord - b.ord; });
   return list;
@@ -3020,52 +3118,69 @@ function drawPaperEndless(c, y0, y1, x0, x1) {
 
 function drawPaperPages(c, y0, y1, x0, x1) {
   if (isEndless()) { drawPaperEndless(c, y0, y1, x0, x1); return; }
-  var P = PAPERS[settings.paperColor] || PAPERS[0];
+  if (x0 === undefined) { x0 = docX0; x1 = docW; }
+  if (horiz()) {
+    /* side by side: which pages are reached is decided across, not down */
+    var sp = pageSpan();
+    var ha = Math.max(0, Math.floor(x0 / sp) - 1), hb = Math.floor(x1 / sp) + 1, hp;
+    for (hp = ha; hp <= hb; hp++) drawPaperRect(c, hp, 0, y0, y1);
+    return;
+  }
   var pFirst = Math.max(0, Math.floor(y0 / (PAGE_H + GAP_H)) - 1);
   var pLast = Math.floor(y1 / (PAGE_H + GAP_H)) + 1;
   for (var p = pFirst; p <= pLast; p++) {
     var top = p * (PAGE_H + GAP_H);
     if (top + PAGE_H <= y0) continue;
     if (top >= y1) continue;
-    var px0 = pageLeft(p), px1 = pageRight(p);
-    c.fillStyle = P.bg;
-    c.fillRect(px0, top, px1 - px0, PAGE_H);
-    var tpl = settings.template;
-    if (tpl === TPL_RULED) {
-      c.strokeStyle = P.line; c.lineWidth = 1;
-      c.beginPath();
-      for (var y = top + FIRST_BASE; y <= top + PAGE_H - 16; y += settings.spacing) {
-        c.moveTo(px0 < 0 ? px0 : MARGIN_X, y + 0.5); c.lineTo(px1, y + 0.5);
-      }
-      c.stroke();
-      /* the margin rule. Ruled lines running wall to wall is the one thing
-         that most makes a page read as a canvas rather than paper, and for
-         working through a problem the left channel is genuinely useful -
-         step numbers, a brace, a note to self. */
-      if (settings.margin) {
-        c.strokeStyle = P.margin || 'rgba(226,35,26,0.30)';
-        c.beginPath();
-        c.moveTo(MARGIN_X + 0.5, top + 8);
-        c.lineTo(MARGIN_X + 0.5, top + PAGE_H - 8);
-        c.stroke();
-      }
-    } else if (tpl === TPL_GRID) {
-      c.strokeStyle = P.line; c.lineWidth = 1;
-      c.beginPath();
-      for (var gx = Math.max(24, Math.ceil(px0 / 24) * 24); gx < px1; gx += 24) { c.moveTo(gx + 0.5, top); c.lineTo(gx + 0.5, top + PAGE_H); }
-      for (var gy = top + 24; gy <= top + PAGE_H - 8; gy += 24) { c.moveTo(px0, gy + 0.5); c.lineTo(px1, gy + 0.5); }
-      c.stroke();
-    } else if (tpl === TPL_DOTTED) {
-      c.fillStyle = P.dot;
-      for (var dy = top + 20; dy <= top + PAGE_H - 12; dy += 24) {
-        for (var dx = Math.ceil((px0 - 12) / 24) * 24 + 12; dx < px1; dx += 24) c.fillRect(dx - 1, dy - 1, 2, 2);
-      }
+    drawPaperRect(c, p, top, y0, y1);
+  }
+}
+
+/* one sheet: where it stands (p, top) and how far it reaches sideways
+   (its own ink decided that, so two pages need not be the same width) */
+function drawPaperRect(c, p, top, y0, y1) {
+  var P = PAPERS[settings.paperColor] || PAPERS[0];
+  var px0 = pageLeft(p), px1 = pageRight(p);
+  var mx = horiz() ? px0 + MARGIN_X : MARGIN_X;
+  c.fillStyle = P.bg;
+  c.fillRect(px0, top, px1 - px0, PAGE_H);
+  var tpl = settings.template;
+  if (tpl === TPL_RULED) {
+    c.strokeStyle = P.line; c.lineWidth = 1;
+    c.beginPath();
+    for (var y = top + FIRST_BASE; y <= top + PAGE_H - 16; y += settings.spacing) {
+      c.moveTo(px0 < 0 ? px0 : mx, y + 0.5); c.lineTo(px1, y + 0.5);
     }
-    c.fillStyle = P.num;
-    c.font = '12px Helvetica, Arial, sans-serif';
-    c.textAlign = 'center';
-    var gy2 = top + PAGE_H + GAP_H / 2;
-    if (gy2 >= y0 - 10 && gy2 <= y1 + 10) c.fillText(String(p + 1), pageBaseW() / 2, gy2 + 4);
+    c.stroke();
+    /* the margin rule. Ruled lines running wall to wall is the one thing
+       that most makes a page read as a canvas rather than paper, and for
+       working through a problem the left channel is genuinely useful -
+       step numbers, a brace, a note to self. */
+    if (settings.margin) {
+      c.strokeStyle = P.margin || 'rgba(226,35,26,0.30)';
+      c.beginPath();
+      c.moveTo(mx + 0.5, top + 8);
+      c.lineTo(mx + 0.5, top + PAGE_H - 8);
+      c.stroke();
+    }
+  } else if (tpl === TPL_GRID) {
+    c.strokeStyle = P.line; c.lineWidth = 1;
+    c.beginPath();
+    for (var gx = Math.max(24, Math.ceil(px0 / 24) * 24); gx < px1; gx += 24) { c.moveTo(gx + 0.5, top); c.lineTo(gx + 0.5, top + PAGE_H); }
+    for (var gy = top + 24; gy <= top + PAGE_H - 8; gy += 24) { c.moveTo(px0, gy + 0.5); c.lineTo(px1, gy + 0.5); }
+    c.stroke();
+  } else if (tpl === TPL_DOTTED) {
+    c.fillStyle = P.dot;
+    for (var dy = top + 20; dy <= top + PAGE_H - 12; dy += 24) {
+      for (var dx = Math.ceil((px0 - 12) / 24) * 24 + 12; dx < px1; dx += 24) c.fillRect(dx - 1, dy - 1, 2, 2);
+    }
+  }
+  c.fillStyle = P.num;
+  c.font = '12px Helvetica, Arial, sans-serif';
+  c.textAlign = 'center';
+  var gy2 = top + PAGE_H + GAP_H / 2;
+  if (y0 === undefined || (gy2 >= y0 - 10 && gy2 <= y1 + 10)) {
+    c.fillText(String(p + 1), (px0 + px1) / 2, gy2 + 4);
   }
 }
 
@@ -3083,24 +3198,70 @@ var docMinX = 0;       /* ...and how far left, which only an infinite page allow
  * and only a page with ink past its sides is drawn wider, on the side the
  * ink went. Scrolling sideways still reaches the widest page. */
 var pageExt = [];
-function pageBaseW() { return Math.max(PAGE_W_MIN, viewW); }
+function pageBaseW() { return horiz() ? pwOf() : Math.max(PAGE_W_MIN, viewW); }
 function stretchPagesFor(bb) {
-  var p0 = Math.max(0, Math.floor(bb.y0 / PAGE_SPAN)), p1 = Math.max(0, Math.floor(bb.y1 / PAGE_SPAN)), p, e;
+  var h = horiz(), span = pageSpan();
+  var p0 = Math.max(0, Math.floor((h ? bb.x0 : bb.y0) / span));
+  var p1 = Math.max(0, Math.floor((h ? bb.x1 : bb.y1) / span)), p, e, ox;
   for (p = p0; p <= p1; p++) {
+    ox = pageOrigin(p);                 /* nothing in the roll: x is shared */
     e = pageExt[p] || (pageExt[p] = [0, 0]);
-    if (bb.x0 < e[0]) e[0] = bb.x0;
-    if (bb.x1 > e[1]) e[1] = bb.x1;
+    if (bb.x0 - ox < e[0]) e[0] = bb.x0 - ox;
+    if (bb.x1 - ox > e[1]) e[1] = bb.x1 - ox;
   }
 }
-function pageLeft(p) {
+function pageLeft(p) { return pageOrigin(p) + pageLocalL(p); }
+function pageRight(p) { return pageOrigin(p) + pageLocalR(p); }
+/* how far a single page reaches, measured from its own left edge - which
+   is what pageExt holds either way round, because the origin is taken off
+   as the ink goes in */
+function pageLocalL(p) {
   var e = pageExt[p];
   return e && e[0] < 0 ? Math.floor(e[0] - settings.spacing * 2) : 0;
 }
-function pageRight(p) {
+function pageLocalR(p) {
   var e = pageExt[p];
   return Math.max(pageBaseW(), e ? Math.ceil(e[1] + settings.spacing * 2) : 0);
 }
 var docX0 = 0;         /* the page's left edge: 0, except on an infinite page */
+
+/* SIDE BY SIDE: every page has to be the same width, because where a page
+   stands is a multiple of the span. If ink runs past that width all the
+   pages widen together and the ones after it are slid along to match; if
+   it hangs past the left edge, that page's marks are brought back to their
+   own margin. Only ever runs from recomputeDoc - never under a live stroke
+   - and never runs twice: the second measure finds nothing to fix. */
+function shiftPageMarks(p, dx, span) {
+  var n = activeNote(), i, j, s, bb;
+  if (!n || !dx) return;
+  for (i = 0; i < n.strokes.length; i++) {
+    s = n.strokes[i];
+    bb = strokeBBox(s);
+    if (Math.floor(bb.x0 / span) !== p) continue;
+    for (j = 0; j < s.pts.length; j++) s.pts[j][0] += dx;
+    s.bb = null;
+  }
+}
+function syncSpan() {
+  var n = activeNote();
+  if (!n || !horiz()) return false;
+  var span = pageSpan(), i, e, l, need = 0, changed = false;
+  for (i = 0; i < pageExt.length; i++) {
+    e = pageExt[i]; if (!e) continue;
+    if (e[0] < 0) {
+      l = -Math.floor(e[0] - settings.spacing * 2);
+      if (l > 0) { shiftPageMarks(i, l, span); e[0] += l; e[1] += l; changed = true; }
+    }
+    if (e[1] + settings.spacing * 2 > need) need = Math.ceil(e[1] + settings.spacing * 2);
+  }
+  if (need > pwOf()) {
+    var d = need - pwOf();
+    n.pw = need;
+    for (i = 1; i < pageExt.length; i++) if (pageExt[i]) shiftPageMarks(i, i * d, span);
+    changed = true;
+  }
+  return changed;
+}
 
 /* A new stroke can only ever push the edges outwards, so the whole page
  * does not have to be measured again to find that out.
@@ -3133,6 +3294,16 @@ function sizeDoc() {
     docH = Math.max(PAGE_H, Math.ceil(docMaxY + Math.max(viewH, PAGE_H)));
     docW = Math.ceil(Math.max(PAGE_W_MIN, viewW, docMaxX) + viewW);
     docX0 = Math.floor(Math.min(0, docMinX) - viewW);
+  } else if (horiz()) {
+    /* SIDE BY SIDE: as wide as the pages laid end to end (ink past the
+       last one opens another), but one page tall however many there are */
+    var minPh = activeNote() ? (activeNote().minPages || 1) : 1;
+    var cnt = Math.max(1, pageExt.length, minPh);
+    docX0 = 0;
+    docW = cnt * pageSpan() - GAP_X;
+    if (docMaxX + settings.spacing * 2 > docW) docW = Math.ceil(docMaxX + settings.spacing * 2);
+    var needH = docMaxY + settings.spacing * 2.5;
+    docH = needH < PAGE_H ? PAGE_H : Math.ceil(needH);
   } else {
     docW = pageBaseW();
     for (var pe = 0; pe < pageExt.length; pe++) {
@@ -3141,7 +3312,11 @@ function sizeDoc() {
       if (pageLeft(pe) < docX0) docX0 = pageLeft(pe);
     }
     var needed = docMaxY + settings.spacing * 2.5;
-    var pages = Math.max(1, Math.ceil(needed / PAGE_H));
+    /* ink decides how tall the note is - but a note the hand has pulled
+       an extra blank page onto stays that tall even before anything is
+       written on it, which is what minPages is for */
+    var minP = activeNote() ? (activeNote().minPages || 1) : 1;
+    var pages = Math.max(1, Math.ceil(needed / PAGE_H), minP);
     var target = pages * (PAGE_H + GAP_H) - GAP_H;
     docH = target < PAGE_H ? PAGE_H : target;
   }
@@ -3151,7 +3326,7 @@ function sizeDoc() {
 
 /* the full measure, for when ink has been taken AWAY and the edges may
    have come in: erasing, undo, deleting a page, opening another note */
-function recomputeDoc() {
+function recomputeDoc(depth) {
   var maxY = 0, maxX = 0, minX = 0, n = activeNote();
   pageExt = [];
   if (n) {
@@ -3167,6 +3342,10 @@ function recomputeDoc() {
   /* never narrower than the screen, so a wide tablet has no dead margin,
      and never narrower than the ink, so nothing can sit off the page */
   sizeDoc();
+  /* side by side, the measure may have changed where the pages stand:
+     widen or tidy them, then measure the result once more - the second
+     pass finds nothing to fix, so the recursion stops here */
+  if (horiz() && syncSpan() && !depth) recomputeDoc(1);
 }
 function clampScroll() {
   /* visible doc-space viewport = viewW/zoom x viewH/zoom.
@@ -3175,7 +3354,11 @@ function clampScroll() {
   var vh = viewH / zoom, vw = viewW / zoom;
   var yMax = Math.max(0, docH - vh), yMin = Math.min(0, docH - vh);
   var xMax = Math.max(docX0, docW - vw), xMin = Math.min(docX0, docW - vw);
-  scrollY = lim(scrollY, yMin, yMax);
+  /* side by side, one page is the whole height: when the screen is taller
+     than the page is, the page stands in the middle of it rather than
+     pinned to the top, and there is no vertical scrolling left to do */
+  if (horiz() && docH < vh) scrollY = (docH - vh) / 2;
+  else scrollY = lim(scrollY, yMin, yMax);
   scrollX = lim(scrollX, xMin, xMax);
 }
 
@@ -3228,10 +3411,14 @@ function render() {
   if (eraserTouchId !== null) drawEraserCursor(ctx);
   drawSelectionOverlays(ctx);
   if (zw.on) drawZoomWindow(ctx);
+  if (pullY > 0.5) drawPullAdd(ctx);
   if (Math.abs(scrollY - lastRenderScrollY) > 0.5 || Math.abs(zoom - lastRenderZoom) > 0.001 || pillTotalDirty) updateScrollPill();
   pillTotalDirty = false;
   lastRenderScrollY = scrollY;
   lastRenderZoom = zoom;
+  /* the strip is rebuilt here rather than at the moment of the edit, so
+     a hundred small edits in a second still cost one rebuild per frame */
+  if (stripOn && stripDirty) buildStrip();
 }
 
 /* ============================================================
@@ -3392,30 +3579,55 @@ function resizeView() {
  * stroke edits, which means undo gets them for free.
  * ============================================================ */
 var PAGE_SPAN = PAGE_H + GAP_H;
+var GAP_X = 44;            /* the gutter between pages laid side by side */
+
+/* PAGES SIDE BY SIDE.
+ * A note has a layout: down the page - the roll it has always been - or
+ * across the screen. Across, page p's marks are stored at x + p*span, a
+ * real change to the note's own coordinates rather than a trick of the
+ * eye: the render loop, the tiles, docPoint, the gestures and the export
+ * all carry on exactly as they were, and only the page arithmetic
+ * changes axis. The layout is saved with the note. */
+function horiz() {
+  var n = activeNote();
+  return !!(n && n.horiz) && !isEndless();
+}
+function pwOf() {
+  var n = activeNote();
+  return (n && n.pw) ? n.pw : PAGE_W_MIN;
+}
+function pageSpan() { return horiz() ? (pwOf() + GAP_X) : PAGE_SPAN; }
+/* where page p begins. In the roll every page shares the x axis, so the
+   origin is nothing; side by side each page owns its own strip of it. */
+function pageOrigin(p) { return horiz() ? p * pageSpan() : 0; }
 
 function pageCount() {
-  return Math.max(1, Math.ceil(docH / PAGE_SPAN));
+  return Math.max(1, Math.ceil((horiz() ? docW : docH) / pageSpan()));
 }
 
 function currentPage() {
-  return Math.floor((scrollY + viewH / zoom / 2) / PAGE_SPAN) + 1;
+  var mid = horiz() ? (scrollX + viewW / zoom / 2) : (scrollY + viewH / zoom / 2);
+  return lim(Math.floor(mid / pageSpan()) + 1, 1, pageCount());
 }
 
 function goToPage(p) {
   p = lim(p, 1, pageCount());
-  scrollY = (p - 1) * PAGE_SPAN;
+  if (horiz()) { startPageTween(viewXFor(p)); return; }
+  scrollY = (p - 1) * pageSpan();
   clampScroll();
   requestRender();
   updateScrollPill();
 }
 
-function shiftStrokesBelow(n, fromY, dy) {
-  var moved = [], i, j, s;
+/* everything from `from` onwards slides by one page step. Which direction
+   that is depends on the note's layout, so the callers do not have to. */
+function shiftStrokesBelow(n, from, d) {
+  var h = horiz(), moved = [], i, j, s;
   for (i = 0; i < n.strokes.length; i++) {
     s = n.strokes[i];
     var bb = strokeBBox(s);
-    if (bb.y0 < fromY) continue;
-    for (j = 0; j < s.pts.length; j++) s.pts[j][1] += dy;
+    if (h ? bb.x0 < from : bb.y0 < from) continue;
+    for (j = 0; j < s.pts.length; j++) s.pts[j][h ? 0 : 1] += d;
     s.bb = null;
     moved.push(s);
   }
@@ -3425,9 +3637,9 @@ function shiftStrokesBelow(n, fromY, dy) {
 function insertPageAt(p) {
   var n = activeNote();
   if (!n) return;
-  var seam = (p - 1) * PAGE_SPAN;
-  var moved = shiftStrokesBelow(n, seam, PAGE_SPAN);
-  pushUndo({ t: 'shift', list: moved, dy: PAGE_SPAN });
+  var seam = (p - 1) * pageSpan(), d = pageSpan();
+  var moved = shiftStrokesBelow(n, seam, d);
+  pushUndo({ t: 'shift', list: moved, dx: horiz() ? d : 0, dy: horiz() ? 0 : d });
   invalidateAll();
   recomputeDoc();
   saveSoon();
@@ -3438,25 +3650,173 @@ function insertPageAt(p) {
 function deletePageAt(p) {
   var n = activeNote();
   if (!n) return;
-  var top = (p - 1) * PAGE_SPAN, bot = top + PAGE_SPAN;
+  var h = horiz(), span = pageSpan();
+  var top = (p - 1) * span, bot = top + span;
   var killed = [], keep = [], i, s;
   for (i = 0; i < n.strokes.length; i++) {
     s = n.strokes[i];
     var bb = strokeBBox(s);
-    var mid = (bb.y0 + bb.y1) / 2;
+    var mid = h ? (bb.x0 + bb.x1) / 2 : (bb.y0 + bb.y1) / 2;
     if (mid >= top && mid < bot) killed.push(s); else keep.push(s);
   }
   if (killed.length && !window.confirm('Delete page ' + p + ' and the ' +
       killed.length + ' mark(s) on it?')) return;
   n.strokes = keep;
-  var moved = shiftStrokesBelow(n, bot, -PAGE_SPAN);
-  /* one undo step puts the marks back AND slides the rest down again */
-  pushUndo({ t: 'page-del', list: killed, moved: moved, dy: -PAGE_SPAN });
+  var moved = shiftStrokesBelow(n, bot, -span);
+  /* one undo step puts the marks back AND slides the rest back again */
+  pushUndo({ t: 'page-del', list: killed, moved: moved,
+             dx: h ? -span : 0, dy: h ? 0 : -span });
   invalidateAll();
   recomputeDoc();
   saveSoon();
   goToPage(Math.min(p, pageCount()));
   toast('Page deleted');
+}
+
+/* ---------- turning the note side to side ----------
+ * Pages laid across the screen is not a redraw of the same note: each
+ * page's own marks are lifted out of the roll and set beside the next,
+ * a change to where they stand rather than to what they are. Page p goes
+ * from y + p*PAGE_SPAN to x + p*span, its own shape untouched, so running
+ * the change twice puts the note back exactly as it was - which is what
+ * undo, and the menu row, both lean on. */
+function applyLayout(n, to) {
+  if (!n) return;
+  var now = n.horiz ? 1 : 0;
+  to = to ? 1 : 0;
+  if (now === to) return;
+  /* the page width is pinned the first time, so the note does not take
+     on the width of whichever screen it happened to be opened on */
+  if (to && !n.pw) n.pw = Math.max(PAGE_W_MIN, viewW);
+  var srcSpan = now ? (pwOf() + GAP_X) : PAGE_SPAN;
+  var dstSpan = to ? (pwOf() + GAP_X) : PAGE_SPAN;
+  var i, j, s, bb, p, pts;
+  for (i = 0; i < n.strokes.length; i++) {
+    s = n.strokes[i];
+    bb = strokeBBox(s);
+    p = Math.max(0, Math.floor((now ? bb.x0 : bb.y0) / srcSpan));
+    if (!p) continue;                       /* page one never moves */
+    pts = s.pts;
+    for (j = 0; j < pts.length; j++) {
+      if (to) { pts[j][0] += p * dstSpan; pts[j][1] -= p * PAGE_SPAN; }
+      else { pts[j][0] -= p * srcSpan; pts[j][1] += p * PAGE_SPAN; }
+    }
+    s.bb = null;
+  }
+  n.horiz = to;
+}
+
+function toggleLayout() {
+  var n = activeNote();
+  if (!n || isEndless()) return;
+  var p = currentPage(), to = n.horiz ? 0 : 1;
+  pushUndo({ t: 'layout', horiz: to });
+  applyLayout(n, to);
+  /* across, the page is shown whole; down the roll it fits the screen
+     as it is, which is what 100% already means */
+  zoom = to ? fitZoom() : 1;
+  invalidateAll();
+  recomputeDoc();
+  saveSoon();
+  goToPage(p);
+  toast(to ? 'Pages side by side' : 'Pages down the page');
+  afterSettingChange();
+}
+
+/* ---------- pulling a new page into being ----------
+ * The last page ends in blank paper, and dragging past that end should
+ * offer one more, the way every pad of paper does: the sheet stops at
+ * its own edge, the rest of the drag STRETCHES it, and a disc in the
+ * stretched part says what letting go will do. Scroll clamping throws
+ * the overshoot away, so the stretch is gathered one frame at a time
+ * in pullPan, before clampScroll gets its hands on it. */
+var pullY = 0;              /* how far the end has been stretched, in doc units */
+var PULL_MAX = 170;         /* past this the sheet has nothing more to give */
+var PULL_ARM = 78;          /* release past here and the page is made */
+
+function pullPan() {
+  if (isEndless()) { pullY = 0; return; }   /* an infinite note never runs out */
+  var h = horiz();
+  var edge = h ? Math.max(0, docW - viewW / zoom) : Math.max(0, docH - viewH / zoom);
+  var over = h ? (scrollX - edge) : (scrollY - edge);
+  /* The stretch is remembered between frames, not measured afresh each
+     one: a held pull stays held, going back inside the page takes it
+     away, and only then. Resistance is what makes it feel like paper. */
+  if (over > 0) {
+    var give = Math.max(0.16, 1 - pullY / PULL_MAX);
+    pullY = lim(pullY + over * give, 0, PULL_MAX);
+    if (h) scrollX = edge; else scrollY = edge;
+    requestRender();
+  } else if (over < 0) {
+    pullY = 0;
+  }
+}
+
+function pullRelease() {
+  var armed = pullY >= PULL_ARM;
+  pullY = 0;
+  if (armed) addPageAtEnd();
+  else requestRender();
+}
+
+/* a blank page at the very end: unlike insertPageAt, nothing on the page
+   above moves, so it is the note's floor that grows (minPages), not a
+   slide of the ink - and minPages is remembered with the note, so an empty
+   last page is still there after a reload */
+function addPageAtEnd() {
+  var n = activeNote();
+  if (!n || isEndless()) { requestRender(); return; }
+  stopMomentum();
+  var want = pageCount() + 1;
+  pushUndo({ t: 'page-add', to: want, from: Math.max(want - 1, n.minPages || 1) });
+  n.minPages = Math.max(n.minPages || 1, want);
+  invalidateAll();
+  recomputeDoc();
+  saveSoon();
+  goToPage(want);
+  toast('Page ' + want + ' added');
+}
+
+function drawPullAdd(c) {
+  var P = PAPERS[settings.paperColor] || PAPERS[0];
+  var dark = !!P.dark;
+  var armed = pullY >= PULL_ARM;
+  var h = horiz();
+  var cx = h ? (docW + pullY / 2) : (scrollX + viewW / zoom / 2);
+  var cy = h ? (scrollY + viewH / zoom / 2) : (docH + pullY / 2);
+  var r = Math.max(7, Math.min(34, pullY / 2 - 8));
+  c.save();
+  /* the end of the last sheet, seen from underneath as it is stretched */
+  c.strokeStyle = dark ? '#3A4048' : '#C9D1DA';
+  c.lineWidth = 1;
+  c.beginPath();
+  if (h) {
+    c.moveTo(docW, scrollY - 8);
+    c.lineTo(docW, scrollY + viewH / zoom + 8);
+  } else {
+    c.moveTo(scrollX - 8, docH);
+    c.lineTo(scrollX + viewW / zoom + 8, docH);
+  }
+  c.stroke();
+  c.beginPath();
+  c.arc(cx, cy, r, 0, Math.PI * 2);
+  if (armed) { c.fillStyle = '#0381FE'; c.fill(); }
+  else { c.strokeStyle = dark ? '#5A6270' : '#AAB2BD'; c.lineWidth = 2; c.stroke(); }
+  c.strokeStyle = armed ? '#FFFFFF' : (dark ? '#98A0AC' : '#6B7482');
+  c.lineWidth = 2;
+  c.lineCap = 'round';
+  c.beginPath();
+  c.moveTo(cx - r * 0.42, cy); c.lineTo(cx + r * 0.42, cy);
+  c.moveTo(cx, cy - r * 0.42); c.lineTo(cx, cy + r * 0.42);
+  c.stroke();
+  if (pullY > 56) {
+    c.font = '13px Helvetica, Arial, sans-serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'top';
+    c.fillStyle = armed ? (dark ? '#61A8FF' : '#0381FE') : (dark ? '#98A0AC' : '#5A6473');
+    c.fillText('Add page', cx, cy + r + 7);
+  }
+  c.restore();
 }
 
 var PG_THUMB_W = 104;
@@ -3467,8 +3827,8 @@ var PG_THUMB_MAX = 60;   /* past this many, drawing every page costs more
    itself uses, at a seventh the size, so a thumbnail cannot drift out of
    agreement with the thing it represents. */
 function pageThumb(pIndex, w) {
-  var top = pIndex * (PAGE_H + GAP_H);
-  var h = Math.round(w * PAGE_H / Math.max(viewW, 1));
+  var h = horiz() ? Math.round(w * PAGE_H / Math.max(pwOf(), 1))
+                  : Math.round(w * PAGE_H / Math.max(viewW, 1));
   var cv = document.createElement('canvas');
   cv.width = Math.round(w * dpr);
   cv.height = Math.round(h * dpr);
@@ -3476,7 +3836,16 @@ function pageThumb(pIndex, w) {
   cv.style.height = h + 'px';
   var c = cv.getContext('2d');
   if (!c) return cv;
-  var k = (w / Math.max(viewW, 1)) * dpr;
+  var k = (w / Math.max(horiz() ? pwOf() : viewW, 1)) * dpr;
+  var ox = pageOrigin(pIndex), top = pIndex * PAGE_SPAN;
+  if (horiz()) {
+    /* the page's own strip of x is brought to the thumbnail's left edge */
+    c.setTransform(k, 0, 0, k, -ox * k, 0);
+    drawPaperPages(c, 0, PAGE_H, ox, ox + pageSpan());
+    var hs = sortedStrokesForBand(0, PAGE_H, ox, ox + pageSpan()), hi;
+    for (hi = 0; hi < hs.length; hi++) renderStrokeFull(c, hs[hi]);
+    return cv;
+  }
   c.setTransform(k, 0, 0, k, 0, -top * k);
   drawPaperPages(c, top, top + PAGE_H);
   var st = sortedStrokesForBand(top, top + PAGE_H), i;
@@ -3512,6 +3881,76 @@ function openPageMenu() {
     ? 'Tap a page to go there \u00b7 showing the first ' + shown
     : 'Tap a page to go there';
   byId('pagesOverlay').className = 'overlay on';
+}
+
+/* ---------- page strip ----------
+ * The Pages overlay is a one-off jump: open it, pick a page, close it.
+ * The strip stays out instead, so a long note can be browsed the way a
+ * pad of paper is browsed - by flicking pages past. Each thumbnail comes
+ * out of the same code that draws the page itself, and the whole strip is
+ * drawn again whenever the ink under it has changed: pushUndo marks it
+ * dirty and the next frame rebuilds it. */
+var stripOn = false, stripDirty = true;
+
+function syncStripTab() {
+  if (isEndless() && stripOn) setStrip(false);
+  byId('stripTab').style.display = isEndless() ? 'none' : '';
+}
+
+function buildStrip() {
+  var list = byId('stripList');
+  stripDirty = false;
+  if (!list) return;
+  var total = Math.min(pageCount(), PG_THUMB_MAX);
+  var cur = currentPage(), p;
+  list.innerHTML = '';
+  for (p = 1; p <= total; p++) {
+    (function (pn) {
+      var cell = document.createElement('button');
+      cell.className = 'strip-cell' + (pn === cur ? ' cur' : '');
+      cell.appendChild(pageThumb(pn - 1, PG_THUMB_W - 20));
+      var num = document.createElement('span');
+      num.className = 'strip-num';
+      num.innerHTML = String(pn);
+      cell.appendChild(num);
+      cell.addEventListener('click', function () { goToPage(pn); });
+      list.appendChild(cell);
+    })(p);
+  }
+  stripMark();
+}
+
+/* mark the page you are now on, without redrawing every thumbnail -
+   this runs on every frame of a scroll, so it only touches the class
+   of the two cells that could have changed. */
+function stripMark() {
+  var list = byId('stripList');
+  if (!list) return;
+  var cur = currentPage(), i, isCur, cn;
+  for (i = 0; i < list.children.length; i++) {
+    isCur = (i + 1) === cur;
+    cn = list.children[i].className;
+    if (isCur && cn.indexOf('cur') < 0) list.children[i].className = 'strip-cell cur';
+    else if (!isCur && cn.indexOf('cur') >= 0) list.children[i].className = 'strip-cell';
+  }
+  var total = Math.min(pageCount(), PG_THUMB_MAX);
+  var t = byId('stripTitle');
+  var txt = 'Page ' + cur + ' of ' + total;
+  if (t.innerHTML !== txt) t.innerHTML = txt;
+}
+
+function setStrip(on) {
+  on = !!on;
+  if (on && isEndless()) { toast('An infinite note keeps going - there are no pages to show'); return; }
+  if (on === stripOn) return;
+  stripOn = on;
+  byId('pageStrip').className = on ? 'on' : '';
+  byId('stripTab').style.display = on ? 'none' : '';
+  /* the paper slides aside rather than hiding under the strip, so the
+     page you are reading is still on screen beside its own thumbnail */
+  canvasWrap.style.left = on ? '112px' : '';
+  if (on) buildStrip();
+  resizeView();
 }
 
 /* ---------- tidy writing ----------
@@ -3991,8 +4430,11 @@ function tidyGroup(list, sink) {
   var dy = 0;
   var tall = (y1 - y0) > settings.spacing * TIDY_TALL;
   if (settings.template === TPL_RULED && !tall) {
-    /* the rules restart at each page top, and run unbroken on an endless one */
-    var top = isEndless() ? 0 : Math.floor(baseY / (PAGE_H + GAP_H)) * (PAGE_H + GAP_H);
+    /* the rules restart at each page top, and run unbroken on an endless
+       one - or across a note whose pages stand side by side, since there
+       the sheets all share one height */
+    var top = (isEndless() || horiz()) ? 0
+            : Math.floor(baseY / (PAGE_H + GAP_H)) * (PAGE_H + GAP_H);
     var k = Math.round((baseY - top - FIRST_BASE) / settings.spacing);
     var rule = top + FIRST_BASE + k * settings.spacing;
     dy = rule - baseY;
@@ -4242,6 +4684,7 @@ function pushUndo(op) {
   if (undoStack.length > 60) undoStack.shift();
   redoStack.length = 0;
   updateUndoButtons();
+  stripDirty = true;   /* whatever changed, the thumbnails now lie */
 }
 function addStroke(n, s) {
   n.strokes.push(s);
@@ -4260,6 +4703,7 @@ function applyOp(op, reverse) {
   var n = activeNote();
   if (!n) return;
   var i;
+  stripDirty = true;
   if (op.t === 'add') {
     if (reverse) removeStroke(n, op.s);
     else addStroke(n, op.s);
@@ -4289,22 +4733,37 @@ function applyOp(op, reverse) {
     requestRender();
   } else if (op.t === 'shift') {
     /* inserting a blank page: slide the same strokes back */
-    var sdy = reverse ? -op.dy : op.dy;
-    for (i = 0; i < op.list.length; i++) shiftStroke(op.list[i], 0, sdy);
+    var sdx = reverse ? -(op.dx || 0) : (op.dx || 0);
+    var sdy = reverse ? -(op.dy || 0) : (op.dy || 0);
+    for (i = 0; i < op.list.length; i++) shiftStroke(op.list[i], sdx, sdy);
     invalidateAll();
     recomputeDoc();
     requestRender();
   } else if (op.t === 'page-del') {
     /* deleting a page did two things at once, so undo does both */
-    var pdy = reverse ? -op.dy : op.dy;
-    for (i = 0; i < op.moved.length; i++) shiftStroke(op.moved[i], 0, pdy);
+    var pdx = reverse ? -(op.dx || 0) : (op.dx || 0);
+    var pdy = reverse ? -(op.dy || 0) : (op.dy || 0);
+    for (i = 0; i < op.moved.length; i++) shiftStroke(op.moved[i], pdx, pdy);
     if (reverse) { for (i = 0; i < op.list.length; i++) addStroke(n, op.list[i]); }
     else { for (i = 0; i < op.list.length; i++) removeStroke(n, op.list[i]); }
     invalidateAll();
     recomputeDoc();
     requestRender();
+  } else if (op.t === 'page-add') {
+    /* a page pulled into existence at the end: one undo takes it away */
+    n.minPages = reverse ? op.from : op.to;
+    invalidateAll();
+    recomputeDoc();
+    requestRender();
   } else if (op.t === 'tidy') {
     tidyApply(op.items, reverse);
+  } else if (op.t === 'layout') {
+    /* the note turned side to side: undo turns it back, mark for mark */
+    applyLayout(n, reverse ? !op.horiz : op.horiz);
+    zoom = n.horiz ? fitZoom() : 1;
+    invalidateAll();
+    recomputeDoc();
+    requestRender();
   } else if (op.t === 'textedit') {
     var bb2 = strokeBBox(op.s);
     invalidateRange(bb2.y0, bb2.y1);
@@ -4323,6 +4782,7 @@ function applyOp(op, reverse) {
   }
 }
 function doUndo() {
+  if (settings.reading) return;   /* reading mode takes nothing off the page */
   if (!undoStack.length) return;
   clearSelection();
   /* Undo is free ground truth. The recorder can see WHAT the engine
@@ -4338,6 +4798,7 @@ function doUndo() {
   toast('Undone');
 }
 function doRedo() {
+  if (settings.reading) return;   /* ...and nothing back onto it either */
   if (!redoStack.length) return;
   clearSelection();
   var op = redoStack.pop();
@@ -4355,12 +4816,17 @@ function exportPNG() {
   /* an endless page is exported as far as the ink goes, not with the
      screen of blank paper it keeps below it */
   var endless = isEndless();
-  var totalPages = Math.max(1, Math.ceil((endless ? docMaxY : docH) / (PAGE_H + GAP_H)));
+  var totalPages = endless ? Math.max(1, Math.ceil(docMaxY / (PAGE_H + GAP_H))) : pageCount();
   var usePages = Math.min(totalPages, 4);
-  var W = Math.round(viewW * dpr);
+  /* pages laid side by side are laid side by side in the picture too;
+     down the roll they stack, one under the other, as they stand */
+  var W = horiz()
+    ? Math.round((usePages * (pwOf() + GAP_X) - GAP_X) * dpr)
+    : Math.round(viewW * dpr);
   var H = endless
     ? Math.round(Math.max(PAGE_H, Math.min(docMaxY + settings.spacing, usePages * (PAGE_H + GAP_H))) * dpr)
     : Math.round(usePages * (PAGE_H + GAP_H) * dpr) - Math.round(GAP_H * dpr);
+  if (horiz()) H = Math.round(PAGE_H * dpr);
   var c = document.createElement('canvas');
   c.width = W; c.height = H;
   var ec = c.getContext('2d');
@@ -4368,8 +4834,9 @@ function exportPNG() {
   ec.setTransform(dpr, 0, 0, dpr, 0, 0);
   var P = PAPERS[settings.paperColor] || PAPERS[0];
   ec.fillStyle = P.bg;
-  ec.fillRect(0, 0, viewW, H / dpr);
-  drawPaperPages(ec, 0, H / dpr);
+  ec.fillRect(0, 0, W / dpr, H / dpr);
+  if (horiz()) drawPaperPages(ec, 0, H / dpr, 0, W / dpr);
+  else drawPaperPages(ec, 0, H / dpr);
   var st = [];
   for (var i = 0; i < n.strokes.length; i++) st.push(n.strokes[i]);
   st.sort(function (a, b) { return a.ord - b.ord; });
@@ -4432,6 +4899,13 @@ var lastHandTap = null;   /* { t, x, y } */
 var twoTap = null;        /* { t, moved } while a candidate is alive */
 var TWOTAP_MS = 320;
 var TWOTAP_PX = 26;
+
+/* THREE-FINGER TAP = REDO, the mirror of the undo above, with the same
+   clock and the same 26px of drift because it is the same gesture with
+   one more finger on the glass. A third finger used to cancel the undo
+   candidate and do nothing, so an undo taken by mistake had to be walked
+   back through the toolbar button. */
+var threeTap = null;
 
 function currentPenWidth() {
   var pdef = PENS[settings.pen];
@@ -4876,6 +5350,29 @@ function anyInkActive() {
 }
 
 /* ---------- touch lifecycle ---------- */
+/* Every contact with the hand tool - and every contact in reading mode -
+   lands here: the paper follows the finger and no ink is possible. One
+   function, so the two can never drift apart. */
+function beginHandTouch(touch, now) {
+  var id = touch.identifier;
+  touchStates[id] = {
+    kind: 'gesture', id: id,
+    sx: touch.clientX, sy: touch.clientY,
+    cx: touch.clientX, cy: touch.clientY,
+    t0: now
+  };
+  if (!gesture) {
+    gesture = {
+      lastCx: touch.clientX, lastCy: touch.clientY,
+      lastD: 0, lastT: now, vx: 0, vy: 0, fromHand: true, sumC: 0
+    };
+  } else if (gesture.fromHand && liveTouchCount() === 2) {
+    /* a second finger: from here it is a scroll or a zoom, by how it moves */
+    gesture.kind = 'auto';
+    gesture.sumC = 0;
+  }
+}
+
 function beginTouch(touch, now, burst) {
   var pt = docPoint(touch);
   var id = touch.identifier;
@@ -4883,26 +5380,10 @@ function beginTouch(touch, now, burst) {
   /* HAND TOOL: every touch is a gesture member (pan/zoom). This
      is the "finger moves the screen, pen writes" split: with the
      hand tool active the paper follows the finger and no ink is
-     possible, exactly like Samsung Notes with finger drawing off. */
-  if (tool === 'hand') {
-    touchStates[id] = {
-      kind: 'gesture', id: id,
-      sx: touch.clientX, sy: touch.clientY,
-      cx: touch.clientX, cy: touch.clientY,
-      t0: now
-    };
-    if (!gesture) {
-      gesture = {
-        lastCx: touch.clientX, lastCy: touch.clientY,
-        lastD: 0, lastT: now, vx: 0, vy: 0, fromHand: true, sumC: 0
-      };
-    } else if (gesture.fromHand && liveTouchCount() === 2) {
-      /* a second finger: from here it is a scroll or a zoom, by how it moves */
-      gesture.kind = 'auto';
-      gesture.sumC = 0;
-    }
-    return;
-  }
+     possible, exactly like Samsung Notes with finger drawing off.
+     Reading mode routes every contact here for the same reason -
+     it is the hand tool made unavoidable. */
+  if (tool === 'hand' || settings.reading) return beginHandTouch(touch, now);
 
   if ((tool === 'select' || tool === 'text' || tool === 'eraser') && toolTwoFinger(touch, now)) return;
 
@@ -5489,7 +5970,7 @@ function finalizeInk(st, now) {
      those dots instead of the stroke the user wanted gone. dotIsCredible
      refuses a dot for the same reason on every other level; this is the
      same rule reaching the path Glove mode actually takes. */
-  if (twoTap && settings.palmLevel === PALM_OFF) { requestRender(); return; }
+  if ((twoTap || threeTap) && settings.palmLevel === PALM_OFF) { requestRender(); return; }
 
   /* A stroke that never went anywhere is a dot, and a one-point stroke
      draws nothing at all - there is no segment to render. In Glove mode
@@ -5537,7 +6018,7 @@ function finalizeInk(st, now) {
 function dotIsCredible(st, now) {
   /* a two-finger tap is a gesture, not two decimal points - without
      this it fires the undo AND leaves a dot, which cancels out */
-  if (twoTap) return false;
+  if (twoTap || threeTap) return false;
   if (st.rx > 12) return false;
   if (!lastInkPt) return false;
   var age = now - lastInkPt.t;
@@ -6180,15 +6661,15 @@ function applyGesture(now) {
       else if (d > gesture.zd + SC.ZOOM_SLACK) gesture.zd = d - SC.ZOOM_SLACK;
       else if (d < gesture.zd - SC.ZOOM_SLACK) gesture.zd = d + SC.ZOOM_SLACK;
       var raw = gesture.z0 * gesture.zd / gesture.zd0;
-      if (raw < Z_MIN || raw > Z_MAX) {
+      if (raw < zMin() || raw > Z_MAX) {
         /* Past a limit, the limit becomes where the fingers are now, so the
            first move back the other way zooms at once instead of first
            having to undo everything pinched past the limit. The slack is
            what keeps this from pumping: a wobble never moves zd. */
-        gesture.z0 = lim(raw, Z_MIN, Z_MAX);
+        gesture.z0 = lim(raw, zMin(), Z_MAX);
         gesture.zd0 = gesture.zd;
       }
-      var target = lim(gesture.z0 * gesture.zd / gesture.zd0, Z_MIN, Z_MAX);
+      var target = lim(gesture.z0 * gesture.zd / gesture.zd0, zMin(), Z_MAX);
       /* one frame never moves the zoom by much, so a single bad reading
          cannot flash the page - it just gets there a frame later */
       var nz = lim(target, zoom * 0.8, zoom * 1.25);
@@ -6204,12 +6685,14 @@ function applyGesture(now) {
   }
 
   /* --- pan: the paper follows the centroid --- */
+  pageTween = null;          /* a hand on the glass takes over the view */
   scrollX -= dx / zoom;
   scrollY -= dy / zoom;
 
   gesture.vx = gesture.vx * 0.7 + (dx / dt) * 0.3;
   gesture.vy = gesture.vy * 0.7 + (dy / dt) * 0.3;
   gesture.lastCx = c.x; gesture.lastCy = c.y; gesture.lastT = now;
+  pullPan();
   clampScroll();
   traceView(now);
   requestRender();
@@ -6240,7 +6723,14 @@ function gestureMemberEnd(now) {
   /* the selection's bar was hidden while the page moved under it */
   if (selection.length) { selBBox = selUnionBBox(); positionSelBar(); }
   saveSoon();
-  if (Math.abs(vy) > 0.06 || Math.abs(vx) > 0.06) startMomentum(vx, vy);
+  if (horiz() && Math.abs(vx) > Math.abs(vy) && Math.abs(vx) > 0.06) {
+    /* sideways across pages settles on the next one along, so a flick is
+       a turn of the page rather than a slide that stops where it stops */
+    turnPage(vx);
+  } else if (Math.abs(vy) > 0.06 || Math.abs(vx) > 0.06) startMomentum(vx, vy);
+  /* last, because making the page cancels the momentum that could
+     otherwise carry the view straight off the page just made */
+  if (pullY > 0) pullRelease();
 }
 
 function startMomentum(vx, vy) {
@@ -7100,10 +7590,9 @@ function commitText() {
 
 /* ---------- scroll position pill ---------- */
 function updateScrollPill() {
-  var totalPages = Math.max(1, Math.ceil(docH / (PAGE_H + GAP_H)));
-  var page = Math.floor((scrollY + viewH / zoom / 2) / (PAGE_H + GAP_H)) + 1;
-  if (page > totalPages) page = totalPages;
-  if (page < 1) page = 1;
+  if (stripOn) stripMark();
+  var totalPages = pageCount();
+  var page = currentPage();
   var txt = page + ' / ' + totalPages;
   if (Math.abs(zoom - 1) > 0.01) txt = txt + '  ' + Math.round(zoom * 100) + '%';
   /* an endless page has no page numbers to show - only the zoom, if any */
@@ -7121,7 +7610,77 @@ function updateScrollPill() {
     scrollPillTimer = setTimeout(function () { scrollPill.style.display = 'none'; }, 1300);
   }
 }
+/* ---------- turning to a page ----------
+ * Side by side, a change of page glides across instead of jumping: the
+ * view rides to where the page begins over a quarter of a second, which
+ * is the page turn this layout asks for. Down the roll nothing has to
+ * travel sideways, so it stays the instant jump it always was. */
+var pageTween = null, pageTweenRAF = 0;
+
+/* where a view starts for the page asked for: at its origin, or at the
+   head of the pair it belongs to when two are shown together */
+function viewXFor(p) {
+  var i = Math.max(0, (p || 1) - 1);
+  if (horiz() && settings.spread) i = Math.floor(i / 2) * 2;
+  return i * pageSpan();
+}
+
+function startPageTween(to) {
+  var vw = viewW / zoom;
+  var xMax = Math.max(docX0, docW - vw), xMin = Math.min(docX0, docW - vw);
+  to = lim(to, xMin, xMax);
+  stopMomentum();
+  if (Math.abs(to - scrollX) < 1) {
+    pageTween = null;
+    scrollX = to;
+    clampScroll();
+    requestRender();
+    return;
+  }
+  pageTween = { from: scrollX, to: to, t0: Date.now() };
+  if (!pageTweenRAF) pageTweenRAF = window.requestAnimationFrame(pageTweenStep);
+}
+function pageTweenStep() {
+  pageTweenRAF = 0;
+  if (!pageTween) return;                 /* a hand took the view over */
+  var e = (Date.now() - pageTween.t0) / 260;
+  if (e >= 1) {
+    scrollX = pageTween.to;
+    pageTween = null;
+  } else {
+    var t = 1 - Math.pow(1 - e, 3);
+    scrollX = pageTween.from + (pageTween.to - pageTween.from) * t;
+  }
+  clampScroll();
+  updateScrollPill();
+  requestRender();
+  if (pageTween) pageTweenRAF = window.requestAnimationFrame(pageTweenStep);
+}
+
+/* a flick across the screen is a turn of the page: the view settles on
+   the next one along rather than coming to rest wherever it stops */
+function turnPage(vx) {
+  var step = settings.spread ? 2 : 1;
+  startPageTween(viewXFor(currentPage() + (vx > 0 ? -step : step)));
+}
+
+/* how far a page fills the screen: one sheet, or two when the view is
+   opened out. On a phone the pair runs past the edge and is scrolled to,
+   since the pinch is allowed no smaller than the floor that suits it. */
+function fitZoom() {
+  var w = settings.spread ? (2 * pageSpan() - GAP_X) : pwOf();
+  return lim(viewW / Math.max(w, 1), zMin(), Z_MAX);
+}
 function resetZoom() {
+  if (horiz()) {
+    zoom = fitZoom();
+    startPageTween(viewXFor(currentPage()));
+    updateScrollPill();
+    if (scrollPillTimer) { clearTimeout(scrollPillTimer); scrollPillTimer = null; }
+    scrollPillTimer = setTimeout(function () { scrollPill.style.display = 'none'; }, 1300);
+    toast('Zoom ' + Math.round(zoom * 100) + '%');
+    return;
+  }
   zoom = 1;
   scrollX = 0;
   clampScroll();
@@ -7138,6 +7697,10 @@ function resetTouchTracking() {
   inkNow = {};
   gesture = null;
   momentum = null;
+  pageTween = null;
+  twoTap = null;
+  threeTap = null;
+  pullY = 0;
   palmMem = [];
   lastBounce = null;
   lastInkPt = null;
@@ -8290,9 +8853,25 @@ window.__mnPen = function () {
            sidebar: !!byId('penDock').className,
            opacity: settings.opacity,
            favGrid: byId('favGrid').style.display === 'block',
-           favEdit: byId('favEdit').style.display === 'block' };
+            favEdit: byId('favEdit').style.display === 'block',
+            reading: !!settings.reading };
 };
 window.__mnSave = function () { saveTick(); };
+window.__mnRec = function () { return noteRecord(activeNote()); };
+window.__mnPages = function () {
+  return { strip: stripOn, total: pageCount(), cur: currentPage(),
+           cells: byId('stripList').children.length,
+           endless: isEndless(), left: canvasWrap.style.left,
+           tab: byId('stripTab').style.display, pull: pullY,
+           minPages: activeNote() ? (activeNote().minPages || 0) : 0,
+           /* side by side */
+           across: horiz(), pw: pwOf(), span: pageSpan(),
+           x: Math.round(scrollX), y: Math.round(scrollY),
+           zoom: zoom, docW: Math.round(docW), docH: Math.round(docH),
+           tween: !!pageTween, spread: !!settings.spread,
+           grid: byId('pagesGrid').children.length,
+           exp: exportOverlay.className };
+};
 window.__mnHold = function () { holdCheck(); };
 window.__mnTidy = function () { return tidyRun(); };
 window.__mnZW = function () { var g = zwGeom(); return { on: zw.on, x: zw.x, y: zw.y, bw: g.bw, bh: g.bh, top: g.top }; };
@@ -8322,6 +8901,19 @@ function onTouchStart(e) {
     }
     twoTap = oldest <= SC.TWOTAP_TOGETHER ? { t: now, moved: 0 } : null;
   } else if (down > 2) twoTap = null;
+  /* three fingers arriving together start the redo candidate. The same
+     "together" rule as the undo: a hand already resting on the glass is
+     old, and three contacts that did not land together are a palm, not a
+     gesture. A fourth finger cancels it, as a third cancels the undo. */
+  if (down === 3) {
+    var oldest3 = 0, tk3;
+    for (tk3 in touchStates) {
+      if (!touchStates.hasOwnProperty(tk3)) continue;
+      var age3 = now - touchStates[tk3].t0;
+      if (age3 > oldest3) oldest3 = age3;
+    }
+    threeTap = oldest3 <= SC.TWOTAP_TOGETHER ? { t: now, moved: 0 } : null;
+  } else if (down > 3) threeTap = null;
   var ch = e.changedTouches;
   var burst = ch.length >= 2 || (e.touches && e.touches.length >= 3);
   if (burst) traceGesture('burst', ch.length, e.touches ? e.touches.length : 0, now);
@@ -8344,6 +8936,11 @@ function onTouchMove(e) {
       if (pst) twoTap.moved += dist(pst.cx, pst.cy, ch[i].clientX, ch[i].clientY);
       if (twoTap.moved > TWOTAP_PX) twoTap = null;   /* a pinch or a pan */
     }
+    if (threeTap) {
+      var qst = touchStates[ch[i].identifier];
+      if (qst) threeTap.moved += dist(qst.cx, qst.cy, ch[i].clientX, ch[i].clientY);
+      if (threeTap.moved > TWOTAP_PX) threeTap = null;   /* a drag, not a tap */
+    }
     moveTouch(ch[i], now);
   }
   rigidGroupCheck(now);
@@ -8364,7 +8961,18 @@ function onTouchEnd(e) {
   for (var i = 0; i < ch.length; i++) { traceTouch(cancelled ? 3 : 2, ch[i], now); endTouch(ch[i], now, cancelled); }
 
   var left = e.touches ? e.touches.length : 0;
-  if (twoTap && left === 0) {
+  if (threeTap && left === 0) {
+    /* the candidate was started by the THIRD finger landing, so the clock
+       runs from there: a tap this long is three deliberate fingers, a
+       gesture that took longer is a hand settling */
+    if (!cancelled && now - threeTap.t < TWOTAP_MS && threeTap.moved <= TWOTAP_PX &&
+        redoStack.length) {
+      traceVerdict('three-finger-redo', -1, now);
+      doRedo();
+    }
+    threeTap = null;
+    twoTap = null;
+  } else if (twoTap && left === 0) {
     if (!cancelled && now - twoTap.t < TWOTAP_MS && twoTap.moved <= TWOTAP_PX &&
         undoStack.length) {
       traceVerdict('two-finger-undo', -1, now);
@@ -8373,6 +8981,7 @@ function onTouchEnd(e) {
     twoTap = null;
   } else if (left === 0) {
     twoTap = null;
+    threeTap = null;
   }
 }
 
@@ -8514,12 +9123,17 @@ function renderHome(filterText) {
     subEl.className = 'nc-sub';
     /* "418 strokes" is a number about the file, not about the note. How
        many pages there are is something a person can picture. */
-    var maxY = 0, sq;
+    var maxY = 0, maxX = 0, sq;
     for (sq = 0; sq < n.strokes.length; sq++) {
       var sp = n.strokes[sq].pts, spq;
-      for (spq = 0; spq < sp.length; spq++) if (sp[spq][1] > maxY) maxY = sp[spq][1];
+      for (spq = 0; spq < sp.length; spq++) {
+        if (sp[spq][1] > maxY) maxY = sp[spq][1];
+        if (sp[spq][0] > maxX) maxX = sp[spq][0];
+      }
     }
-    var pages = n.strokes.length ? Math.max(1, Math.ceil(maxY / (PAGE_H + GAP_H))) : 0;
+    /* how far the note runs decides the count: down the page, or across */
+    var pSpan = n.horiz ? ((n.pw || PAGE_W_MIN) + GAP_X) : (PAGE_H + GAP_H);
+    var pages = n.strokes.length ? Math.max(1, Math.ceil((n.horiz ? maxX : maxY) / pSpan)) : 0;
     subEl.textContent = !n.strokes.length ? 'Empty'
       : (pages === 1 ? '1 page' : pages + ' pages');
     card.appendChild(subEl);
@@ -8561,9 +9175,11 @@ function openNote(id) {
   redoStack = [];
   resetTouchTracking();
   invalidateAll();
-  scrollY = n.scroll || 0;
+  scrollY = n.horiz ? 0 : (n.scroll || 0);
   scrollX = 0;
-  zoom = 1;
+  /* one page to the screen as it opens (or the pair, if that is how the
+     view has been left) - down the roll the page is the screen already */
+  zoom = n.horiz ? fitZoom() : 1;
   noteTitleBtn.textContent = n.title || 'Untitled';
   updateUndoButtons();
   recomputeDoc();
@@ -8571,6 +9187,8 @@ function openNote(id) {
   showView('draw');
   resizeView();
   applyPalmUI();
+  stripDirty = true;      /* another note's thumbnails are up there */
+  syncStripTab();
   saveSoon();
   setTimeout(function () { layoutReport('toolbar'); }, 1200);
 }
@@ -8598,6 +9216,7 @@ function newNote() {
 function renameCurrentNote() {
   var n = activeNote();
   if (!n) return;
+  if (settings.reading) return;   /* the note is not the reader's to rename */
   var name = window.prompt('Note name', n.title || 'Untitled');
   if (name !== null && name !== '') {
     n.title = name;
@@ -9009,7 +9628,7 @@ var pop = { on: false, x: 0, y: 0, open: '', off: 0, drag: null, hideT: null, ba
 function holdArm(id, now) {
   holdDisarm();
   var st = touchStates[id];
-  if (!st || !settings.hold || settings.palmLevel !== PALM_OFF || gesture) return;
+  if (!st || !settings.hold || settings.reading || settings.palmLevel !== PALM_OFF || gesture) return;
   if (st.kind !== 'probe' && st.kind !== 'erase' && st.kind !== 'lasso') return;
   hold = { id: id, t0: now, x: st.cx, y: st.cy, fired: false, timer: setTimeout(holdCheck, HOLD_MS + 20) };
 }
@@ -9867,12 +10486,12 @@ function buildMoreMenu() {
   moreMenu.innerHTML = '';
   moreRowDefs = [
     isEndless() ? null : { leave: true, lbl: 'Pages', val: currentPage() + ' / ' + pageCount(), act: openPageMenu },
-    clip ? { leave: true, lbl: 'Paste', val: clip.items.length === 1 ? '1 item' : clip.items.length + ' items',
+    clip ? { leave: true, lbl: 'Paste', edit: true, val: clip.items.length === 1 ? '1 item' : clip.items.length + ' items',
              act: function () {
                closePanels();
                pasteClip(scrollX + viewW / zoom / 2, scrollY + viewH / zoom / 2);
              } } : null,
-    { lbl: 'Page type', val: isEndless() ? 'Infinite' : 'Pages', act: function () {
+    { lbl: 'Page type', edit: true, val: isEndless() ? 'Infinite' : 'Pages', act: function () {
         var n = activeNote();
         if (!n) return;
         n.endless = !n.endless;
@@ -9882,7 +10501,21 @@ function buildMoreMenu() {
                         : 'Pages');
         afterSettingChange();
       } },
-    { leave: true, lbl: 'Insert photo', val: '', act: function () {
+    /* PAGES SIDE BY SIDE: the note's own layout, so it changes the note */
+    isEndless() ? null : { lbl: 'Page layout', edit: true,
+        val: (activeNote() && activeNote().horiz) ? 'Across' : 'Down',
+        act: toggleLayout },
+    /* ...whereas two pages to a screen is only how they are looked at */
+    (isEndless() || !horiz()) ? null : { lbl: 'Two pages',
+        val: settings.spread ? 'On' : 'Off',
+        act: function () {
+          settings.spread = !settings.spread;
+          zoom = fitZoom();
+          startPageTween(viewXFor(currentPage()));
+          afterSettingChange();
+          toast(settings.spread ? 'Two pages at a time' : 'One page at a time');
+        } },
+    { leave: true, lbl: 'Insert photo', edit: true, val: '', act: function () {
         try { photoInput.value = ''; photoInput.click(); }
         catch (e) { toast('Photos are not supported on this device'); }
       } },
@@ -9916,6 +10549,8 @@ function buildMoreMenu() {
                                 : 'Off - use the hand tool to zoom and scroll');
         afterSettingChange();
       } },
+    { lbl: 'Reading mode', val: settings.reading ? 'On' : 'Off',
+      act: function () { setReading(!settings.reading); } },
     { lbl: 'Hold pen for pop-up', val: settings.hold ? 'On' : 'Off',
       act: function () {
         settings.hold = !settings.hold;
@@ -9931,7 +10566,7 @@ function buildMoreMenu() {
         afterSettingChange();
       } },
     { lbl: 'Zoom window', val: zw.on ? 'On' : 'Off', act: zwToggle },
-    { leave: true, lbl: 'Tidy handwriting', val: '', act: function () { closePanels(); tidyRun(); } },
+    { leave: true, lbl: 'Tidy handwriting', edit: true, val: '', act: function () { closePanels(); tidyRun(); } },
     { lbl: 'Margin line', val: settings.margin ? 'On' : 'Off',
       act: function () { settings.margin = !settings.margin; invalidateAll(); afterSettingChange(); } },
     { leave: true, lbl: 'Testing drills', val: canUpload() ? 'server' : 'paste', act: showTraining },
@@ -9945,11 +10580,16 @@ function buildMoreMenu() {
     { leave: true, lbl: 'Copy report', val: traceCount ? traceCount + ' pts' : 'empty', act: showTrace },
     { leave: true, lbl: 'Touch capabilities', val: '', act: function () { window.alert(capsReport()); } },
     { leave: true, lbl: 'Recording', val: traceOn ? 'On' : 'Off', act: function () { traceOn = !traceOn; afterSettingChange(); } },
-    { leave: true, lbl: 'Clear note', val: '', warn: true, act: clearNote },
-    { leave: true, lbl: 'Delete note', val: '', warn: true, act: deleteCurrentNote },
+    { leave: true, lbl: 'Clear note', edit: true, val: '', warn: true, act: clearNote },
+    { leave: true, lbl: 'Delete note', edit: true, val: '', warn: true, act: deleteCurrentNote },
     { leave: true, lbl: 'About', val: '', act: function () { window.alert('MathNotes v5.1 (S-Class 5)\n\nSamsung-notes style handwriting for iPad 3.\nWorks offline. Notes are saved in this browser.\n\nHand tool: finger scrolls, pen writes.\nTwo-finger pinch zooms. Lasso tool selects ink.\nDrag the corner handle or tap - / + to resize\nthe selection. Double-tap with the hand tool\nresets zoom.'); } }
   ];
   moreRowDefs = moreRowDefs.filter(function (r) { return r; });   /* rows that do not apply here */
+  /* reading mode: the rows that would change the note are not offered at
+     all. A reader cannot reach the ink through the menu either - the
+     settings that only change how it looks stay, the ones that move,
+     replace or delete what is on the page go. */
+  if (settings.reading) moreRowDefs = moreRowDefs.filter(function (r) { return !r.edit; });
   for (var i = 0; i < moreRowDefs.length; i++) {
     var d = moreRowDefs[i];
     var row = document.createElement('button');
@@ -9979,6 +10619,7 @@ function afterSettingChange() {
   var keep = moreMenu.scrollTop;
   buildMoreMenu();
   moreMenu.scrollTop = keep;
+  syncStripTab();
   popPaint();
   requestRender();
   saveSoon();
@@ -9986,7 +10627,37 @@ function afterSettingChange() {
 
 /* ---------- dark theme ---------- */
 function applyTheme() {
-  document.body.className = settings.uiDark ? 'dark' : '';
+  applyReadingUI();
+}
+
+/* ---------- reading mode ----------
+ * Look, scroll, zoom, turn pages - and nothing on the page can be
+ * marked. Three doors into the ink are shut, not merely hidden: the
+ * touch path is the hand tool's (beginTouch), setTool refuses every
+ * tool but the hand, and undo/redo refuse to run. The toolbar dims so
+ * the state is visible, and the chip in the header is the way out. */
+var readTool = 'pen';            /* what the hand held before the reader came */
+function applyReadingUI() {
+  document.body.className = (settings.uiDark ? 'dark' : '') +
+                            (settings.reading ? ' reading' : '');
+}
+function setReading(on) {
+  on = !!on;
+  if (on === settings.reading) return;
+  settings.reading = on;
+  if (on) {
+    readTool = tool;
+    closePanels();
+    setTool('hand');
+    clearSelection();
+    closeTextEditor();
+  } else {
+    setTool(readTool || 'pen');   /* back to whatever the hand was holding */
+  }
+  applyReadingUI();
+  afterSettingChange();
+  toast(on ? 'Reading mode - scroll and turn pages, nothing can be marked'
+           : 'Writing again');
 }
 
 /* ---------- palm level ---------- */
@@ -10108,6 +10779,10 @@ eraserBtn.addEventListener('click', function () {
 });
 
 function setTool(t) {
+  /* reading mode keeps the hand: the pen, the eraser and the lasso all
+     mark the page, and a reader who reaches for one is one tap from an
+     accidental edit */
+  if (settings.reading && t !== 'hand') return;
   tool = t;
   penBtn.className = 'tb-btn' + (t === 'pen' ? ' on' : '');
   selectBtn.className = 'tb-btn' + (t === 'select' ? ' on' : '');
@@ -10160,6 +10835,9 @@ searchCancelBtn.addEventListener('click', hideSearch);
 searchInputEl.addEventListener('input', function () { renderHome(); });
 undoBtn.addEventListener('click', doUndo);
 redoBtn.addEventListener('click', doRedo);
+byId('readChip').addEventListener('click', function () { setReading(false); });
+byId('stripTab').addEventListener('click', function () { setStrip(!stripOn); });
+byId('stripClose').addEventListener('click', function () { setStrip(false); });
 byId('exportCloseBtn').addEventListener('click', function () { exportOverlay.className = 'overlay'; });
 byId('traceCloseBtn').addEventListener('click', function () { traceOverlay.className = 'overlay'; });
 byId('pagesCloseBtn').addEventListener('click', function () {
@@ -10167,10 +10845,12 @@ byId('pagesCloseBtn').addEventListener('click', function () {
 });
 byId('pagesInsertBtn').addEventListener('click', function () {
   byId('pagesOverlay').className = 'overlay';
+  if (settings.reading) return;   /* a reader turns pages, never adds one */
   insertPageAt(currentPage());
 });
 byId('pagesDeleteBtn').addEventListener('click', function () {
   byId('pagesOverlay').className = 'overlay';
+  if (settings.reading) return;
   deletePageAt(currentPage());
 });
 byId('refNextBtn').addEventListener('click', refDone);
@@ -10212,6 +10892,10 @@ function init() {
   applyPenUI();
   applyPalmUI();
   applyTheme();
+  /* reading mode was switched on in another session: come back to it with
+     the hand already selected, rather than a pen that cannot draw */
+  if (settings.reading) setTool('hand');
+  syncStripTab();
   updateUndoButtons();
   if (!storageOk) showWarning('Private Browsing detected: notes will NOT be saved after reload.');
   if (curNoteId && notes[curNoteId]) openNote(curNoteId);

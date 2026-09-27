@@ -244,6 +244,21 @@ App.prototype.twoFingerTap = function (ax, ay, bx, by, driftPx) {
   return this;
 };
 
+/* a three-finger tap: all three arrive in ONE touchstart (the burst path
+ * the two-finger version cannot reach), hold still, all three lift */
+App.prototype.threeFingerTap = function (ax, ay, bx, by, cx, cy, driftPx) {
+  this.downMulti([[911, ax, ay], [912, bx, by], [913, cx, cy]]);
+  this.tick(60);
+  if (driftPx) {
+    this.moveTo(911, ax - driftPx, ay);
+    this.moveTo(912, bx + driftPx, by);
+    this.moveTo(913, cx, cy + driftPx);
+    this.tick(60);
+  }
+  this.up(911); this.up(912); this.up(913);
+  return this;
+};
+
 /* every stroke in the collection, not just the open note */
 App.prototype.allStrokes = function () {
   var st = this.state(), out = [], i, n;
@@ -300,6 +315,7 @@ App.prototype.rotate = function (w, hh) {
 };
 App.prototype.geom = function () { return this.win.__mnGeom(); };
 App.prototype.pen = function () { return this.win.__mnPen(); };
+App.prototype.pages = function () { return this.win.__mnPages(); };
 App.prototype.nb = function () { return this.win.__mnNb; };
 App.prototype.ref = function () { return this.win.__mnRef; };
 App.prototype.loadInk = function (list) { var n = this.win.__mnLoadInk(list); this.flushFrames(); return n; };
