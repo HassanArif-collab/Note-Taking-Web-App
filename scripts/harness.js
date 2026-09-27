@@ -190,11 +190,11 @@ App.prototype.stroke = function (o) {
  * from moreRowDefs each time, so this is how a test reaches settings
  * that live inside the IIFE. */
 App.prototype.clickMenu = function (label) {
-  var menu = this.els.moreMenu;
-  if (!menu) return false;
-  for (var i = 0; i < menu.children.length; i++) {
-    if (String(menu.children[i].innerHTML).indexOf(label) >= 0) {
-      menu.children[i]._fire('click', {});
+  var body = this.els.settingsBody;
+  if (!body) return false;
+  for (var i = 0; i < body.children.length; i++) {
+    if (String(body.children[i].innerHTML).indexOf(label) >= 0) {
+      body.children[i]._fire('click', {});
       return true;
     }
   }

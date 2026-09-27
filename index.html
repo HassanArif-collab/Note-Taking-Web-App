@@ -925,6 +925,52 @@ body.dark #tplTitle { color: #F2F3F5; }
 body.dark .tpl-cell canvas { border-color: #3A414A; }
 body.dark #tplActions { border-top-color: #2F3033; }
 body.dark #tplActions button { background: #26282C; color: #C4C7CC; }
+
+/* ---------- settings screen ---------- */
+/* The three-line menu was a flat list of names with no idea what any of
+   them did and no grouping - tapping Template cycled it and hoped. The
+   settings screen groups what goes together under a header and explains
+   every row in a line under it, the way Samsung's settings does. */
+#settingsBox {
+  max-width: 560px; margin: 0 auto; background: #FFFFFF; border-radius: 16px;
+  padding: 0 0 10px 0; text-align: left; max-height: 82%; overflow: hidden;
+  display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column;
+}
+#settingsHead {
+  padding: 14px 20px 12px 20px; border-bottom: 1px solid #ECEFF2;
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  background: #FFFFFF;
+}
+#settingsTitle { font-size: 18px; font-weight: 700; color: #1A1A1A; -webkit-flex: 1; flex: 1; }
+#settingsCloseBtn {
+  border: 0; background: #F0F1F3; color: #5A6270; font-size: 15px; font-weight: 600;
+  border-radius: 18px; padding: 8px 18px;
+}
+#settingsBody { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 0 6px 0; }
+.set-sec {
+  font-size: 11px; font-weight: 700; color: #0381FE; letter-spacing: 0.05em;
+  padding: 14px 20px 4px 20px; text-transform: uppercase;
+}
+.set-row {
+  width: 100%; -webkit-box-sizing: border-box; box-sizing: border-box;
+  padding: 8px 20px 9px 20px; border: 0; background: none; text-align: left;
+  display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column;
+  -webkit-align-items: stretch; align-items: stretch;
+  font-size: 15px; color: #1B1B1B;
+}
+.set-row:active { background: #F4F6F8; }
+.set-top { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.set-top .lbl { -webkit-flex: 1; flex: 1; font-weight: 600; }
+.set-top .val { color: #0381FE; font-size: 14px; font-weight: 600; margin-left: 10px; }
+.set-row.warn .set-top .lbl, .set-row.warn .set-top .val { color: #E2231A; }
+.set-hint { font-size: 12px; color: #8A9099; margin-top: 1px; }
+body.dark #settingsBox { background: #23272E; }
+body.dark #settingsHead { background: #23272E; border-bottom-color: #2F3033; }
+body.dark #settingsTitle { color: #F2F3F5; }
+body.dark #settingsCloseBtn { background: #2B2D33; color: #C4C7CC; }
+body.dark .set-row { color: #E8E8E8; }
+body.dark .set-row:active { background: #26282C; }
+body.dark .set-hint { color: #8C8C8C; }
 #trainBox {
   max-width: 560px; margin: 0 auto; background: #FFFFFF; border-radius: 12px;
   padding: 14px; text-align: left; max-height: 82%; overflow: hidden;
@@ -1675,6 +1721,17 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
       </div>
     </div>
     <button id="tplCloseBtn">Close</button>
+  </div>
+
+  <!-- settings screen: every setting grouped and explained -->
+  <div id="settingsOverlay" class="overlay">
+    <div id="settingsBox">
+      <div id="settingsHead">
+        <div id="settingsTitle">Settings</div>
+        <button id="settingsCloseBtn">Close</button>
+      </div>
+      <div id="settingsBody"></div>
+    </div>
   </div>
 
   <!-- testing drills -->
@@ -10841,16 +10898,63 @@ function applyEraserUI() {
 
 /* ---------- more menu ---------- */
 var moreRowDefs = null;
-function buildMoreMenu() {
-  moreMenu.innerHTML = '';
-  moreRowDefs = [
-    isEndless() ? null : { leave: true, lbl: 'Pages', val: currentPage() + ' / ' + pageCount(), act: openPageMenu },
-    clip ? { leave: true, lbl: 'Paste', edit: true, val: clip.items.length === 1 ? '1 item' : clip.items.length + ' items',
-             act: function () {
-               closePanels();
-               pasteClip(scrollX + viewW / zoom / 2, scrollY + viewH / zoom / 2);
-             } } : null,
-    { lbl: 'Page type', edit: true, val: isEndless() ? 'Infinite' : 'Pages', act: function () {
+/* ---------- settings screen ----------
+ * The three-line menu was a flat list of names: no grouping, and no idea
+ * what any setting did until you tapped it and something changed. This
+ * groups what belongs together under a header and explains every row in a
+ * line under it, the way Samsung's settings does. Each row's value is a
+ * function so the screen always shows the current state. */
+var SET_SECTIONS = [
+  { name: 'Writing', rows: [
+    { lbl: 'Palm rejection', hint: 'How firmly the pen must be held to write',
+      v: function () { return PALM_NAMES[settings.palmLevel]; },
+      act: function () { settings.palmLevel = nextPalmLevel(settings.palmLevel); applyPalmUI(); afterSettingChange(); } },
+    { lbl: 'Writing hand', hint: 'Which hand writes, so the other is ignored',
+      v: function () { return HAND_NAMES[settings.hand]; },
+      act: function () { settings.hand = (settings.hand + 1) % 3; afterSettingChange(); } },
+    { lbl: 'Nib offset', hint: 'Shift the ink if it lands off where the nib is',
+      v: function () { return settings.nibFix ? SC.NIB_DY + 'px down' : 'Off'; },
+      act: function () {
+        settings.nibFix = !settings.nibFix;
+        toast(settings.nibFix ? 'Ink shifted ' + SC.NIB_DY + 'px down'
+                              : 'Ink drawn where the glass reports it');
+        afterSettingChange();
+      } },
+    { lbl: 'Scribble to erase', hint: 'Scribble over writing to rub it out',
+      v: function () { return settings.scratch ? 'On' : 'Off'; },
+      act: function () {
+        settings.scratch = !settings.scratch;
+        toast(settings.scratch ? 'Scribble over writing to erase it'
+                               : 'Off - scribbles stay as ink');
+        afterSettingChange();
+      } },
+    { lbl: 'Hold pen for pop-up', hint: 'Hold the pen still to open its pop-up',
+      v: function () { return settings.hold ? 'On' : 'Off'; },
+      act: function () {
+        settings.hold = !settings.hold;
+        if (!settings.hold) { settings.popDock = 0; popHide(); }
+        toast(settings.hold ? 'Hold the pen still to open its pop-up (Glove mode)' : 'Off - pens stay in the toolbar');
+        afterSettingChange();
+      } },
+    { lbl: 'Two-finger zoom', hint: 'Two fingers zoom and scroll the page',
+      v: function () { return settings.gestures ? 'On' : 'Off'; },
+      act: function () {
+        settings.gestures = !settings.gestures;
+        toast(settings.gestures ? 'Two fingers zoom and scroll again'
+                                : 'Off - use the hand tool to zoom and scroll');
+        afterSettingChange();
+      } },
+    { lbl: 'Touch guide', hint: 'Show a dot where each touch lands',
+      v: function () { return settings.guideDots ? 'On' : 'Off'; },
+      act: function () { settings.guideDots = !settings.guideDots; hidePendingDot(); afterSettingChange(); } }
+  ] },
+  { name: 'Page', rows: [
+    { lbl: 'Pages', hint: 'Jump to a page by its thumbnail', leave: true,
+      show: function () { return !isEndless(); },
+      v: function () { return currentPage() + ' / ' + pageCount(); }, act: openPageMenu },
+    { lbl: 'Page type', hint: 'Separate pages or one endless sheet', edit: true,
+      v: function () { return isEndless() ? 'Infinite' : 'Pages'; },
+      act: function () {
         var n = activeNote();
         if (!n) return;
         n.endless = !n.endless;
@@ -10860,124 +10964,147 @@ function buildMoreMenu() {
                         : 'Pages');
         afterSettingChange();
       } },
-    /* PAGES SIDE BY SIDE: the note's own layout, so it changes the note */
-    isEndless() ? null : { lbl: 'Page layout', edit: true,
-        val: (activeNote() && activeNote().horiz) ? 'Across' : 'Down',
-        act: toggleLayout },
-    /* ...whereas two pages to a screen is only how they are looked at */
-    (isEndless() || !horiz()) ? null : { lbl: 'Two pages',
-        val: settings.spread ? 'On' : 'Off',
-        act: function () {
-          settings.spread = !settings.spread;
-          zoom = fitZoom();
-          startPageTween(viewXFor(currentPage()));
-          afterSettingChange();
-          toast(settings.spread ? 'Two pages at a time' : 'One page at a time');
-        } },
-    { leave: true, lbl: 'Insert photo', edit: true, val: '', act: function () {
+    { lbl: 'Page layout', hint: 'Pages down the page or side by side', edit: true,
+      show: function () { return !isEndless(); },
+      v: function () { return (activeNote() && activeNote().horiz) ? 'Across' : 'Down'; },
+      act: toggleLayout },
+    { lbl: 'Two pages', hint: 'Two pages side by side in one view',
+      show: function () { return !isEndless() && horiz(); },
+      v: function () { return settings.spread ? 'On' : 'Off'; },
+      act: function () {
+        settings.spread = !settings.spread;
+        zoom = fitZoom();
+        startPageTween(viewXFor(currentPage()));
+        afterSettingChange();
+        toast(settings.spread ? 'Two pages at a time' : 'One page at a time');
+      } },
+    { lbl: 'Template', hint: 'Ruled, grid, dotted, to-do and more', leave: true,
+      v: function () { return TPL_NAMES[settings.template]; }, act: openTplGallery },
+    { lbl: 'Paper color', hint: 'The colour of the paper and the bar', leave: true,
+      v: function () { return (PAPERS[settings.paperColor] || PAPERS[0]).name; }, act: togglePageView },
+    { lbl: 'Line spacing', hint: 'Distance between the rules',
+      v: function () { return settings.spacing + ' px'; },
+      act: function () { settings.spacing = settings.spacing === 32 ? 38 : (settings.spacing === 38 ? 44 : 32); afterSettingChange(); } },
+    { lbl: 'Margin line', hint: 'The red rule down the left margin',
+      v: function () { return settings.margin ? 'On' : 'Off'; },
+      act: function () { settings.margin = !settings.margin; invalidateAll(); afterSettingChange(); } },
+    { lbl: 'Tidy handwriting', hint: 'Straighten a line after writing it', edit: true, leave: true,
+      act: function () { closePanels(); tidyRun(); } },
+    { lbl: 'Zoom', hint: 'How much of the page fills the screen',
+      v: function () { return Math.round(zoom * 100) + '%'; }, act: function () { resetZoom(); } },
+    { lbl: 'Reading mode', hint: 'Look and turn pages, but write nothing',
+      v: function () { return settings.reading ? 'On' : 'Off'; },
+      act: function () { setReading(!settings.reading); } },
+    { lbl: 'Zoom window', hint: 'Write large in a strip, land small on the page',
+      v: function () { return zw.on ? 'On' : 'Off'; }, act: zwToggle },
+    { lbl: 'Insert photo', hint: 'Add a picture to the page', edit: true, leave: true,
+      act: function () {
         try { photoInput.value = ''; photoInput.click(); }
         catch (e) { toast('Photos are not supported on this device'); }
+      } }
+  ] },
+  { name: 'Note', rows: [
+    { lbl: 'Export PNG', hint: 'Save the note as an image', leave: true, act: exportPNG },
+    { lbl: 'Backup and restore', hint: 'Copy every note, or put one back', leave: true,
+      v: function () { return countNotes() + ' notes'; }, act: openBackup },
+    { lbl: 'Paste', hint: 'Put back what was copied', edit: true, leave: true,
+      v: function () { return clip ? (clip.items.length === 1 ? '1 item' : clip.items.length + ' items') : ''; },
+      act: function () {
+        closePanels();
+        pasteClip(scrollX + viewW / zoom / 2, scrollY + viewH / zoom / 2);
       } },
-    { leave: true, lbl: 'Backup and restore', val: countNotes() + ' notes', act: openBackup },
-    { leave: true, lbl: 'Export PNG', val: '', act: exportPNG },
-    { leave: true, lbl: 'Template', val: TPL_NAMES[settings.template], act: openTplGallery },
-    { lbl: 'Line spacing', val: settings.spacing + ' px', act: function () { settings.spacing = settings.spacing === 32 ? 38 : (settings.spacing === 38 ? 44 : 32); afterSettingChange(); } },
-    { leave: true, lbl: 'Paper color', val: (PAPERS[settings.paperColor] || PAPERS[0]).name, act: togglePageView },
-    { lbl: 'Theme', val: settings.uiDark ? 'Dark' : 'Light', act: function () {
+    { lbl: 'Clear note', hint: 'Erase the writing on this note', edit: true, warn: true, leave: true, act: clearNote },
+    { lbl: 'Delete note', hint: 'Remove this note for good', edit: true, warn: true, leave: true, act: deleteCurrentNote }
+  ] },
+  { name: 'Display', rows: [
+    { lbl: 'Theme', hint: 'Light or dark interface',
+      v: function () { return settings.uiDark ? 'Dark' : 'Light'; },
+      act: function () {
         settings.uiDark = !settings.uiDark;
         if (settings.uiDark && settings.paperColor === 0) settings.paperColor = 4;
         else if (!settings.uiDark && settings.paperColor === 4) settings.paperColor = 0;
         applyTheme();
         afterSettingChange();
-      } },
-    { lbl: 'Zoom', val: Math.round(zoom * 100) + '%', act: function () { resetZoom(); } },
-    { lbl: 'Palm rejection', val: PALM_NAMES[settings.palmLevel], act: function () { settings.palmLevel = nextPalmLevel(settings.palmLevel); applyPalmUI(); afterSettingChange(); } },
-    { lbl: 'Writing hand', val: HAND_NAMES[settings.hand], act: function () { settings.hand = (settings.hand + 1) % 3; afterSettingChange(); } },
-    { lbl: 'Touch guide', val: settings.guideDots ? 'On' : 'Off', act: function () { settings.guideDots = !settings.guideDots; hidePendingDot(); afterSettingChange(); } },
-    { lbl: 'Nib offset', val: settings.nibFix ? SC.NIB_DY + 'px down' : 'Off',
-      act: function () {
-        settings.nibFix = !settings.nibFix;
-        toast(settings.nibFix ? 'Ink shifted ' + SC.NIB_DY + 'px down'
-                              : 'Ink drawn where the glass reports it');
-        afterSettingChange();
-      } },
-    { lbl: 'Two-finger zoom', val: settings.gestures ? 'On' : 'Off',
-      act: function () {
-        settings.gestures = !settings.gestures;
-        toast(settings.gestures ? 'Two fingers zoom and scroll again'
-                                : 'Off - use the hand tool to zoom and scroll');
-        afterSettingChange();
-      } },
-    { lbl: 'Reading mode', val: settings.reading ? 'On' : 'Off',
-      act: function () { setReading(!settings.reading); } },
-    { lbl: 'Hold pen for pop-up', val: settings.hold ? 'On' : 'Off',
-      act: function () {
-        settings.hold = !settings.hold;
-        if (!settings.hold) { settings.popDock = 0; popHide(); }
-        toast(settings.hold ? 'Hold the pen still to open its pop-up (Glove mode)' : 'Off - pens stay in the toolbar');
-        afterSettingChange();
-      } },
-    { lbl: 'Scribble to erase', val: settings.scratch ? 'On' : 'Off',
-      act: function () {
-        settings.scratch = !settings.scratch;
-        toast(settings.scratch ? 'Scribble over writing to erase it'
-                               : 'Off - scribbles stay as ink');
-        afterSettingChange();
-      } },
-    { lbl: 'Zoom window', val: zw.on ? 'On' : 'Off', act: zwToggle },
-    { leave: true, lbl: 'Tidy handwriting', edit: true, val: '', act: function () { closePanels(); tidyRun(); } },
-    { lbl: 'Margin line', val: settings.margin ? 'On' : 'Off',
-      act: function () { settings.margin = !settings.margin; invalidateAll(); afterSettingChange(); } },
-    { leave: true, lbl: 'Testing drills', val: canUpload() ? 'server' : 'paste', act: showTraining },
-    { lbl: 'Send as I write', val: !canUpload() ? 'no server' : (liveOn ? 'On' : 'Off'),
+      } }
+  ] },
+  { name: 'Advanced', rows: [
+    { lbl: 'Testing drills', hint: 'Practice the pen gestures', leave: true,
+      v: function () { return canUpload() ? 'server' : 'paste'; }, act: showTraining },
+    { lbl: 'Send as I write', hint: 'Stream the ink to the test server',
+      v: function () { return !canUpload() ? 'no server' : (liveOn ? 'On' : 'Off'); },
       act: function () {
         if (!canUpload()) { toast('Only on the test server'); return; }
         liveOn = !liveOn;
         toast(liveOn ? 'Sending as you write' : 'Stopped sending');
         afterSettingChange();
       } },
-    { leave: true, lbl: 'Copy report', val: traceCount ? traceCount + ' pts' : 'empty', act: showTrace },
-    { leave: true, lbl: 'Touch capabilities', val: '', act: function () { window.alert(capsReport()); } },
-    { leave: true, lbl: 'Recording', val: traceOn ? 'On' : 'Off', act: function () { traceOn = !traceOn; afterSettingChange(); } },
-    { leave: true, lbl: 'Clear note', edit: true, val: '', warn: true, act: clearNote },
-    { leave: true, lbl: 'Delete note', edit: true, val: '', warn: true, act: deleteCurrentNote },
-    { leave: true, lbl: 'About', val: '', act: function () { window.alert('MathNotes v5.1 (S-Class 5)\n\nSamsung-notes style handwriting for iPad 3.\nWorks offline. Notes are saved in this browser.\n\nHand tool: finger scrolls, pen writes.\nTwo-finger pinch zooms. Lasso tool selects ink.\nDrag the corner handle or tap - / + to resize\nthe selection. Double-tap with the hand tool\nresets zoom.'); } }
-  ];
-  moreRowDefs = moreRowDefs.filter(function (r) { return r; });   /* rows that do not apply here */
+    { lbl: 'Recording', hint: 'Record every touch to a trace file', leave: true,
+      v: function () { return traceOn ? 'On' : 'Off'; },
+      act: function () { traceOn = !traceOn; afterSettingChange(); } },
+    { lbl: 'Copy report', hint: 'Copy a diagnostics report', leave: true,
+      v: function () { return traceCount ? traceCount + ' pts' : 'empty'; }, act: showTrace },
+    { lbl: 'Touch capabilities', hint: 'What the screen reports it can do', leave: true,
+      act: function () { window.alert(capsReport()); } }
+  ] },
+  { name: 'About', rows: [
+    { lbl: 'About', hint: 'Version and how the app works', leave: true,
+      act: function () { window.alert('MathNotes v5.1 (S-Class 5)\n\nSamsung-notes style handwriting for iPad 3.\nWorks offline. Notes are saved in this browser.\n\nHand tool: finger scrolls, pen writes.\nTwo-finger pinch zooms. Lasso tool selects ink.\nDrag the corner handle or tap - / + to resize\nthe selection. Double-tap with the hand tool\nresets zoom.'); } }
+  ] }
+];
+
+function buildSettings() {
+  var body = byId('settingsBody');
+  body.innerHTML = '';
+  var sections = SET_SECTIONS, s, r, i;
+  /* rows that do not apply here - an endless note has no pages to navigate
+     or lay out, and two pages needs the note across */
+  sections = sections.map(function (sc) {
+    return { name: sc.name, rows: sc.rows.filter(function (r) { return !r.show || r.show(); }) };
+  });
   /* reading mode: the rows that would change the note are not offered at
-     all. A reader cannot reach the ink through the menu either - the
+     all. A reader cannot reach the ink through the settings either - the
      settings that only change how it looks stay, the ones that move,
      replace or delete what is on the page go. */
-  if (settings.reading) moreRowDefs = moreRowDefs.filter(function (r) { return !r.edit; });
-  for (var i = 0; i < moreRowDefs.length; i++) {
-    var d = moreRowDefs[i];
-    var row = document.createElement('button');
-    row.className = 'mrow' + (d.warn ? ' warn' : '');
-    row.innerHTML = '<span class="lbl">' + d.lbl + '</span>' + (d.val ? '<span class="val">' + d.val + '</span>' : '');
-    (function (def) {
-      row.addEventListener('click', function () {
-        /* Most of these rows only cycle a value - Paper color, Template,
-           Theme, Line spacing. Closing the menu after each tap meant that
-           trying three paper colours was: three dots, scroll, tap, look,
-           three dots, scroll, tap, look. The menu stays open for those
-           and the row updates under your finger; only rows that actually
-           take you somewhere else close it. */
-        if (def.leave && moreMenu.style.display === 'block') {
-          moreMenu.style.display = 'none';
-        }
-        def.act();
-      });
-    })(d);
-    moreMenu.appendChild(row);
+  if (settings.reading) {
+    sections = sections.map(function (sc) {
+      return { name: sc.name, rows: sc.rows.filter(function (r) { return !r.edit; }) };
+    });
+  }
+  for (s = 0; s < sections.length; s++) {
+    var sec = sections[s];
+    if (!sec.rows.length) continue;
+    var h = document.createElement('div');
+    h.className = 'set-sec';
+    h.innerHTML = sec.name;
+    body.appendChild(h);
+    for (r = 0; r < sec.rows.length; r++) {
+      var d = sec.rows[r];
+      var val = d.v ? d.v() : '';
+      var row = document.createElement('button');
+      row.className = 'set-row' + (d.warn ? ' warn' : '');
+      row.innerHTML = '<span class="set-top"><span class="lbl">' + d.lbl + '</span>' +
+        (val ? '<span class="val">' + val + '</span>' : '') + '</span>' +
+        (d.hint ? '<span class="set-hint">' + d.hint + '</span>' : '');
+      (function (def) {
+        row.addEventListener('click', function () {
+          /* Most rows only cycle a value - Theme, Line spacing, Palm.
+             Closing the screen after each tap meant that trying three
+             themes was: tap, look, tap, look. The screen stays open for
+             those and the row updates under your finger; only rows that
+             take you somewhere else close it. */
+          if (def.leave) byId('settingsOverlay').className = 'overlay';
+          def.act();
+        });
+      })(d);
+      body.appendChild(row);
+    }
   }
 }
 function afterSettingChange() {
-  /* buildMoreMenu throws the rows away and makes them again, which sends
+  /* buildSettings throws the rows away and makes them again, which sends
      the list back to the top - so changing the second-to-last setting
-     scrolled the menu out from under you. */
-  var keep = moreMenu.scrollTop;
-  buildMoreMenu();
-  moreMenu.scrollTop = keep;
+     scrolled the screen out from under you. */
+  buildSettings();
   syncStripTab();
   popPaint();
   applyPaperTint();
@@ -11125,6 +11252,7 @@ function closePanels() {
   eraserPanel.style.display = 'none';
   moreMenu.style.display = 'none';
   pageView.style.display = 'none';
+  byId('settingsOverlay').className = 'overlay';
   byId('favGrid').style.display = 'none';
   byId('favGrid').className = '';
   byId('favEdit').style.display = 'none';
@@ -11146,6 +11274,7 @@ function syncScrim() {
              eraserPanel.style.display === 'block' ||
              moreMenu.style.display === 'block' ||
              pageView.style.display === 'block' ||
+             byId('settingsOverlay').className === 'overlay on' ||
              byId('favGrid').style.display === 'block' ||
              byId('favEdit').style.display === 'block';
   byId('panelScrim').className = open ? 'on' : '';
@@ -11185,8 +11314,13 @@ byId('backBtn').addEventListener('click', goHome);
 noteTitleBtn.addEventListener('click', renameCurrentNote);
 palmBtn.addEventListener('click', cyclePalm);
 byId('moreBtn').addEventListener('click', function () {
-  if (moreMenu.style.display === 'block') moreMenu.style.display = 'none';
-  else { buildMoreMenu(); moreMenu.style.display = 'block'; penPalette.style.display = 'none'; eraserPanel.style.display = 'none'; }
+  closePanels();
+  buildSettings();
+  byId('settingsOverlay').className = 'overlay on';
+  syncScrim();
+});
+byId('settingsCloseBtn').addEventListener('click', function () {
+  byId('settingsOverlay').className = 'overlay';
   syncScrim();
 });
 function togglePageView() {
@@ -11352,7 +11486,7 @@ function init() {
   initFavs();
   initFavEdit();
   buildEraserPanel();
-  buildMoreMenu();
+  buildSettings();
   applyPenUI();
   applyPalmUI();
   applyTheme();
