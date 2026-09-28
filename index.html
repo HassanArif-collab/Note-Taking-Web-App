@@ -1886,8 +1886,11 @@ var STORAGE_KEY_V1 = 'mathnotes_v1';
    ever retracted mid-word. The rejection engine exists only because the
    hardware reports no pressure, no contact size and no stylus id. A
    300-rupee glove supplies what the hardware cannot. */
-var PALM_OFF = 0, PALM_MED = 1, PALM_MAX = 2, PALM_STRICT = 3;
-var PALM_NAMES = ['Glove', 'Med', 'Max', 'Strict'];
+var PALM_OFF = 0, PALM_MED = 1, PALM_MAX = 2, PALM_STRICT = 3, PALM_AUTO = 4;
+var PALM_NAMES = ['Glove', 'Med', 'Max', 'Strict', 'Auto'];
+/* Glove and Auto both ink from the first sample; Auto also sorts out the
+   resting hand (see handBegin) */
+function inkFirst() { return settings.palmLevel === PALM_OFF || settings.palmLevel === PALM_AUTO; }
 
 var PAGE_H   = 1000;   /* document px per page  */
 /* THE PAGE HAD NO WIDTH OF ITS OWN. It was exactly as wide as the screen,
@@ -5896,7 +5899,7 @@ function beginTouch(touch, now, burst) {
     state: 'probe',
     sx: pt.x, sy: pt.y, x: pt.x, y: pt.y,
     cx: touch.clientX, cy: touch.clientY,
-    csx: touch.clientX, csy: touch.clientY,
+    csx: touch.clientX, csy: touch.clientY, maxCy: touch.clientY,
     t0: now, lastT: now,
     path: [[pt.x, pt.y, now]],
     pathLen: 0, net: 0,
@@ -5916,6 +5919,7 @@ function beginTouch(touch, now, burst) {
   st.viaZW = zw.on;
 
   if (gesture) st.state = 'palm';                       /* do not disturb a pan */
+  else if (settings.palmLevel === PALM_AUTO) handBegin(st, now);
   else if (anyInkActive()) {                            /* a stroke owns the pen */
     if (settings.palmLevel !== PALM_OFF && allInkDubious(now)) {
       /* every live stroke looks like a palm slide - let this touch
@@ -5950,7 +5954,10 @@ function beginTouch(touch, now, burst) {
     }
   }
 
-  if (st.state === 'ink') startInkRecord(st, now);
+  if (st.state === 'ink') {
+    startInkRecord(st, now);
+    if (st.wait) inkNow[id].held = true;
+  }
   else if (st.state === 'probe' && settings.guideDots) showPendingDot(id, pt.x, pt.y);
 }
 
@@ -6006,6 +6013,99 @@ function toolTwoFinger(touch, now) {
  * landing that soon after is almost always a gesture, so the young line
  * is not drawn while it is there. If no gesture comes of it, the line
  * reappears, whole, the moment the other finger lifts. */
+/* AUTO PALM REJECTION - write with the hand resting on the glass, no glove.
+ *
+ * The iPad gives a web page no contact size (none of 6,971 recorded
+ * touches had one), so a palm and a nib are the same thing to this code:
+ * a point. What does separate them is where they are. In every recording
+ * made with the hand resting while writing, the palm sat 230-400px BELOW
+ * the pen - a hand cannot write above itself. So the highest touch on the
+ * glass is the pen and anything well below it is the hand:
+ *  - a touch landing well above the others takes the pen from them, and
+ *    whatever they had drawn goes. The palm lands 300-500ms before the nib
+ *    (recorded), so it has usually started a line by then;
+ *  - a touch landing level with or below one already down is the hand. It
+ *    never draws, never blocks the pen and is never half of a zoom;
+ *  - a touch landing far below the line just written is almost always the
+ *    hand coming down, so its line is kept out of sight until the pen
+ *    lands above it (hand: gone) or it lifts on its own (drawn, if it was
+ *    a stroke rather than a tap or a long slide).
+ * Everything else is Glove mode: ink from the first sample, no waiting. */
+var HAND_GAP = 120;        /* the pen sits at least this far above the palm (recorded 230-400) */
+var HAND_ZONE_M = 170;     /* further below the last stroke than this is where the hand lands
+                              (the palm sits 230-400px below the nib; three lines down is 150) */
+var HAND_ZONE_T = 8000;    /* ...for this long after the stroke */
+var HAND_REVEAL = 700;     /* a hidden stroke still going this long with no pen above it is the pen */
+var handZone = null;       /* the bottom of the last stroke on screen, and when */
+var HAND_GRACE = 450;      /* a stroke far below the writing is shown this much later... */
+var handPend = [];         /* ...unless the pen lands above it first: those strokes */
+
+function handBegin(st, now) {
+  var k, o, lower = [];
+  /* two fingers landing together at about the same height are a scroll or
+     a pinch, and Glove mode's gesture rules already handle those */
+  for (k in touchStates) {
+    if (!touchStates.hasOwnProperty(k)) continue;
+    o = touchStates[k];
+    if (o.kind === 'probe' && !o.hpalm && now - o.t0 <= SC.GPAN_LAND &&
+        Math.abs(st.cy - o.cy) < HAND_GAP) {
+      st.state = 'palm';
+      holdYoungInk(now);
+      return;
+    }
+  }
+  for (k in touchStates) {
+    if (!touchStates.hasOwnProperty(k)) continue;
+    o = touchStates[k];
+    if (o.kind !== 'probe') continue;
+    if (st.cy > o.cy - HAND_GAP) { handPalm(st, now); return; }
+    lower.push(o);
+  }
+  for (k = 0; k < lower.length; k++) handPalm(lower[k], now);
+  handPendCheck(st.cy, now);
+  st.state = 'ink';
+  st.wait = !!(handZone && now - handZone.t < HAND_ZONE_T && st.cy > handZone.y1 + HAND_ZONE_M);
+}
+function handPalm(o, now) {
+  if (o.hpalm) return;
+  var seen = inkNow[o.id] && !inkNow[o.id].held;
+  o.hpalm = true;
+  o.state = 'palm';
+  o.wait = false;
+  if (inkNow[o.id]) { delete inkNow[o.id]; requestRender(); }
+  traceVerdict(seen ? 'palm-shown' : 'palm', o.id, now);
+}
+/* A stroke that lifted far below the writing with nothing above it yet.
+   The hand lands 300-500ms before the pen, so a palm brush that has already
+   lifted is usually followed by the pen landing above it: shown only once
+   HAND_GRACE has passed without that. The timer is for the device; the
+   check at every touch is what a replay, running on recorded time, sees. */
+function handDefer(st, s, now) {
+  var p = { st: st, s: s, y: st.maxCy || st.cy, t: now };
+  handPend.push(p);
+  setTimeout(function () { handPendCheck(null, Date.now()); }, HAND_GRACE + 20);
+}
+function handPendCheck(penY, now) {
+  var keep = [], i, p;
+  for (i = 0; i < handPend.length; i++) {
+    p = handPend[i];
+    if (now - p.t >= HAND_GRACE) commitInk(p.st, p.s, now);
+    else if (penY !== null && penY <= p.y - HAND_GAP) traceVerdict('palm-low', p.st.id, now);
+    else keep.push(p);
+  }
+  handPend = keep;
+}
+/* a hidden touch that lifted with no pen above it: drawn if it was a stroke */
+function handWaitDrop(st, now) {
+  var drop = st.cancelled || st.pathLen < SC.TAP_PATH;
+  if (drop) traceVerdict('palm-low', st.id, now);
+  return drop;
+}
+function handOnLine(st, now) {
+  return st.state === 'ink' && !st.wait && !!handZone && now - handZone.t < HAND_ZONE_T &&
+         Math.abs(st.cy - handZone.y1) < HAND_ZONE_M;
+}
+
 function holdYoungInk(now) {
   var k, o;
   for (k in inkNow) {
@@ -6017,7 +6117,10 @@ function holdYoungInk(now) {
 function releaseHeldInk() {
   var k;
   for (k in inkNow) {
-    if (inkNow.hasOwnProperty(k) && inkNow[k].held) { inkNow[k].held = false; requestRender(); }
+    if (inkNow.hasOwnProperty(k) && inkNow[k].held && !(touchStates[k] && touchStates[k].wait)) {
+      inkNow[k].held = false;
+      requestRender();
+    }
   }
 }
 
@@ -6040,7 +6143,7 @@ function startInkRecord(st, now) {
   st.fx = fx; st.fy = fy;
   var s = mkStroke(settings.pen, currentPenWidth(), settings.color, sm);
   inkNow[st.id] = { stroke: s };
-  if (st.state === 'ink' && settings.palmLevel !== PALM_OFF) {
+  if (st.state === 'ink' && !inkFirst()) {
     /* a contender that earned ink evicts the stroke it was competing
        with, so a palm can never hold the pen hostage */
     if (st.contender) {
@@ -6071,7 +6174,7 @@ function verdictPalm(st, now) {
   /* see discardActiveInk: in Glove mode every contact is the pen, and
      calling one a palm would also flip it out of the 'ink' state it was
      born in, which breaks it rather than merely rejecting it */
-  if (settings.palmLevel === PALM_OFF) return;
+  if (inkFirst()) return;
   if (st.state === 'palm') return;
   st.state = 'palm';
   traceVerdict('palm', st.id, now);
@@ -6145,7 +6248,19 @@ function moveTouch(touch, now) {
     st.cx = touch.clientX; st.cy = touch.clientY;
     return;
   }
-  if (st.state === 'ink') { appendInk(st, pt, now, touch); return; }
+  if (st.state === 'ink') {
+    if (touch.clientY > st.maxCy) st.maxCy = touch.clientY;
+    /* the hand lands 300-500ms ahead of the pen: this long without one landing
+       above it, and still writing, it is the pen - so it is shown, not kept
+       out of sight for the whole of a slow stroke */
+    if (st.wait && now - st.t0 > HAND_REVEAL && st.pathLen > 20) {
+      st.wait = false;
+      if (inkNow[st.id]) inkNow[st.id].held = false;
+      requestRender();
+    }
+    appendInk(st, pt, now, touch);
+    return;
+  }
 
   /* --- probe update ---
      Travel and speed are measured in SCREEN space, not document
@@ -6196,7 +6311,7 @@ function moveTouch(touch, now) {
     st.coh = Math.sqrt(sx * sx + sy * sy) / st.dirs.length;
   }
 
-  if (settings.palmLevel !== PALM_OFF) tryCommit(st, now);
+  if (!inkFirst()) tryCommit(st, now);
 }
 
 function tryCommit(st, now) {
@@ -6372,7 +6487,7 @@ function discardActiveInk(st, now, why) {
      so it is the honest place: a rule added later cannot quietly reopen
      the hole. A pinch still takes the ink back, because that is the user
      asking for it rather than the engine deciding. */
-  if (settings.palmLevel === PALM_OFF && why !== 'pinch') return;
+  if (inkFirst() && why !== 'pinch') return;
   delete inkNow[st.id];
   st.state = 'palm';
   traceVerdict(why === 'pinch' ? 'pinch-cancel' : (why || 'discarded'), st.id, now);
@@ -6397,7 +6512,8 @@ function finalizeInk(st, now) {
      those dots instead of the stroke the user wanted gone. dotIsCredible
      refuses a dot for the same reason on every other level; this is the
      same rule reaching the path Glove mode actually takes. */
-  if ((twoTap || threeTap) && settings.palmLevel === PALM_OFF) { requestRender(); return; }
+  if ((twoTap || threeTap) && inkFirst()) { requestRender(); return; }
+  if (st.wait && handWaitDrop(st, now)) { requestRender(); return; }
 
   /* A stroke that never went anywhere is a dot, and a one-point stroke
      draws nothing at all - there is no segment to render. In Glove mode
@@ -6409,6 +6525,11 @@ function finalizeInk(st, now) {
     flushDot({ x: s.pts[0][0], y: s.pts[0][1], t: now });
     return;
   }
+  if (st.wait) { handDefer(st, s, now); return; }
+  commitInk(st, s, now);
+}
+
+function commitInk(st, s, now) {
   var n = activeNote();
   if (!n) return;
   if (tryScratch(n, s, st, now)) return;
@@ -6418,6 +6539,7 @@ function finalizeInk(st, now) {
     tryReshape(s);
   }
   n.strokes.push(s);
+  if (settings.palmLevel === PALM_AUTO) handZone = { y1: st.maxCy || st.cy, t: now };
   pushUndo({ t: 'add', s: s });
   var lp = s.pts[s.pts.length - 1];
   lastInkPt = { x: lp[0], y: lp[1], t: now };
@@ -6502,6 +6624,8 @@ function endTouch(touch, now, cancelled) {
   if (!st) return;
   delete touchStates[touch.identifier];
   if (holdEnd(st)) return;
+  st.cancelled = cancelled;
+  if (st.hpalm) { requestRender(); return; }
   /* the other finger went without making a gesture: show the line again */
   if (st.kind === 'probe' && st.state === 'palm') releaseHeldInk();
 
@@ -6641,7 +6765,7 @@ function shortMark(st, age) {
      suspect, which refuses it too - so one lost comma quietly took the
      rest of the line with it. */
   if (st.suspect && !isFlick(st, age)) return false;
-  if (settings.palmLevel === PALM_OFF || settings.palmLevel === PALM_STRICT) return false;
+  if (inkFirst() || settings.palmLevel === PALM_STRICT) return false;
   if (age >= SC.SHORT_MS || st.path.length < 4) return false;
   if (st.net < SC.SHORT_NET || st.net > SC.SHORT_MAX_NET) return false;
   if (st.coh < SC.SHORT_COH) return false;
@@ -6679,6 +6803,7 @@ function gestureMembers() {
 }
 
 function engageGesture(ids, now, pairDist, kind, bothMoving, fromD) {
+  handZone = null;     /* the page moves: the line on screen is somewhere else now */
   var c = gestureCentroid(true);
   if (!c) return;
   var i, o;
@@ -6731,7 +6856,8 @@ function nonInkProbes() {
        never run at all. That is what forced the sledgehammer below it -
        "two contacts exist, therefore zoom" - which cancelled 19 strokes in
        a pen-and-palm recording for 2 gestures the user actually made. */
-    if (o.state === 'ink' && settings.palmLevel !== PALM_OFF) continue;
+    if (o.state === 'ink' && !inkFirst()) continue;
+    if (o.hpalm) continue;              /* Auto's palm is never half of a gesture */
     out.push(o);
   }
   return out;
@@ -6761,7 +6887,7 @@ function discardAllActiveInk(now) {
  * from the point it was recognised - that lag is the other half of it
  * feeling slow. */
 function tryGlovePan(now) {
-  if (settings.palmLevel !== PALM_OFF) return false;
+  if (!inkFirst()) return false;
   var p = nonInkProbes();
   if (p.length !== 2) return false;
   var a = p[0], b = p[1];
@@ -10199,7 +10325,10 @@ var pop = { on: false, x: 0, y: 0, open: '', off: 0, drag: null, hideT: null, ba
 function holdArm(id, now) {
   holdDisarm();
   var st = touchStates[id];
-  if (!st || !settings.hold || settings.reading || settings.palmLevel !== PALM_OFF || gesture) return;
+  if (!st || !settings.hold || settings.reading || gesture) return;
+  /* In Auto a resting palm is a still contact too, so only one on the line
+     being written may open it - the palm lands well below that line */
+  if (settings.palmLevel === PALM_AUTO ? !handOnLine(st, now) : settings.palmLevel !== PALM_OFF) return;
   if (st.kind !== 'probe' && st.kind !== 'erase' && st.kind !== 'lasso') return;
   hold = { id: id, t0: now, x: st.cx, y: st.cy, fired: false, timer: setTimeout(holdCheck, HOLD_MS + 20) };
 }
@@ -11364,10 +11493,11 @@ function setReading(on) {
 /* ---------- palm level ---------- */
 function applyPalmUI() {
   palmBtn.textContent = 'Palm: ' + PALM_NAMES[settings.palmLevel];
-  palmBtn.className = settings.palmLevel >= PALM_MAX ? 'maxed' : '';
+  palmBtn.className = settings.palmLevel === PALM_MAX || settings.palmLevel === PALM_STRICT ? 'maxed' : '';
 }
 function nextPalmLevel(l) {
-  if (l === PALM_OFF) return PALM_MAX;
+  if (l === PALM_OFF) return PALM_AUTO;
+  if (l === PALM_AUTO) return PALM_MAX;
   if (l === PALM_MAX) return PALM_STRICT;
   return PALM_OFF;
 }

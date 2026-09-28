@@ -978,6 +978,102 @@ test('Glove: a two-finger tap still undoes', function (done) {
   });
 });
 
+/* ---------- Auto: write with the hand resting, no glove ----------
+ * The recorded pattern: the palm lands 300-500ms before the nib and sits
+ * 230-400px below it, sliding along as the line is written. */
+function autoLine(app, id, x, y, n) {
+  app.down(id, x, y);
+  for (var i = 1; i <= (n || 12); i++) { app.tick(16); app.moveTo(id, x + i * 8, y + (i % 4)); }
+  app.tick(16); app.up(id);
+}
+
+test('Auto: palm lands first and slides, pen lands above - only the pen writes', function (done) {
+  var app = freshAtLevel(4), i;
+  app.down(1, 640, 600);
+  for (i = 1; i <= 20; i++) { app.tick(16); app.moveTo(1, 640 + i * 3, 600 + i); }
+  app.down(2, 300, 330);
+  for (i = 1; i <= 25; i++) {
+    app.tick(16);
+    app.moveTo(2, 300 + i * 8, 330 + (i % 5));
+    app.moveTo(1, 700 + i * 2, 620 + i);
+  }
+  app.tick(16); app.up(2); app.tick(40); app.up(1);
+  after(300, function () {
+    app.flushFrames();
+    var s = app.strokes();
+    check('Auto: one stroke, the pen\'s', s.length === 1 && s[0].pts[0][1] < 400,
+          s.length + ' strokes' + (s[0] ? ', first at y ' + Math.round(s[0].pts[0][1]) : ''));
+    check('Auto: ...and the page did not zoom', Math.abs(app.geom().zoom - 1) < 0.01, 'zoom ' + app.geom().zoom);
+    done();
+  });
+});
+
+test('Auto: the palm landing mid-stroke draws nothing, stops nothing, zooms nothing', function (done) {
+  var app = freshAtLevel(4), i;
+  app.down(1, 300, 330);
+  for (i = 1; i <= 10; i++) { app.tick(16); app.moveTo(1, 300 + i * 8, 330); }
+  app.down(2, 650, 600);
+  for (i = 11; i <= 30; i++) {
+    app.tick(16);
+    app.moveTo(1, 300 + i * 8, 330 + (i % 4));
+    app.moveTo(2, 650 + (i - 10) * 4, 600 + (i - 10));
+  }
+  app.up(1); app.tick(50); app.up(2);
+  after(300, function () {
+    app.flushFrames();
+    var s = app.strokes();
+    check('Auto: the pen\'s stroke lands whole', s.length === 1 && s[0].pts.length > 25,
+          s.length + ' strokes' + (s[0] ? ', ' + s[0].pts.length + ' points' : ''));
+    check('Auto: no zoom from pen and palm moving apart', Math.abs(app.geom().zoom - 1) < 0.01, 'zoom ' + app.geom().zoom);
+    done();
+  });
+});
+
+test('Auto: a palm brush below the line is dropped when the pen comes back above it', function (done) {
+  var app = freshAtLevel(4), i;
+  autoLine(app, 1, 200, 330);
+  app.tick(200);
+  app.down(2, 520, 620);
+  for (i = 1; i <= 8; i++) { app.tick(16); app.moveTo(2, 520 + i * 2, 620 + i); }
+  app.tick(16); app.up(2);
+  app.tick(150);
+  autoLine(app, 3, 320, 336);
+  after(300, function () {
+    app.flushFrames();
+    var low = app.strokes().filter(function (s) { return s.pts[0][1] > 450; }).length;
+    check('Auto: the two pen strokes stay, the brush does not',
+          app.strokes().length === 2 && low === 0, app.strokes().length + ' strokes, ' + low + ' low');
+    done();
+  });
+});
+
+test('Auto: a stroke written far below still lands once no pen comes above it', function (done) {
+  var app = freshAtLevel(4);
+  autoLine(app, 1, 200, 330);
+  app.tick(300);
+  autoLine(app, 2, 200, 640, 20);
+  app.tick(500);                 /* past the grace, on the app's clock */
+  after(520, function () {      /* ...and the device's timer */
+    app.flushFrames();
+    check('Auto: both strokes are on the page', app.strokes().length === 2, app.strokes().length + ' strokes');
+    done();
+  });
+});
+
+test('Auto: two fingers landing together still scroll', function (done) {
+  var app = freshAtLevel(4), i;
+  app.down(1, 400, 520); app.tick(20); app.down(2, 520, 522);
+  for (i = 1; i <= 20; i++) { app.tick(16); app.moveTo(1, 400, 520 - i * 14); app.moveTo(2, 520, 522 - i * 14); app.flushFrames(); }
+  app.tick(16); app.up(1); app.up(2);
+  after(300, function () {
+    app.flushFrames();
+    check('Auto: the page scrolled and nothing was drawn',
+          app.geom().scrollY > 100 && app.strokes().length === 0,
+          'scrollY ' + Math.round(app.geom().scrollY) + ', ' + app.strokes().length + ' strokes');
+    done();
+  });
+});
+
 (function run(i) {
   if (i >= tests.length) {
     console.log('\n' + pass + ' passed, ' + fail + ' failed');
