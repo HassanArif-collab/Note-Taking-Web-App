@@ -1114,6 +1114,24 @@ test('Auto: a real two-finger tap after a pause still undoes', function (done) {
   });
 });
 
+/* Auto is numbered after Max, and Max's "level >= Max" rules - a stroke
+   that ends by dwelling is a palm, a fast one is a hand - silently ate
+   pen strokes in Auto: recorded, three strokes of a written name vanished */
+test('Auto: a stroke that ends by resting still is kept whole', function (done) {
+  var app = freshAtLevel(4), i;
+  app.down(1, 300, 330);
+  for (i = 1; i <= 15; i++) { app.tick(16); app.moveTo(1, 300 + i * 6, 330 + (i % 3)); }
+  for (i = 0; i < 50; i++) { app.tick(16); app.moveTo(1, 390, 331); }     /* 800ms still */
+  app.up(1);
+  after(300, function () {
+    app.flushFrames();
+    var s = app.strokes();
+    check('Auto: the dwelling stroke is on the page', s.length === 1 && s[0].pts.length > 10,
+          s.length + ' strokes' + (s[0] ? ', ' + s[0].pts.length + ' points' : ''));
+    done();
+  });
+});
+
 test('Auto: two fingers landing together still scroll', function (done) {
   var app = freshAtLevel(4), i;
   app.down(1, 400, 520); app.tick(20); app.down(2, 520, 522);
