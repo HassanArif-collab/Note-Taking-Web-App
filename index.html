@@ -6032,10 +6032,15 @@ function toolTwoFinger(touch, now) {
  *    a stroke rather than a tap or a long slide).
  * Everything else is Glove mode: ink from the first sample, no waiting. */
 var HAND_GAP = 120;        /* the pen sits at least this far above the palm (recorded 230-400) */
-var HAND_ZONE_M = 170;     /* further below the last stroke than this is where the hand lands
-                              (the palm sits 230-400px below the nib; three lines down is 150) */
+var HAND_PROOF = 200;      /* this far above the hand, and writing, a touch is surely the pen -
+                              one hand's own points were never recorded further apart than
+                              this more than once in a while */
+var HAND_ZONE_M = 110;     /* further below the last stroke than this is where the hand lands:
+                              recorded palms landed 100-400px below it, and only 1.9% of pen
+                              strokes start that far down (they show a moment late, not lost) */
 var HAND_ZONE_T = 60000;   /* ...for this long after the stroke (the page scrolling forgets it) */
-var HAND_REVEAL = 800;     /* a hidden stroke still going this long with no pen above it is the pen */
+var HAND_REVEAL = 1500;    /* a hidden stroke still going this long with no pen above it is the pen
+                              (recorded: the hand can rest alone 1.7s before the nib lands) */
 var HAND_BUSY = 1000;      /* this soon after a stroke you are mid-writing */
 var HAND_SPOT_R = 120;     /* the hand is this big around a touch the iPad called a palm... */
 var HAND_SPOT_T = 1500;    /* ...for this long */
@@ -6048,26 +6053,28 @@ var handPend = [];         /* ...unless the pen lands above it first: those stro
 
 function handBegin(st, now) {
   var k, o, lower = [];
-  /* two fingers landing together at about the same height are a scroll or
-     a pinch, and Glove mode's gesture rules already handle those */
-  for (k in touchStates) {
-    if (!touchStates.hasOwnProperty(k)) continue;
-    o = touchStates[k];
-    if (o.kind === 'probe' && !o.hpalm && !o.wait && now - o.t0 <= SC.GPAN_LAND &&
-        Math.abs(st.cy - o.cy) < HAND_GAP && !handMidLine(st, o, now)) {
-      st.state = 'palm';
-      holdYoungInk(now);
-      return;
-    }
-  }
   for (k in touchStates) {
     if (!touchStates.hasOwnProperty(k)) continue;
     o = touchStates[k];
     if (o.kind !== 'probe') continue;
-    if (st.cy > o.cy - HAND_GAP) { handPalm(st, now); return; }
-    lower.push(o);
+    if (st.cy <= o.cy - HAND_GAP) { lower.push(o); continue; }    /* that one is well below this */
+    /* below a touch, or level with the hand, or level with anything while
+       mid-writing below the line: the hand */
+    if (st.cy >= o.cy + HAND_GAP || o.hpalm || handMidLine(st, o, now)) {
+      if (o.cy <= st.cy - HAND_PROOF) o.penProof = true;
+      handPalm(st, now);
+      return;
+    }
+    /* level with a touch that is not the hand: a second finger - a scroll,
+       a pinch or a two-finger tap - and Glove mode's rules decide those */
+    st.state = 'palm';
+    holdYoungInk(now);
+    return;
   }
-  for (k = 0; k < lower.length; k++) handPalm(lower[k], now);
+  for (k = 0; k < lower.length; k++) {
+    if (lower[k].cy >= st.cy + HAND_PROOF) st.penProof = true;
+    handPalm(lower[k], now);
+  }
   if (handSpot(st.cx, st.cy, now)) { handPalm(st, now); return; }
   handPendCheck(st.cy, now);
   handRetro(st.cy, now);
@@ -6123,7 +6130,8 @@ function handMidLine(a, b, now) {
    and it cancels the ones it takes for a palm: in every pen-only session
    recorded it cancelled none at all, in the palm drills one touch in four.
    So a cancelled touch is the hand - its line goes - and for a moment so is
-   anything else around that spot. */
+   anything else around that spot. Unless it was well above a touch that is the
+   hand: with a palm down the iPad cancels the pen now and then as well. */
 function handCancel(st, now) {
   var seen = inkNow[st.id] && !inkNow[st.id].held, k, o;
   if (inkNow[st.id]) { delete inkNow[st.id]; requestRender(); }
@@ -6697,7 +6705,8 @@ function endTouch(touch, now, cancelled) {
   st.cancelled = cancelled;
   if (settings.palmLevel === PALM_AUTO && now - st.t0 < 20) handVetoTaps();
   if (st.hpalm) { handVetoTaps(); requestRender(); return; }
-  if (cancelled && settings.palmLevel === PALM_AUTO && st.kind === 'probe' && st.state === 'ink') {
+  if (cancelled && settings.palmLevel === PALM_AUTO && st.kind === 'probe' && st.state === 'ink' &&
+      !(st.penProof && st.pathLen > 40 && now - st.t0 > 150)) {
     handVetoTaps();
     handCancel(st, now);
     return;
