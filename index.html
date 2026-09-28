@@ -6034,8 +6034,14 @@ function toolTwoFinger(touch, now) {
 var HAND_GAP = 120;        /* the pen sits at least this far above the palm (recorded 230-400) */
 var HAND_ZONE_M = 170;     /* further below the last stroke than this is where the hand lands
                               (the palm sits 230-400px below the nib; three lines down is 150) */
-var HAND_ZONE_T = 8000;    /* ...for this long after the stroke */
-var HAND_REVEAL = 700;     /* a hidden stroke still going this long with no pen above it is the pen */
+var HAND_ZONE_T = 60000;   /* ...for this long after the stroke (the page scrolling forgets it) */
+var HAND_REVEAL = 800;     /* a hidden stroke still going this long with no pen above it is the pen */
+var HAND_BUSY = 1000;      /* this soon after a stroke you are mid-writing */
+var HAND_SPOT_R = 120;     /* the hand is this big around a touch the iPad called a palm... */
+var HAND_SPOT_T = 1500;    /* ...for this long */
+var handSpots = [];        /* where the iPad cancelled a touch, and when */
+var HAND_RETRO = 1200;     /* a stroke nothing vouched for, finished this recently... */
+var handRecent = [];       /* ...is taken back if the pen then lands well above it */
 var handZone = null;       /* the bottom of the last stroke on screen, and when */
 var HAND_GRACE = 450;      /* a stroke far below the writing is shown this much later... */
 var handPend = [];         /* ...unless the pen lands above it first: those strokes */
@@ -6047,8 +6053,8 @@ function handBegin(st, now) {
   for (k in touchStates) {
     if (!touchStates.hasOwnProperty(k)) continue;
     o = touchStates[k];
-    if (o.kind === 'probe' && !o.hpalm && now - o.t0 <= SC.GPAN_LAND &&
-        Math.abs(st.cy - o.cy) < HAND_GAP) {
+    if (o.kind === 'probe' && !o.hpalm && !o.wait && now - o.t0 <= SC.GPAN_LAND &&
+        Math.abs(st.cy - o.cy) < HAND_GAP && !handMidLine(st, o, now)) {
       st.state = 'palm';
       holdYoungInk(now);
       return;
@@ -6062,9 +6068,13 @@ function handBegin(st, now) {
     lower.push(o);
   }
   for (k = 0; k < lower.length; k++) handPalm(lower[k], now);
+  if (handSpot(st.cx, st.cy, now)) { handPalm(st, now); return; }
   handPendCheck(st.cy, now);
+  handRetro(st.cy, now);
   st.state = 'ink';
   st.wait = !!(handZone && now - handZone.t < HAND_ZONE_T && st.cy > handZone.y1 + HAND_ZONE_M);
+  st.onLine = !!(handZone && now - handZone.t < HAND_ZONE_T && Math.abs(st.cy - handZone.y1) < HAND_ZONE_M);
+  st.unsure = !(handZone && now - handZone.t < HAND_ZONE_T) || st.wait;
 }
 function handPalm(o, now) {
   if (o.hpalm) return;
@@ -6100,6 +6110,63 @@ function handWaitDrop(st, now) {
   var drop = st.cancelled || st.pathLen < SC.TAP_PATH;
   if (drop) traceVerdict('palm-low', st.id, now);
   return drop;
+}
+/* Two touches landing together while you are mid-writing, below the line,
+   are the hand - its heel and its side. Recorded finger pairs and palm pairs
+   land just as close together in time and space, so only the moment tells
+   them apart: a scroll comes after a pause, the hand comes with the pen. */
+function handMidLine(a, b, now) {
+  if (!handZone || now - handZone.t > HAND_BUSY) return false;
+  return a.cy > handZone.y1 + HAND_ZONE_M || b.cy > handZone.y1 + HAND_ZONE_M;
+}
+/* The iPad knows how big a touch is even though it does not tell the page,
+   and it cancels the ones it takes for a palm: in every pen-only session
+   recorded it cancelled none at all, in the palm drills one touch in four.
+   So a cancelled touch is the hand - its line goes - and for a moment so is
+   anything else around that spot. */
+function handCancel(st, now) {
+  var seen = inkNow[st.id] && !inkNow[st.id].held, k, o;
+  if (inkNow[st.id]) { delete inkNow[st.id]; requestRender(); }
+  traceVerdict(seen ? 'palm-shown' : 'palm', st.id, now);
+  handSpots.push({ x: st.cx, y: st.cy, t: now });
+  if (handSpots.length > 8) handSpots.shift();
+  for (k in touchStates) {
+    if (!touchStates.hasOwnProperty(k)) continue;
+    o = touchStates[k];
+    if (o.kind === 'probe' && !o.onLine && dist(o.cx, o.cy, st.cx, st.cy) < HAND_SPOT_R) handPalm(o, now);
+  }
+}
+/* The hand often rests, draws a line and lifts again just before the pen
+   comes down - recorded: a palm lifting 0.8s before the nib landed 250px
+   above it. With nothing written yet there was no line to measure that
+   touch against, so it was drawn; the pen landing above is the evidence
+   that arrives afterwards, and the line goes, undo entry and all. */
+function handRetro(penY, now) {
+  var keep = [], i, r, n = activeNote(), u;
+  for (i = 0; i < handRecent.length; i++) {
+    r = handRecent[i];
+    if (now - r.t > HAND_RETRO) continue;
+    if (penY <= r.y - HAND_GAP && n && n.strokes.indexOf(r.s) >= 0) {
+      removeStroke(n, r.s);
+      for (u = undoStack.length - 1; u >= 0; u--) {
+        if (undoStack[u].t === 'add' && undoStack[u].s === r.s) { undoStack.splice(u, 1); updateUndoButtons(); break; }
+      }
+      traceVerdict('palm-retro', -2, now);
+      saveSoon();
+    } else keep.push(r);
+  }
+  handRecent = keep;
+}
+/* a tap made partly of palm is not two fingers asking for undo */
+function handVetoTaps() {
+  if (twoTap) twoTap.palm = true;
+  if (threeTap) threeTap.palm = true;
+}
+function handSpot(x, y, now) {
+  for (var i = 0; i < handSpots.length; i++) {
+    if (now - handSpots[i].t < HAND_SPOT_T && dist(handSpots[i].x, handSpots[i].y, x, y) < HAND_SPOT_R) return true;
+  }
+  return false;
 }
 function handOnLine(st, now) {
   return st.state === 'ink' && !st.wait && !!handZone && now - handZone.t < HAND_ZONE_T &&
@@ -6512,7 +6579,7 @@ function finalizeInk(st, now) {
      those dots instead of the stroke the user wanted gone. dotIsCredible
      refuses a dot for the same reason on every other level; this is the
      same rule reaching the path Glove mode actually takes. */
-  if ((twoTap || threeTap) && inkFirst()) { requestRender(); return; }
+  if ((twoTap || threeTap) && inkFirst()) { traceVerdict('tap-gesture', st.id, now); requestRender(); return; }
   if (st.wait && handWaitDrop(st, now)) { requestRender(); return; }
 
   /* A stroke that never went anywhere is a dot, and a one-point stroke
@@ -6539,7 +6606,10 @@ function commitInk(st, s, now) {
     tryReshape(s);
   }
   n.strokes.push(s);
-  if (settings.palmLevel === PALM_AUTO) handZone = { y1: st.maxCy || st.cy, t: now };
+  if (settings.palmLevel === PALM_AUTO) {
+    handZone = { y1: st.maxCy || st.cy, t: now };
+    if (st.unsure) { handRecent.push({ s: s, y: st.maxCy || st.cy, t: now }); if (handRecent.length > 6) handRecent.shift(); }
+  }
   pushUndo({ t: 'add', s: s });
   var lp = s.pts[s.pts.length - 1];
   lastInkPt = { x: lp[0], y: lp[1], t: now };
@@ -6625,7 +6695,13 @@ function endTouch(touch, now, cancelled) {
   delete touchStates[touch.identifier];
   if (holdEnd(st)) return;
   st.cancelled = cancelled;
-  if (st.hpalm) { requestRender(); return; }
+  if (settings.palmLevel === PALM_AUTO && now - st.t0 < 20) handVetoTaps();
+  if (st.hpalm) { handVetoTaps(); requestRender(); return; }
+  if (cancelled && settings.palmLevel === PALM_AUTO && st.kind === 'probe' && st.state === 'ink') {
+    handVetoTaps();
+    handCancel(st, now);
+    return;
+  }
   /* the other finger went without making a gesture: show the line again */
   if (st.kind === 'probe' && st.state === 'palm') releaseHeldInk();
 
@@ -9591,7 +9667,7 @@ function onTouchEnd(e) {
        runs from there: a tap this long is three deliberate fingers, a
        gesture that took longer is a hand settling */
     if (!cancelled && now - threeTap.t < TWOTAP_MS && threeTap.moved <= TWOTAP_PX &&
-        redoStack.length) {
+        redoStack.length && !threeTap.palm) {
       traceVerdict('three-finger-redo', -1, now);
       doRedo();
     }
@@ -9599,7 +9675,7 @@ function onTouchEnd(e) {
     twoTap = null;
   } else if (twoTap && left === 0) {
     if (!cancelled && now - twoTap.t < TWOTAP_MS && twoTap.moved <= TWOTAP_PX &&
-        undoStack.length) {
+        undoStack.length && !twoTap.palm) {
       traceVerdict('two-finger-undo', -1, now);
       doUndo();
     }

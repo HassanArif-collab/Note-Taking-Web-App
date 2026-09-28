@@ -1060,6 +1060,60 @@ test('Auto: a stroke written far below still lands once no pen comes above it', 
   });
 });
 
+test('Auto: two palm points landing together below the line are not an undo', function (done) {
+  var app = freshAtLevel(4);
+  autoLine(app, 1, 200, 330);
+  app.tick(200);
+  app.down(2, 450, 640); app.tick(8); app.down(3, 560, 700);
+  app.tick(60); app.up(2); app.up(3);
+  after(300, function () {
+    app.flushFrames();
+    check('Auto: the stroke is still there', app.strokes().length === 1, app.strokes().length + ' strokes');
+    done();
+  });
+});
+
+test('Auto: a touch the iPad cancels leaves nothing', function (done) {
+  var app = freshAtLevel(4), i;
+  app.down(1, 300, 330);
+  for (i = 1; i <= 15; i++) { app.tick(16); app.moveTo(1, 300 + i * 6, 330 + i); }
+  app.tick(16); app.up(1, true);
+  after(300, function () {
+    app.flushFrames();
+    check('Auto: no mark from the cancelled touch', app.strokes().length === 0, app.strokes().length + ' strokes');
+    done();
+  });
+});
+
+test('Auto: a palm line drawn just before the pen lands above it is taken back', function (done) {
+  var app = freshAtLevel(4);
+  autoLine(app, 1, 420, 640, 20);          /* the hand, alone, nothing written yet */
+  app.tick(700);
+  autoLine(app, 2, 300, 360);               /* the pen, 280px above, 0.7s later */
+  after(300, function () {
+    app.flushFrames();
+    var s = app.strokes();
+    check('Auto: only the pen\'s stroke is left', s.length === 1 && s[0].pts[0][1] < 400,
+          s.length + ' strokes' + (s[0] ? ', first at y ' + Math.round(s[0].pts[0][1]) : ''));
+    app.undo();
+    check('Auto: ...and undo takes the pen\'s stroke, not the palm\'s ghost', app.strokes().length === 0,
+          app.strokes().length + ' strokes after undo');
+    done();
+  });
+});
+
+test('Auto: a real two-finger tap after a pause still undoes', function (done) {
+  var app = freshAtLevel(4);
+  autoLine(app, 1, 200, 330);
+  app.tick(1500);
+  app.twoFingerTap(300, 500, 420, 505);
+  after(300, function () {
+    app.flushFrames();
+    check('Auto: two-finger tap undid the stroke', app.strokes().length === 0, app.strokes().length + ' strokes');
+    done();
+  });
+});
+
 test('Auto: two fingers landing together still scroll', function (done) {
   var app = freshAtLevel(4), i;
   app.down(1, 400, 520); app.tick(20); app.down(2, 520, 522);
