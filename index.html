@@ -358,10 +358,10 @@ body.reading #readChip { display: block; }
 #emptyHint .eh-c { font-size: 14px; margin-top: 6px; max-width: 300px; line-height: 1.45; }
 
 /* the home's popover menus: sort, more, a note's and a folder's actions */
-#hmScrim { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 19; display: none; }
+#hmScrim { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 60; display: none; }
 #hmScrim.on { display: block; }
 #hmPop {
-  position: absolute; z-index: 20; min-width: 232px; max-width: 300px; padding: 6px 0;
+  position: absolute; z-index: 61; min-width: 232px; max-width: 300px; padding: 6px 0;
   background: #FFFFFF; border-radius: 18px;
   box-shadow: 0 14px 44px rgba(0,0,0,0.17), 0 0 0 1px rgba(0,0,0,0.04);
   opacity: 0; visibility: hidden;
@@ -510,6 +510,158 @@ body.dark .hp-sep { background: #2F2F33; }
 body.dark #dlgMsg, body.dark #dlgBtns button { color: #B4B8BE; }
 body.dark #dlgInput { background: #1B1B1D; color: #FFFFFF; }
 body.dark #dlgInput:focus { background: #111113; }
+
+/* ---------- PDF: the page chooser ---------- */
+#pdfSheet {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 66;
+  background: rgba(0,0,0,0); visibility: hidden;
+  -webkit-transition: background-color 0.22s, visibility 0s 0.22s;
+  transition: background-color 0.22s, visibility 0s 0.22s;
+}
+#pdfSheet.on {
+  background: rgba(0,0,0,0.4); visibility: visible;
+  -webkit-transition: background-color 0.22s; transition: background-color 0.22s;
+}
+#pdfBox {
+  position: absolute; top: 5%; bottom: 5%; left: 0; right: 0; margin: 0 auto;
+  width: 724px; max-width: 94%; background: #FFFFFF; border-radius: 26px;
+  box-shadow: 0 18px 56px rgba(0,0,0,0.26); overflow: hidden;
+  display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column;
+  opacity: 0; -webkit-transform: translateY(24px) scale(0.98); transform: translateY(24px) scale(0.98);
+  -webkit-transition: opacity 0.18s, -webkit-transform 0.2s cubic-bezier(0.3, 0, 0.8, 0.15);
+  transition: opacity 0.18s, transform 0.2s cubic-bezier(0.3, 0, 0.8, 0.15);
+}
+#pdfSheet.on #pdfBox {
+  opacity: 1; -webkit-transform: none; transform: none;
+  -webkit-transition: opacity 0.22s, -webkit-transform 0.34s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.22s, transform 0.34s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#pdfHead {
+  -webkit-flex: none; flex: none; display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center; padding: 20px 20px 12px 24px;
+}
+#pdfHeadT { -webkit-flex: 1; flex: 1; min-width: 0; }
+#pdfTitle { font-size: 20px; font-weight: 700; color: #16181A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#pdfSub { font-size: 13.5px; color: #7B858E; margin-top: 2px; }
+#pdfAll {
+  -webkit-flex: none; flex: none; height: 34px; padding: 0 16px; border-radius: 17px; margin-left: 12px;
+  background: #E1EDFF; color: #0381FE; font-size: 14px; font-weight: 600;
+}
+#pdfAll:active { background: #CFE2FF; }
+#pdfGrid {
+  -webkit-flex: 1; flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 6px 8px 8px 24px; display: -webkit-flex; display: flex;
+  -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-align-content: flex-start; align-content: flex-start;
+}
+.pdf-cell { position: relative; width: 132px; margin: 0 14px 16px 0; padding: 0; text-align: center; }
+.pdf-th {
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  -webkit-justify-content: center; justify-content: center;
+  width: 132px; height: 170px; border-radius: 10px; background: #F1F3F5; overflow: hidden;
+  box-shadow: 0 0 0 1px #E3E7EB;
+  -webkit-transition: box-shadow 0.15s, -webkit-transform 0.15s; transition: box-shadow 0.15s, transform 0.15s;
+}
+.pdf-th canvas { display: block; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+.pdf-cell:active .pdf-th { -webkit-transform: scale(0.96); transform: scale(0.96); }
+.pdf-cell.on .pdf-th { box-shadow: 0 0 0 3px #0381FE; background: #EAF3FF; }
+.pdf-n { display: block; font-size: 12.5px; color: #7B858E; margin-top: 6px; }
+.pdf-cell.on .pdf-n { color: #0381FE; font-weight: 600; }
+.pdf-ck {
+  position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%;
+  -webkit-box-sizing: border-box; box-sizing: border-box; border: 2px solid #FFFFFF;
+  background: rgba(0,0,0,0.2); box-shadow: 0 1px 4px rgba(0,0,0,0.25); color: #FFFFFF;
+}
+.pdf-ck svg { display: block; margin: 3px auto 0 auto; opacity: 0; }
+.pdf-cell.on .pdf-ck { background: #0381FE; }
+.pdf-cell.on .pdf-ck svg { opacity: 1; }
+#pdfWhere {
+  -webkit-flex: none; flex: none; display: none; margin: 4px 24px 6px 24px; padding: 4px;
+  border-radius: 14px; background: #EEF0F3;
+}
+#pdfWhere.on { display: -webkit-flex; display: flex; }
+#pdfWhere button {
+  -webkit-flex: 1; flex: 1; height: 38px; border-radius: 11px;
+  font-size: 14px; font-weight: 600; color: #4A5158;
+  -webkit-transition: background-color 0.15s, color 0.15s; transition: background-color 0.15s, color 0.15s;
+}
+#pdfWhere button.on { background: #FFFFFF; color: #0381FE; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+#pdfFoot {
+  -webkit-flex: none; flex: none; display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center;
+  padding: 12px 16px 16px 24px; border-top: 1px solid #EEF0F2;
+}
+#pdfSize { -webkit-flex: 1; flex: 1; font-size: 13px; color: #7B858E; }
+#pdfSize.bad { color: #D64545; font-weight: 600; }
+#pdfCancel { height: 44px; padding: 0 18px; border-radius: 22px; font-size: 15px; font-weight: 600; color: #4A5158; }
+#pdfCancel:active { background: #F1F3F5; }
+#pdfGo {
+  height: 44px; padding: 0 22px; border-radius: 22px; margin-left: 6px;
+  background: #0381FE; color: #FFFFFF; font-size: 15px; font-weight: 700;
+  box-shadow: 0 6px 16px rgba(3,129,254,0.26);
+}
+#pdfGo:active { background: #0270DB; }
+#pdfGo.dis { opacity: 0.45; box-shadow: none; }
+
+/* ---------- a document beside the note ---------- */
+@-webkit-keyframes spIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes spIn { from { opacity: 0; } to { opacity: 1; } }
+#splitPane {
+  position: absolute; display: none; z-index: 12; background: #E9ECEF;
+  -webkit-box-sizing: border-box; box-sizing: border-box;
+}
+#splitPane.on {
+  display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column;
+  -webkit-animation: spIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); animation: spIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#splitPane.at-right { border-left: 1px solid #D5DAE0; }
+#splitPane.at-left { border-right: 1px solid #D5DAE0; }
+#splitPane.at-bottom { border-top: 1px solid #D5DAE0; }
+#splitPane.at-top { border-bottom: 1px solid #D5DAE0; }
+#spBar {
+  -webkit-flex: none; flex: none; height: 44px; padding: 0 4px 0 14px;
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  background: #F7F8FA; border-bottom: 1px solid #E3E7EB;
+}
+#spName { -webkit-flex: 1; flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: #16181A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#spPage { font-size: 12.5px; color: #7B858E; margin: 0 8px; white-space: nowrap; }
+.sp-b { width: 38px; height: 38px; border-radius: 19px; color: #4A5158; }
+.sp-b:active { background: #E6E9ED; }
+.sp-b svg { display: block; margin: 0 auto; }
+#spZoom { width: auto; padding: 0 10px; font-size: 12.5px; font-weight: 700; }
+#spBody {
+  -webkit-flex: 1; flex: 1; min-height: 0; overflow-x: auto; overflow-y: scroll; -webkit-overflow-scrolling: touch;
+  padding: 12px; -webkit-box-sizing: border-box; box-sizing: border-box;
+}
+.sp-page { position: relative; margin: 0 auto 12px auto; background: #FFFFFF; box-shadow: 0 1px 4px rgba(0,0,0,0.14); }
+.sp-page canvas { display: block; position: relative; }
+.sp-page span { position: absolute; left: 0; right: 0; top: 45%; text-align: center; font-size: 13px; color: #B4BAC1; }
+.sp-img { display: block; margin: 0 auto; box-shadow: 0 1px 4px rgba(0,0,0,0.14); background: #FFFFFF; }
+#spGrip { position: absolute; z-index: 2; }
+#splitPane.at-right #spGrip { left: -13px; top: 0; bottom: 0; width: 26px; }
+#splitPane.at-left #spGrip { right: -13px; top: 0; bottom: 0; width: 26px; }
+#splitPane.at-bottom #spGrip { top: -13px; left: 0; right: 0; height: 26px; }
+#splitPane.at-top #spGrip { bottom: -13px; left: 0; right: 0; height: 26px; }
+#spGrip i {
+  position: absolute; left: 50%; top: 50%; border-radius: 3px; background: #9AA3AB;
+  box-shadow: 0 0 0 2px #FFFFFF, 0 1px 4px rgba(0,0,0,0.2);
+}
+#splitPane.at-right #spGrip i, #splitPane.at-left #spGrip i { width: 5px; height: 48px; margin: -24px 0 0 -2.5px; }
+#splitPane.at-bottom #spGrip i, #splitPane.at-top #spGrip i { width: 48px; height: 5px; margin: -2.5px 0 0 -24px; }
+#spGhost { position: absolute; display: none; z-index: 13; background: #0381FE; opacity: 0.7; pointer-events: none; }
+#spGhost.on { display: block; }
+body.dark #splitPane { background: #0B0B0C; border-color: #2A2A2E; }
+body.dark #spBar { background: #1B1B1D; border-bottom-color: #2A2A2E; }
+body.dark #spName { color: #FFFFFF; }
+body.dark .sp-b { color: #C4C7CC; }
+body.dark .sp-b:active { background: #2C2C30; }
+body.dark #pdfBox { background: #232326; }
+body.dark #pdfTitle { color: #FFFFFF; }
+body.dark .pdf-th { background: #1B1B1D; box-shadow: 0 0 0 1px #2F2F33; }
+body.dark #pdfWhere { background: #1B1B1D; }
+body.dark #pdfWhere button { color: #B4B8BE; }
+body.dark #pdfWhere button.on { background: #2C2C30; color: #4DA3FF; }
+body.dark #pdfFoot { border-top-color: #2F2F33; }
+body.dark #pdfCancel { color: #B4B8BE; }
 
 /* ---------- editor canvas ---------- */
 #drawView { background: #F1F2F4; overflow: hidden; }
@@ -1677,8 +1829,6 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
     <div id="emptyHint"></div>
   </div>
   <div id="hmRailScrim"></div>
-  <div id="hmScrim"></div>
-  <div id="hmPop"></div>
 </div>
 
 <!-- ============ DIALOG ============ -->
@@ -1690,6 +1840,25 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
     <div id="dlgColors"></div>
     <div id="dlgList"></div>
     <div id="dlgBtns"><button id="dlgCancel">Cancel</button><button id="dlgOk">OK</button></div>
+  </div>
+</div>
+
+<!-- ============ POPOVER MENUS (home and editor) ============ -->
+<div id="hmScrim"></div>
+<div id="hmPop"></div>
+
+<!-- ============ PDF: choose the pages to bring in ============ -->
+<input id="pdfInput" type="file" accept="application/pdf,.pdf" style="position:absolute;left:-9999px;width:1px;height:1px;">
+<input id="sideImgInput" type="file" accept="image/*" style="position:absolute;left:-9999px;width:1px;height:1px;">
+<div id="pdfSheet">
+  <div id="pdfBox">
+    <div id="pdfHead">
+      <div id="pdfHeadT"><div id="pdfTitle">Import PDF</div><div id="pdfSub"></div></div>
+      <button id="pdfAll">Select all</button>
+    </div>
+    <div id="pdfGrid"></div>
+    <div id="pdfWhere"><button id="pdfNew" class="on">As new pages</button><button id="pdfHere">On this page</button></div>
+    <div id="pdfFoot"><div id="pdfSize"></div><button id="pdfCancel">Cancel</button><button id="pdfGo">Import</button></div>
   </div>
 </div>
 
@@ -1877,6 +2046,19 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
     </div>
   </div>
 
+  <!-- a PDF or a picture beside the note -->
+  <div id="splitPane">
+    <div id="spBar">
+      <div id="spName"></div><div id="spPage"></div>
+      <button id="spZoom" class="sp-b" aria-label="Zoom">100%</button>
+      <button id="spPlace" class="sp-b" aria-label="Move the panel"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M13 4.5v15"/></svg></button>
+      <button id="spClose" class="sp-b" aria-label="Close the panel"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+    </div>
+    <div id="spBody"></div>
+    <div id="spGrip"><i></i></div>
+  </div>
+  <div id="spGhost"></div>
+
   <!-- scroll/zoom pill: outside canvasWrap so its tap is not eaten
        by the canvas touch handlers (tap = jump to page) -->
   <div id="scrollPill"></div>
@@ -1916,6 +2098,11 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
         <path d="M10.7 10.9 V4.9 a1.05 1.05 0 0 1 2.1 0 v5.6"/>
         <path d="M12.8 10.5 V6.1 a1.05 1.05 0 0 1 2.1 0 v5.2"/>
         <path d="M14.9 11.3 V7.9 a1.05 1.05 0 0 1 2.1 0 v5.9 c0 3.7 -2.3 6.4 -5.7 6.4 c-2.6 0 -4.1 -1.1 -5.2 -3.1 l-1.5 -2.7 c-0.5 -0.9 0.5 -1.8 1.4 -1.2 l2 1.5"/>
+      </svg>
+    </button>
+    <button id="insertBtn" class="tb-btn" aria-label="Insert a photo or a PDF">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="4" width="16" height="16" rx="4.2"/><path d="M12 8.4 v7.2 M8.4 12 h7.2"/>
       </svg>
     </button>
     <div class="tb-sep"></div>
@@ -2790,6 +2977,8 @@ var settings = {
   favTop: true,               /* favourites before the rest */
   homeList: false,            /* home shows one note to a row, not a grid */
   railHidden: false,          /* the folder rail folded away */
+  splitAt: 'right',           /* where a document beside the note sits */
+  splitFrac: 0.42,            /* ...and how much of the screen it takes */
   popDock: 0,                 /* pen pop-up docked: 0 no, 1 left edge, 2 right edge */
   popY: 0.5,                  /* ...and how far down that edge */
   zwMag: 3.2,                 /* zoom window: how much bigger you write than
@@ -3000,6 +3189,8 @@ function applyStoredSettings(set) {
     if (typeof data.set.favTop === 'boolean') settings.favTop = data.set.favTop;
     if (typeof data.set.homeKind === 'string') settings.homeKind = data.set.homeKind;
     if (typeof data.set.railHidden === 'boolean') settings.railHidden = data.set.railHidden;
+    if (typeof data.set.splitAt === 'string') settings.splitAt = data.set.splitAt;
+    if (typeof data.set.splitFrac === 'number') settings.splitFrac = lim(data.set.splitFrac, 0.25, 0.75);
     if (typeof data.set.homeList === 'boolean') settings.homeList = data.set.homeList;
     if (typeof data.set.popDock === 'number') settings.popDock = lim(Math.round(data.set.popDock), 0, 2);
     if (typeof data.set.popY === 'number') settings.popY = lim(data.set.popY, 0, 1);
@@ -3075,7 +3266,7 @@ function serializeNote(n) {
       rec.tw = s.tw || 100;
       rec.th = s.th || s.sz || 24;
     }
-    if (s.pen === PEN_IMG) { rec.src = s.src; rec.iw = s.iw; rec.ih = s.ih; }
+    if (s.pen === PEN_IMG) { rec.src = s.src; rec.iw = s.iw; rec.ih = s.ih; if (s.bg) rec.bg = 1; }
     out.push(rec);
   }
   return out;
@@ -4845,9 +5036,9 @@ function setStrip(on) {
   byId('stripTab').style.display = on ? 'none' : '';
   /* the paper slides aside rather than hiding under the strip, so the
      page you are reading is still on screen beside its own thumbnail */
-  canvasWrap.style.left = on ? '112px' : '';
   if (on) buildStrip();
-  resizeView();
+  placeCanvas();
+  if (split.on) splitBuild(0);
 }
 
 /* ---------- tidy writing ----------
@@ -5643,6 +5834,17 @@ function applyOp(op, reverse) {
     for (i = 0; i < op.moved.length; i++) shiftStroke(op.moved[i], pdx, pdy);
     if (reverse) { for (i = 0; i < op.list.length; i++) addStroke(n, op.list[i]); }
     else { for (i = 0; i < op.list.length; i++) removeStroke(n, op.list[i]); }
+    invalidateAll();
+    recomputeDoc();
+    requestRender();
+  } else if (op.t === 'pdf-in') {
+    /* PDF pages put in: the pages after them slid on and the pictures
+       laid down - one undo takes both away */
+    var qdx = reverse ? -(op.dx || 0) : (op.dx || 0);
+    var qdy = reverse ? -(op.dy || 0) : (op.dy || 0);
+    for (i = 0; i < op.moved.length; i++) shiftStroke(op.moved[i], qdx, qdy);
+    if (reverse) { for (i = 0; i < op.list.length; i++) removeStroke(n, op.list[i]); }
+    else { for (i = 0; i < op.list.length; i++) addStroke(n, op.list[i]); }
     invalidateAll();
     recomputeDoc();
     requestRender();
@@ -7954,6 +8156,7 @@ function eraseAt(x, y) {
   var hits = [], i, j;
   for (i = 0; i < st.length; i++) {
     var s = st[i];
+    if (s.bg) continue;          /* a PDF page under the ink is the paper, not a mark */
     var bb = strokeBBox(s);
     if (x < bb.x0 - r || x > bb.x1 + r || y < bb.y0 - r || y > bb.y1 + r) continue;
     var hit = false;
@@ -8175,6 +8378,7 @@ function ptInPoly(x, y, poly) {
 }
 
 function strokeInLasso(s, poly) {
+  if (s.bg) return false;        /* nor can a lasso carry the page off */
   if (s.pen === PEN_TEXT || s.pen === PEN_IMG) {
     var bb = strokeBBox(s);
     return ptInPoly((bb.x0 + bb.x1) / 2, (bb.y0 + bb.y1) / 2, poly);
@@ -10084,6 +10288,17 @@ window.__mnNb = {
   move: moveNotebook, rename: renameNotebook, del: deleteNotebook,
   actions: folderMenu, close: hpClose
 };
+/* PDFs without a file picker: a test hands over a document object */
+window.__mnPdf = {
+  sheet: pdfSheetOpen, side: splitOpenPdf, sideImg: splitOpenImg, close: splitClose,
+  place: function (at) { settings.splitAt = at; placeCanvas(); splitBuild(0); },
+  split: function () {
+    return { on: split.on, at: splitAt(), kind: split.kind, pages: split.pages.length,
+             pane: byId('splitPane').className, left: canvasWrap.style.left, right: canvasWrap.style.right,
+             top: canvasWrap.style.top, bottom: canvasWrap.style.bottom };
+  },
+  open: function () { return !!pdfS; }
+};
 window.__mnGeom = function () {
   var pw = [], pp;
   for (pp = 0; pp < pageCount(); pp++) pw.push(pageRight(pp) - pageLeft(pp));
@@ -10352,7 +10567,10 @@ window.addEventListener('pagehide', doSaveNow);
    not the part that never arrives */
 window.addEventListener('pagehide', function () { liveTick(); });
 window.addEventListener('beforeunload', doSaveNow);
-window.addEventListener('resize', function () { resizeView(); if (homeOn()) layoutHome(); });
+window.addEventListener('resize', function () {
+  if (split.on) { placeCanvas(); splitBuild(0); } else resizeView();
+  if (homeOn()) layoutHome();
+});
 window.addEventListener('orientationchange', function () { setTimeout(resizeView, 350); });
 
 /* ============================================================
@@ -10421,7 +10639,11 @@ var IC = {
   select: svgIc('<circle cx="12" cy="12" r="8"/><path d="M8.5 12.2l2.4 2.4 4.8-4.8"/>'),
   newFolder: svgIc(ICP.folder + '<path d="M12 11v5M9.5 13.5h5"/>'),
   gear: svgIc('<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4L6 18M18 18l-1.6-1.6M7.6 7.6L6 6"/>'),
-  pdf: svgIc('<path d="M7 3.5h7l4.5 4.5v11c0 .8-.7 1.5-1.5 1.5H7c-.8 0-1.5-.7-1.5-1.5v-14c0-.8.7-1.5 1.5-1.5z"/><path d="M13.5 3.5V8.5h5"/><path d="M8.5 13.5h7M8.5 16.5h5"/>')
+  pdf: svgIc('<path d="M7 3.5h7l4.5 4.5v11c0 .8-.7 1.5-1.5 1.5H7c-.8 0-1.5-.7-1.5-1.5v-14c0-.8.7-1.5 1.5-1.5z"/><path d="M13.5 3.5V8.5h5"/><path d="M8.5 13.5h7M8.5 16.5h5"/>'),
+  photo: svgIc('<rect x="3.5" y="5" width="17" height="14" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M4 17l4.8-4.6 3.6 3.2 2.8-2.4 4.8 4.3"/>'),
+  side: svgIc('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M13 4.5v15"/><path d="M15.5 8.5h3M15.5 11h3M15.5 13.5h2"/>'),
+  sideImg: svgIc('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M13 4.5v15"/><path d="M13.5 15l2.4-2.3 1.8 1.6 2.3-2"/>'),
+  x: svgIc('<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>')
 };
 
 function homeOn() { return homeView.className.indexOf('on') >= 0; }
@@ -11154,7 +11376,7 @@ function hpOpen(anchor, rows, head) {
       hmPop.appendChild(b);
     })(rows[i]);
   }
-  var W = homeView.offsetWidth || 1024, H = homeView.offsetHeight || 768;
+  var W = window.innerWidth || document.body.offsetWidth || 1024, H = window.innerHeight || document.body.offsetHeight || 768;
   var ar = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect()
          : { left: W / 2, right: W / 2, top: H / 2, bottom: H / 2 };
   var pw = hmPop.offsetWidth || 240, ph = hmPop.offsetHeight || 220;
@@ -11293,15 +11515,529 @@ function noteThumb(n, w, h) {
   c.fillStyle = P.bg;
   c.fillRect(0, 0, pw, PAGE_H);
   drawTplPattern(c, tplFor(n, 0), P, 0, 0, pw, MARGIN_X);
-  var i, s, bb, im;
-  for (i = 0; i < n.strokes.length; i++) {
-    s = n.strokes[i];
+  var i, s, bb, im, list = n.strokes.slice();
+  list.sort(function (a, b) { return a.ord - b.ord; });   /* a PDF page under its ink */
+  for (i = 0; i < list.length; i++) {
+    s = list[i];
     bb = strokeBBox(s);
     if (bb.y0 > ph + 8 || bb.y1 < -8 || bb.x1 < -8 || bb.x0 > pw + 8) continue;
     if (s.pen === PEN_IMG) { im = imageFor(s); if (!im || !im.width) thumbWaitImg = true; }
     renderStrokeFull(c, s);
   }
   return cv;
+}
+
+/* ============================================================
+ * PDF AND PICTURES: pages into a note, or a document beside it
+ *
+ * A PDF's pages come in as pictures laid UNDER the ink - one PDF page to
+ * one page of the note, fitted to it - so the pen, the highlighter and the
+ * lasso all work on top of them, while nothing the pen does (the eraser,
+ * a lasso, a scribble) can take the page itself away by accident. From the
+ * home they make a new note; in a note they go after the page you are on,
+ * or onto it.
+ *
+ * Or a PDF - or a picture - opens BESIDE the note, in a panel on whichever
+ * side suits, to read while writing: Samsung's split view. That one is
+ * drawn live and kept only while it is open, because a PDF is far bigger
+ * than the 5MB the iPad lets a web page keep.
+ *
+ * The reader is pdf.js 2.0.943, the last build written in the JavaScript
+ * Safari 9 runs. It is a megabyte, so it is fetched from lib/ the first
+ * time a PDF is opened rather than slowing every start.
+ * ============================================================ */
+var PDF_LIB = 'lib/pdf.min.js', PDF_WORKER = 'lib/pdf.worker.min.js';
+/* image px per page px for an imported page. 2 would be pin sharp on the
+   iPad's 2x glass, and would cost a quarter of all the storage there is
+   for every three pages; 1.3 reads cleanly at the zoom you write at.
+   ponytail: pages live in localStorage; IndexedDB would lift the 5MB cap */
+var PDF_RES = 1.3, PDF_Q = 0.72;
+var BG_ORD = -1000000;          /* below every stroke that will ever be drawn */
+var pdfLibState = 0, pdfLibWait = [];
+
+function pdfLibReady() {
+  var L = window.pdfjsLib;
+  if (L && L.GlobalWorkerOptions && !L.GlobalWorkerOptions.workerSrc) L.GlobalWorkerOptions.workerSrc = PDF_WORKER;
+}
+function pdfLib(cb) {
+  if (window.pdfjsLib) { pdfLibReady(); cb(window.pdfjsLib); return; }
+  pdfLibWait.push(cb);
+  if (pdfLibState === 1) return;
+  pdfLibState = 1;
+  function done() {
+    pdfLibState = 0;
+    var lib = window.pdfjsLib || null, w = pdfLibWait, i;
+    pdfLibWait = [];
+    if (lib) pdfLibReady();
+    for (i = 0; i < w.length; i++) w[i](lib);
+  }
+  var sc = document.createElement('script');
+  sc.onload = done;
+  sc.onerror = done;
+  sc.src = PDF_LIB;
+  document.body.appendChild(sc);
+}
+/* a pdf.js task is a promise in some builds and has one in others */
+function whenDone(t) { return t && t.promise ? t.promise : t; }
+function pdfOpen(data, cb) {
+  pdfLib(function (lib) {
+    if (!lib) { toast('The PDF reader did not load - check the connection and try again'); cb(null); return; }
+    var task;
+    try { task = lib.getDocument({ data: data }); } catch (e) { toast('That PDF could not be opened'); cb(null); return; }
+    whenDone(task).then(function (doc) { cb(doc); }, function () { toast('That PDF could not be opened'); cb(null); });
+  });
+}
+function readFileAs(file, how, cb) {
+  var fr;
+  try { fr = new FileReader(); } catch (e) { cb(null); return; }
+  fr.onload = function () { cb(fr.result); };
+  fr.onerror = function () { cb(null); };
+  try { if (how === 'buf') fr.readAsArrayBuffer(file); else fr.readAsDataURL(file); } catch (e) { cb(null); }
+}
+
+/* where a picked PDF goes: 'new' note, the open 'note', or 'side' */
+var pdfDest = 'new';
+function pdfPick(dest) {
+  pdfDest = dest;
+  hpClose();
+  var inp = byId('pdfInput');
+  try { inp.value = ''; inp.click(); } catch (e) {}
+}
+function pdfImportNew() { pdfPick('new'); }
+function pdfFileChosen(f) {
+  if (!f) return;
+  var dest = pdfDest, name = String(f.name || 'Document.pdf');
+  toast('Opening ' + name + '…');
+  readFileAs(f, 'buf', function (buf) {
+    if (!buf) { toast('That file could not be read'); return; }
+    pdfOpen(new Uint8Array(buf), function (doc) {
+      if (!doc) return;
+      if (dest === 'side') splitOpenPdf(doc, name);
+      else pdfSheetOpen(doc, name, dest);
+    });
+  });
+}
+
+/* ---- the page chooser ---- */
+var pdfS = null;            /* { doc, name, dest, where, pick: { n: 1 }, cells: [] } */
+function pdfSheetOpen(doc, name, dest) {
+  var N = doc.numPages || 0, grid = byId('pdfGrid'), i;
+  pdfS = { doc: doc, name: name, dest: dest, where: 'after', pick: {}, cells: [] };
+  byId('pdfTitle').textContent = name.replace(/\.pdf$/i, '') || 'PDF';
+  grid.innerHTML = '';
+  grid.scrollTop = 0;
+  for (i = 1; i <= N; i++) {
+    if (N <= 30) pdfS.pick[i] = 1;             /* a short PDF comes in whole unless you say otherwise */
+    grid.appendChild(pdfCell(i));
+  }
+  byId('pdfWhere').className = dest === 'note' ? 'on' : '';
+  byId('pdfNew').className = 'on';
+  byId('pdfHere').className = '';
+  byId('pdfGo').disabled = false;
+  pdfPaint();
+  byId('pdfSheet').className = 'on';
+  pdfThumbs(pdfS);
+}
+function pdfCell(n) {
+  var b = document.createElement('button');
+  b.className = 'pdf-cell' + (pdfS.pick[n] ? ' on' : '');
+  b.innerHTML = '<span class="pdf-th"></span><span class="pdf-n">' + n + '</span><span class="pdf-ck">' + IC.check + '</span>';
+  b._n = n;
+  b.addEventListener('click', function () {
+    if (!pdfS || pdfS.busy) return;
+    if (pdfS.pick[n]) delete pdfS.pick[n]; else pdfS.pick[n] = 1;
+    b.className = 'pdf-cell' + (pdfS.pick[n] ? ' on' : '');
+    pdfPaint();
+  });
+  pdfS.cells.push(b);
+  return b;
+}
+function pdfPicked() {
+  var out = [], i, N = pdfS ? pdfS.doc.numPages : 0;
+  for (i = 1; i <= N; i++) if (pdfS.pick[i]) out.push(i);
+  return out;
+}
+function mb(bytes) { return (Math.round(bytes / 100000) / 10).toFixed(1) + ' MB'; }
+function pdfPaint() {
+  if (!pdfS) return;
+  var n = pdfPicked().length, N = pdfS.doc.numPages;
+  var free = Math.max(0, QUOTA_BYTES - storageBytes()), need = n * 190000;
+  byId('pdfSub').textContent = (N === 1 ? '1 page' : N + ' pages') + '  ·  tap the pages to bring in';
+  byId('pdfAll').textContent = n === N ? 'Select none' : 'Select all';
+  var sz = byId('pdfSize');
+  sz.textContent = n ? 'About ' + mb(need) + ' of ' + mb(free) + ' free' : 'No pages chosen';
+  sz.className = need > free ? 'bad' : '';
+  var go = byId('pdfGo');
+  go.textContent = n ? (n === 1 ? 'Import 1 page' : 'Import ' + n + ' pages') : 'Import';
+  go.className = n ? '' : 'dis';
+}
+/* the miniatures, one page at a time so a long PDF never holds more than
+   one page's drawing in memory at once */
+function pdfThumbs(s) {
+  var i = 0;
+  function next() {
+    if (pdfS !== s || i >= s.cells.length) return;
+    var cell = s.cells[i++];
+    s.doc.getPage(cell._n).then(function (pg) {
+      if (pdfS !== s) return;
+      var v1 = pg.getViewport(1), k = Math.min(132 / v1.width, 170 / v1.height), d = Math.min(dpr, 1.5);
+      var vp = pg.getViewport(k * d), cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(vp.width));
+      cv.height = Math.max(1, Math.round(vp.height));
+      cv.style.width = Math.round(v1.width * k) + 'px';
+      cv.style.height = Math.round(v1.height * k) + 'px';
+      var c = cv.getContext('2d');
+      c.fillStyle = '#FFFFFF';
+      c.fillRect(0, 0, cv.width, cv.height);
+      whenDone(pg.render({ canvasContext: c, viewport: vp })).then(function () {
+        if (cell.children && cell.children[0]) cell.children[0].appendChild(cv);
+        else cell.appendChild(cv);
+        next();
+      }, next);
+    }, next);
+  }
+  next();
+}
+function pdfSheetClose() {
+  if (pdfS && !pdfS.kept && pdfS.doc && pdfS.doc.destroy) { try { pdfS.doc.destroy(); } catch (e) {} }
+  pdfS = null;
+  byId('pdfSheet').className = '';
+  byId('pdfGrid').innerHTML = '';
+}
+
+/* one PDF page as a picture the size of a note's page */
+function pdfPageImage(doc, n, pw, cb) {
+  doc.getPage(n).then(function (pg) {
+    var v1 = pg.getViewport(1), fit = Math.min(pw / v1.width, PAGE_H / v1.height);
+    var w = Math.round(v1.width * fit), h = Math.round(v1.height * fit);
+    var vp = pg.getViewport(fit * PDF_RES), cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(vp.width));
+    cv.height = Math.max(1, Math.round(vp.height));
+    var c = cv.getContext('2d');
+    if (!c) { cb(null); return; }
+    c.fillStyle = '#FFFFFF';
+    c.fillRect(0, 0, cv.width, cv.height);
+    whenDone(pg.render({ canvasContext: c, viewport: vp })).then(function () {
+      var url = null;
+      try { url = cv.toDataURL('image/jpeg', PDF_Q); } catch (e) { url = null; }
+      cv.width = 0; cv.height = 0;          /* give the memory back now */
+      if (pg.cleanup) { try { pg.cleanup(); } catch (e2) {} }
+      cb(url, w, h);
+    }, function () { cb(null); });
+  }, function () { cb(null); });
+}
+function pdfGo() {
+  if (!pdfS || pdfS.busy) return;
+  var s = pdfS, list = pdfPicked(), out = [], i = 0, go = byId('pdfGo');
+  if (!list.length) return;
+  var pw = s.dest === 'new' ? PAGE_W_MIN : pageBaseW();
+  s.busy = true;
+  go.className = 'dis';
+  function next() {
+    if (pdfS !== s) return;                    /* cancelled */
+    if (i >= list.length) { finish(); return; }
+    go.textContent = 'Importing ' + (i + 1) + ' of ' + list.length + '…';
+    pdfPageImage(s.doc, list[i], pw, function (url, w, h) {
+      if (url) out.push({ url: url, w: w, h: h });
+      i++;
+      next();
+    });
+  }
+  function finish() {
+    var need = 0, k;
+    for (k = 0; k < out.length; k++) need += out[k].url.length;
+    pdfSheetClose();
+    if (!out.length) { toast('Those pages could not be read'); return; }
+    var free = QUOTA_BYTES - storageBytes();
+    if (need > free) {
+      dlgOpen({ title: 'Not enough room', ok: 'OK', cancel: 'Close',
+        msg: 'Those pages need ' + mb(need) + ' but only ' + mb(Math.max(0, free)) + ' is free on this iPad. ' +
+             'Choose fewer pages, or delete notes you no longer need from the trash.',
+        done: function () {} });
+      return;
+    }
+    if (s.dest === 'new') pdfToNewNote(out, s.name);
+    else pdfIntoNote(out, s.where === 'here');
+  }
+  next();
+}
+function bgImage(x, y, pg, p) {
+  var st = mkImgStroke(Math.round(x), Math.round(y), pg.url, pg.w, pg.h);
+  st.bg = 1;
+  st.ord = BG_ORD + p;
+  return st;
+}
+function pdfToNewNote(pages, name) {
+  var id = genId(), kind = homeKind(), nbi = kind === 'nb' ? curNotebook : 0, k;
+  if (!notebooks[nbi]) nbi = 0;
+  var n = { id: id, title: String(name).replace(/\.pdf$/i, '') || 'PDF', cr: Date.now(), mod: Date.now(),
+            scroll: 0, strokes: [], endless: false, minPages: pages.length };
+  for (k = 0; k < pages.length; k++) {
+    n.strokes.push(bgImage((PAGE_W_MIN - pages[k].w) / 2, k * PAGE_SPAN, pages[k], k));
+  }
+  notes[id] = n;
+  notebooks[nbi].notes.unshift(id);
+  markDirty(id);
+  if (kind === 'trash') settings.homeKind = 'all';
+  openNote(id, homeOn());
+  saveSoon();
+  toast(pages.length === 1 ? 'PDF page imported - write on it' : pages.length + ' PDF pages imported - write on them');
+}
+/* into the open note: after the page you are on, pushing the rest along -
+   or the first one onto this page, under what is already written there */
+function pdfIntoNote(pages, here) {
+  var n = activeNote();
+  if (!n) return;
+  var h = horiz(), span = pageSpan(), cur = currentPage() - 1, k, p;
+  var add = here ? pages.length - 1 : pages.length;
+  var first = here ? cur : cur + 1;
+  var moved = add ? shiftStrokesBelow(n, (cur + 1) * span, add * span) : [];
+  var imgs = [];
+  for (k = 0; k < pages.length; k++) {
+    p = first + k;
+    imgs.push(bgImage(h ? p * span + (pwOf() - pages[k].w) / 2 : (pageBaseW() - pages[k].w) / 2,
+                      h ? 0 : p * span, pages[k], p));
+  }
+  for (k = 0; k < imgs.length; k++) n.strokes.push(imgs[k]);
+  if (add) n.minPages = Math.max(n.minPages || 1, pageCount() + add);
+  pushUndo({ t: 'pdf-in', list: imgs, moved: moved, dx: h ? add * span : 0, dy: h ? 0 : add * span });
+  invalidateAll();
+  recomputeDoc();
+  saveSoon();
+  requestRender();
+  if (!here) goToPage(first + 1);
+  toast(pages.length === 1 ? 'PDF page added' : pages.length + ' PDF pages added');
+}
+
+/* ---- side by side ----
+ * The panel sits right, left, below or above the page; the page shrinks
+ * to the rest of the screen rather than being covered, and the handle on
+ * the seam drags the split anywhere between a quarter and three quarters. */
+var split = { on: false, kind: '', doc: null, url: '', name: '', zoom: 1, pages: [], ratio: 1.3 };
+var spQ = [], spBusy = false, spScrollT = null;
+function splitAt() { var a = settings.splitAt; return a === 'left' || a === 'top' || a === 'bottom' ? a : 'right'; }
+function placeCanvas() {
+  var L = stripOn ? 112 : 0, R = 0, T = 102, B = 0, pane = byId('splitPane');
+  if (split.on) {
+    var W = drawView.offsetWidth || window.innerWidth || 1024, H = drawView.offsetHeight || window.innerHeight || 768;
+    var at = splitAt(), across = at === 'left' || at === 'right';
+    var room = across ? W - L : H - T, s = Math.round(lim(settings.splitFrac || 0.42, 0.25, 0.75) * room);
+    var ps = pane.style;
+    if (at === 'right') { R = s; ps.left = (W - s) + 'px'; ps.top = T + 'px'; ps.width = s + 'px'; ps.height = (H - T) + 'px'; }
+    else if (at === 'left') { ps.left = L + 'px'; ps.top = T + 'px'; ps.width = s + 'px'; ps.height = (H - T) + 'px'; L += s; }
+    else if (at === 'bottom') { B = s; ps.left = L + 'px'; ps.top = (H - s) + 'px'; ps.width = (W - L) + 'px'; ps.height = s + 'px'; }
+    else { ps.left = L + 'px'; ps.top = T + 'px'; ps.width = (W - L) + 'px'; ps.height = s + 'px'; T += s; }
+    pane.className = 'on at-' + at;
+  } else pane.className = '';
+  canvasWrap.style.left = L ? L + 'px' : '';
+  canvasWrap.style.right = R ? R + 'px' : '';
+  canvasWrap.style.top = T !== 102 ? T + 'px' : '';
+  canvasWrap.style.bottom = B ? B + 'px' : '';
+  byId('zwBar').style.right = (R + 10) + 'px';
+  resizeView();
+  if (zw.on) zwBarPlace();
+}
+function splitOpenPdf(doc, name) {
+  splitClose(true);
+  split.kind = 'pdf'; split.doc = doc; split.name = name; split.zoom = 1;
+  splitShow();
+}
+function splitOpenImg(url, name) {
+  splitClose(true);
+  split.kind = 'img'; split.url = url; split.name = name; split.zoom = 1;
+  splitShow();
+}
+function splitShow() {
+  split.on = true;
+  byId('spName').textContent = String(split.name || '').replace(/\.pdf$/i, '');
+  byId('spPage').textContent = '';
+  placeCanvas();
+  splitBuild(0);
+  toast('Drag the handle on the edge to make it bigger or smaller');
+}
+function splitClose(quiet) {
+  if (split.doc && split.doc.destroy) { try { split.doc.destroy(); } catch (e) {} }
+  var was = split.on;
+  split = { on: false, kind: '', doc: null, url: '', name: '', zoom: 1, pages: [], ratio: 1.3 };
+  spQ = [];
+  byId('spBody').innerHTML = '';
+  if (was && !quiet) placeCanvas();
+}
+/* the scroller's own width: it keeps room for a scroll bar where the
+   browser draws one, so a page at 100% never needs sideways scrolling */
+function spInnerW() { return Math.max(100, ((byId('spBody').clientWidth || byId('splitPane').offsetWidth || 400) - 24) * split.zoom); }
+/* lay the pages out as empty sheets of the right size, then draw the ones
+   in view - a hundred-page PDF costs the same as a two-page one */
+function splitBuild(keepFrac) {
+  var body = byId('spBody'), w = spInnerW(), i;
+  body.innerHTML = '';
+  split.pages = [];
+  spQ = [];
+  byId('spZoom').textContent = Math.round(split.zoom * 100) + '%';
+  if (split.kind === 'img') {
+    var im = document.createElement('img');
+    im.className = 'sp-img';
+    im.src = split.url;
+    im.style.width = Math.round(w) + 'px';
+    body.appendChild(im);
+    byId('spPage').textContent = '';
+    return;
+  }
+  if (split.kind !== 'pdf' || !split.doc) return;
+  var N = split.doc.numPages;
+  for (i = 1; i <= N; i++) {
+    var el = document.createElement('div');
+    el.className = 'sp-page';
+    el.style.width = Math.round(w) + 'px';
+    el.style.height = Math.round(w * split.ratio) + 'px';
+    el.innerHTML = '<span>' + i + '</span>';
+    body.appendChild(el);
+    split.pages.push({ n: i, el: el, cv: null });
+  }
+  byId('spPage').textContent = N === 1 ? '1 page' : '1 / ' + N;
+  split.doc.getPage(1).then(function (pg) {
+    var v = pg.getViewport(1);
+    split.ratio = v.height / v.width;
+    for (var k = 0; k < split.pages.length; k++) split.pages[k].el.style.height = Math.round(w * split.ratio) + 'px';
+    if (keepFrac) body.scrollTop = keepFrac * (body.scrollHeight || 0);
+    spVisible();
+  });
+}
+function spVisible() {
+  if (!split.on || split.kind !== 'pdf') return;
+  var body = byId('spBody'), top = body.scrollTop || 0, h = body.clientHeight || 600, i, p, y0, y1, cur = 1;
+  for (i = 0; i < split.pages.length; i++) {
+    p = split.pages[i];
+    y0 = p.el.offsetTop || 0;
+    y1 = y0 + (p.el.offsetHeight || 0);
+    if (y0 <= top + h / 2) cur = p.n;
+    if (y1 > top - h && y0 < top + 2 * h) { if (!p.cv && !p.q) { p.q = 1; spQ.push(p); } }
+    else if (p.cv) {                              /* far off screen: drop the drawing */
+      if (p.cv.parentNode) p.cv.parentNode.removeChild(p.cv);
+      p.cv.width = 0; p.cv = null;
+    }
+  }
+  if (split.pages.length > 1) byId('spPage').textContent = cur + ' / ' + split.pages.length;
+  spPump();
+}
+function spPump() {
+  if (spBusy || !spQ.length || !split.on) return;
+  var p = spQ.shift(), doc = split.doc;
+  spBusy = true;
+  doc.getPage(p.n).then(function (pg) {
+    if (split.doc !== doc) { spBusy = false; return; }
+    var cssW = parseFloat(p.el.style.width) || spInnerW(), v1 = pg.getViewport(1), k = cssW / v1.width;
+    var vp = pg.getViewport(k * Math.min(dpr, 2)), cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(vp.width));
+    cv.height = Math.max(1, Math.round(vp.height));
+    cv.style.width = Math.round(cssW) + 'px';
+    cv.style.height = Math.round(v1.height * k) + 'px';
+    p.el.style.height = cv.style.height;
+    var c = cv.getContext('2d');
+    c.fillStyle = '#FFFFFF';
+    c.fillRect(0, 0, cv.width, cv.height);
+    whenDone(pg.render({ canvasContext: c, viewport: vp })).then(function () {
+      spBusy = false;
+      p.q = 0;
+      if (split.doc === doc) { p.el.appendChild(cv); p.cv = cv; }
+      spPump();
+    }, function () { spBusy = false; p.q = 0; spPump(); });
+  }, function () { spBusy = false; p.q = 0; spPump(); });
+}
+function splitZoom() {
+  var body = byId('spBody'), f = body.scrollHeight ? body.scrollTop / body.scrollHeight : 0;
+  split.zoom = split.zoom >= 2 ? 1 : split.zoom + 0.5;
+  splitBuild(f);
+}
+function splitPlaceMenu(anchor) {
+  var at = splitAt();
+  function row(k, lbl, ic) {
+    return { lbl: lbl, ic: svgIc(ic), on: at === k, act: function () {
+      settings.splitAt = k;
+      saveSoon();
+      placeCanvas();
+      splitBuild(0);
+    } };
+  }
+  hpOpen(anchor, [
+    row('right', 'On the right', '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M13 4.5v15"/><path d="M15.5 8.5h3M15.5 11h3"/>'),
+    row('left', 'On the left', '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M11 4.5v15"/><path d="M5.5 8.5h3M5.5 11h3"/>'),
+    row('bottom', 'Below', '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 13h17"/><path d="M7 15.5h6M7 17.5h4"/>'),
+    row('top', 'Above', '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 11h17"/><path d="M7 6.8h6M7 8.8h4"/>')
+  ], 'Put the panel');
+}
+/* the seam's handle: a line follows the finger, the split happens on
+   letting go - resizing the page live every frame is more than an iPad 3
+   can do smoothly */
+function spGripInit() {
+  var grip = byId('spGrip'), ghost = byId('spGhost'), drag = null;
+  function at(cx, cy) {
+    var W = drawView.offsetWidth || 1024, H = drawView.offsetHeight || 768, L = stripOn ? 112 : 0, T = 102;
+    var a = splitAt(), f;
+    if (a === 'right') f = (W - cx) / (W - L);
+    else if (a === 'left') f = (cx - L) / (W - L);
+    else if (a === 'bottom') f = (H - cy) / (H - T);
+    else f = (cy - T) / (H - T);
+    return lim(f, 0.25, 0.75);
+  }
+  function show(cx, cy) {
+    var a = splitAt(), gs = ghost.style;
+    if (a === 'left' || a === 'right') { gs.left = Math.round(cx - 1.5) + 'px'; gs.top = '102px'; gs.width = '3px'; gs.height = ''; gs.bottom = '0'; gs.right = ''; }
+    else { gs.top = Math.round(cy - 1.5) + 'px'; gs.left = (stripOn ? 112 : 0) + 'px'; gs.height = '3px'; gs.width = ''; gs.right = '0'; gs.bottom = ''; }
+    ghost.className = 'on';
+  }
+  function start(cx, cy) { drag = { f: at(cx, cy) }; show(cx, cy); }
+  function move(cx, cy) { if (!drag) return; drag.f = at(cx, cy); show(cx, cy); }
+  function end() {
+    if (!drag) return;
+    settings.splitFrac = drag.f;
+    drag = null;
+    ghost.className = '';
+    saveSoon();
+    placeCanvas();
+    splitBuild(0);
+  }
+  grip.addEventListener('touchstart', function (e) {
+    if (e.preventDefault) e.preventDefault();
+    var t = e.changedTouches[0];
+    start(t.clientX, t.clientY);
+  }, false);
+  grip.addEventListener('touchmove', function (e) {
+    if (e.preventDefault) e.preventDefault();
+    var t = e.changedTouches[0];
+    move(t.clientX, t.clientY);
+  }, false);
+  grip.addEventListener('touchend', end, false);
+  grip.addEventListener('touchcancel', end, false);
+  grip.addEventListener('mousedown', function (e) { start(e.clientX, e.clientY); });
+  window.addEventListener('mousemove', function (e) { if (drag) move(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', function () { end(); });
+}
+function sideImgPick() {
+  hpClose();
+  var inp = byId('sideImgInput');
+  try { inp.value = ''; inp.click(); } catch (e) {}
+}
+function sideImgChosen(f) {
+  if (!f) return;
+  readFileAs(f, 'url', function (url) {
+    if (!url) { toast('That picture could not be read'); return; }
+    splitOpenImg(url, String(f.name || 'Picture'));
+  });
+}
+
+/* ---- the Insert menu on the toolbar ---- */
+function insertMenu(anchor) {
+  var rows = [], ro = settings.reading;
+  if (!ro) {
+    rows.push({ lbl: 'Photo', ic: IC.photo, act: function () { try { photoInput.value = ''; photoInput.click(); } catch (e) {} } });
+    rows.push({ lbl: 'PDF pages', ic: IC.pdf, act: function () { pdfPick('note'); } });
+    rows.push({ sep: true });
+  }
+  rows.push({ lbl: 'Open a PDF beside', ic: IC.side, act: function () { pdfPick('side'); } });
+  rows.push({ lbl: 'Open a picture beside', ic: IC.sideImg, act: sideImgPick });
+  if (split.on) rows.push({ lbl: 'Close the panel', ic: IC.x, act: function () { splitClose(); } });
+  hpOpen(anchor, rows, 'Insert');
 }
 
 function openNote(id, anim) {
@@ -13025,6 +13761,37 @@ byId('searchClear').addEventListener('click', function () {
   byId('searchClear').className = '';
   renderHome();
 });
+/* PDFs and pictures */
+byId('insertBtn').addEventListener('click', function () { closePanels(); insertMenu(byId('insertBtn')); });
+byId('pdfInput').addEventListener('change', function () { pdfFileChosen(this.files && this.files[0]); });
+byId('sideImgInput').addEventListener('change', function () { sideImgChosen(this.files && this.files[0]); });
+byId('pdfAll').addEventListener('click', function () {
+  if (!pdfS || pdfS.busy) return;
+  var N = pdfS.doc.numPages, all = pdfPicked().length === N, i;
+  pdfS.pick = {};
+  if (!all) for (i = 1; i <= N; i++) pdfS.pick[i] = 1;
+  for (i = 0; i < pdfS.cells.length; i++) pdfS.cells[i].className = 'pdf-cell' + (pdfS.pick[pdfS.cells[i]._n] ? ' on' : '');
+  pdfPaint();
+});
+byId('pdfNew').addEventListener('click', function () {
+  if (!pdfS) return;
+  pdfS.where = 'after';
+  byId('pdfNew').className = 'on'; byId('pdfHere').className = '';
+});
+byId('pdfHere').addEventListener('click', function () {
+  if (!pdfS) return;
+  pdfS.where = 'here';
+  byId('pdfHere').className = 'on'; byId('pdfNew').className = '';
+});
+byId('pdfCancel').addEventListener('click', pdfSheetClose);
+byId('pdfGo').addEventListener('click', pdfGo);
+byId('spClose').addEventListener('click', function () { splitClose(); });
+byId('spZoom').addEventListener('click', splitZoom);
+byId('spPlace').addEventListener('click', function () { splitPlaceMenu(byId('spPlace')); });
+byId('spBody').addEventListener('scroll', function () {
+  if (spScrollT) return;
+  spScrollT = setTimeout(function () { spScrollT = null; spVisible(); }, 90);
+});
 /* the dialog */
 byId('dlgOk').addEventListener('click', dlgAccept);
 byId('dlgCancel').addEventListener('click', dlgClose);
@@ -13198,6 +13965,7 @@ function init() {
   loadAll();
   purgeTrash();
   if (curNoteId && notes[curNoteId] && notes[curNoteId].trash) curNoteId = null;
+  spGripInit();
   buildPalette();
   buildPageView();
   initPop();

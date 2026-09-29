@@ -2222,6 +2222,92 @@ check('the Paper colour row opens the picker',
       tn3.pageView().open === true && tn3.tint().paper === 0,
       'open ' + tn3.pageView().open + ', paper ' + tn3.tint().paper);
 
+/* ---------- PDF pages, and a document beside the note ----------
+ * pdf.js is not in the sandbox, so a stand-in document is handed over: a
+ * 600x800 page, which fits a 1024x1000 note page at 750x1000. */
+function fakeThen(v) { return { then: function (ok) { if (ok) ok(v); return this; } }; }
+function fakePdf(N) {
+  return { numPages: N, destroy: function () {},
+    getPage: function () {
+      return fakeThen({
+        getViewport: function (s) { return { width: 600 * s, height: 800 * s }; },
+        render: function () { return { promise: fakeThen() }; },
+        cleanup: function () {} });
+    } };
+}
+function bgImgs(app) {
+  var out = [], st = app.strokes(), i;
+  for (i = 0; i < st.length; i++) if (st[i].pen === 6 && st[i].bg) out.push(st[i]);
+  return out;
+}
+function openTitle(app) { var s = app.state(); return s && s.cur && app.note(s.cur.note) ? app.note(s.cur.note).title : ''; }
+
+var pf = fresh();
+pf.els.backBtn._fire('click', {}); pf.flushFrames();
+pf.win.__mnPdf.sheet(fakePdf(4), 'Lecture 5.pdf', 'new');
+check('the page chooser shows every page, all picked',
+      pf.els.pdfGrid.children.length === 4 && pf.els.pdfGrid.children[0].className.indexOf('on') >= 0,
+      pf.els.pdfGrid.children.length + ' pages');
+pf.els.pdfGrid.children[1]._fire('click', {});          /* leave page 2 out */
+pf.els.pdfGo._fire('click', {}); pf.flushFrames();
+var pfImgs = bgImgs(pf);
+check('the chosen pages become a new note named after the file',
+      openTitle(pf) === 'Lecture 5' && pfImgs.length === 3, '"' + openTitle(pf) + '", ' + pfImgs.length + ' pages');
+check('...each fitted to a page of its own, under the ink',
+      pfImgs.length === 3 && pfImgs[0].pts[0][0] === 137 && pfImgs[1].pts[0][1] === 1020 &&
+      pfImgs[2].pts[0][1] === 2040 && pfImgs[0].ord < 0,
+      pfImgs.map(function (s) { return s.pts[0].slice(0, 2).join(','); }).join(' / '));
+
+var pn = fresh();
+write(pn, 1);                                         /* ink on page 1 */
+pn.win.__mnPdf.sheet(fakePdf(2), 'Sheet.pdf', 'note');
+pn.els.pdfGo._fire('click', {}); pn.flushFrames();
+var pnImgs = bgImgs(pn);
+check('in a note, the pages go in after the page you are on',
+      pnImgs.length === 2 && pnImgs[0].pts[0][1] === 1020 && pnImgs[1].pts[0][1] === 2040,
+      pnImgs.map(function (s) { return s.pts[0][1]; }).join(', '));
+pn.undo();
+check('...and one undo takes them all out again', bgImgs(pn).length === 0 && pn.strokes().length === 1,
+      bgImgs(pn).length + ' PDF pages, ' + pn.strokes().length + ' strokes');
+
+var ph = fresh();
+write(ph, 1);
+ph.win.__mnPdf.sheet(fakePdf(1), 'One.pdf', 'note');
+ph.els.pdfHere._fire('click', {});
+ph.els.pdfGo._fire('click', {}); ph.flushFrames();
+var phImg = bgImgs(ph), phInk = ph.strokes().filter(function (s) { return !s.bg; });
+check('"On this page" lays the PDF page under what is already written',
+      phImg.length === 1 && phImg[0].pts[0][1] === 0 && phInk.length === 1 && phImg[0].ord < phInk[0].ord,
+      phImg.length + ' page at y ' + (phImg[0] && phImg[0].pts[0][1]));
+ph.els.eraserBtn._fire('click', {});
+ph.stroke({ id: 7, x0: 150, y0: 400, x1: 650, y1: 420, speed: 0.4 });   /* across the ink and the page */
+ph.tick(100);
+check('...and the eraser rubs out the ink, never the page itself',
+      bgImgs(ph).length === 1 && ph.strokes().length === 1,
+      bgImgs(ph).length + ' PDF page, ' + ph.strokes().length + ' strokes');
+
+var im = fresh();
+im.els.insertBtn._fire('click', {});
+var imRows = im.els.hmPop.children, imL = [], q2;
+for (q2 = 0; q2 < imRows.length; q2++) if (imRows[q2]._lbl) imL.push(imRows[q2]._lbl);
+check('the toolbar has Insert: a photo, PDF pages, or a PDF or picture beside',
+      imL.join('|') === 'Photo|PDF pages|Open a PDF beside|Open a picture beside', imL.join('|'));
+
+var sv = fresh();
+sv.win.__mnPdf.side(fakePdf(3), 'Ref.pdf');
+var sv1 = sv.win.__mnPdf.split();
+check('a PDF opens beside the note, and the page moves over for it',
+      sv1.on && sv1.pane.indexOf('on at-right') === 0 && parseInt(sv1.right, 10) > 200 && sv1.pages === 3,
+      JSON.stringify(sv1));
+sv.win.__mnPdf.place('bottom');
+var sv2 = sv.win.__mnPdf.split();
+check('...it can sit below the page instead', sv2.at === 'bottom' && parseInt(sv2.bottom, 10) > 150 && !sv2.right,
+      JSON.stringify(sv2));
+sv.els.spClose._fire('click', {});
+var sv3 = sv.win.__mnPdf.split();
+check('...and closing it gives the page all its room back',
+      !sv3.on && !sv3.right && !sv3.bottom && !sv3.left && !sv3.top, JSON.stringify(sv3));
+
 /* ---------- the home screen ----------
  * Samsung's tablet home: a rail with All notes, Favorites, Trash and the
  * folders; each note a miniature with a menu of its own; long-press to
