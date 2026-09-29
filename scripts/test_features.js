@@ -2504,6 +2504,28 @@ hm.dlg();
 check('deleting from the trash is for good', !saved(hm, hmGone) && hm.home().cards === 0,
       saved(hm, hmGone) ? 'still stored' : hm.home().cards + ' cards');
 
+/* A note opened from the home slides in, and mid-slide the browser reports
+   the page 30px along. Measured then, every stroke of the note landed 30px
+   left of the pen. The page's resting place is what must be used. */
+var pw = fresh();
+pw.wrap.offsetLeft = 0; pw.wrap.offsetTop = 56; pw.wrap.offsetParent = pw.els.drawView;
+pw.els.drawView.offsetLeft = 0; pw.els.drawView.offsetTop = 0;
+(function () {
+  var realRect = pw.wrap.getBoundingClientRect;
+  pw.wrap.getBoundingClientRect = function () {
+    var r = realRect.call(this);
+    if (String(pw.els.drawView.className).indexOf('enter') >= 0) r.left += 30;   /* painted mid-slide */
+    return r;
+  };
+})();
+pw.els.backBtn._fire('click', {}); pw.flushFrames();
+pw.home().els[0]._fire('click', {}); pw.flushFrames();
+pw.stroke({ id: 1, x0: 300, y0: 356, x1: 420, y1: 380, speed: 0.3 });
+pw.tick(120);
+check('a note opened from the home is written exactly where the pen is',
+      pw.strokes().length === 1 && Math.abs(pw.strokes()[0].pts[0][0] - 300) < 1 && Math.abs(pw.strokes()[0].pts[0][1] - 300) < 1,
+      pw.strokes()[0] ? 'first point ' + pw.strokes()[0].pts[0].slice(0, 2).join(',') + ' for a pen at 300,300' : 'no stroke');
+
 /* opening a folder scales the notes up into place */
 var hm3 = fresh();
 (function () {

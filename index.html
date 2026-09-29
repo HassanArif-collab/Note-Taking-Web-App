@@ -4499,14 +4499,29 @@ function resizeView() {
   cvs.style.width = viewW + 'px';
   cvs.style.height = viewH + 'px';
   invalidateAll();
-  wrapRect = canvasWrap.getBoundingClientRect();
+  measureWrap();
   popPlace();
   zwBarPlace();
-  if (refOn) wrapRect = { left: wrapRect.left, top: wrapRect.top + REF_BAR_H,
-                          width: wrapRect.width, height: wrapRect.height };
   clampScroll();
   positionSelBar();
   requestRender();
+}
+
+/* WHERE THE PAGE IS ON THE GLASS, AT REST. getBoundingClientRect reports
+ * where the page is PAINTED, and while a note slides in from the home that
+ * is 30px right of where it comes to rest - measured then, it put every
+ * stroke of the note 30px left of the pen: "the strokes are not made where
+ * the pen is". The layout position (offsetLeft/Top) takes no notice of a
+ * slide, so it is used wherever the browser gives it; the window's own
+ * scroll (the keyboard can push it) is taken off, as it is from a touch. */
+function measureWrap() {
+  var r = canvasWrap.getBoundingClientRect();
+  if (canvasWrap.offsetParent === drawView && typeof canvasWrap.offsetLeft === 'number') {
+    r = { left: (drawView.offsetLeft || 0) + canvasWrap.offsetLeft - (window.pageXOffset || 0),
+          top: (drawView.offsetTop || 0) + canvasWrap.offsetTop - (window.pageYOffset || 0),
+          width: canvasWrap.offsetWidth, height: canvasWrap.offsetHeight };
+  }
+  wrapRect = refOn ? { left: r.left, top: r.top + REF_BAR_H, width: r.width, height: r.height } : r;
 }
 
 /* ============================================================
@@ -10690,6 +10705,9 @@ window.__mnZW = function () { var g = zwGeom(); return { on: zw.on, x: zw.x, y: 
 /* ---------- event wiring ---------- */
 function onTouchStart(e) {
   e.preventDefault();
+  /* the first contact of a gesture takes a fresh reading of where the page
+     is, so no stale one can ever outlive the stroke it was taken for */
+  if (!liveTouchCount()) measureWrap();
   /* a touch that lands while the pen wheel is open closes it; if it turns
      out to be a stroke it is written, and if it was only a tap it leaves
      nothing behind - closing the wheel is not a decimal point */
@@ -10845,6 +10863,7 @@ var mouseId = 'mouse';
 canvasWrap.addEventListener('mousedown', function (e) {
   e.preventDefault();
   stopMomentum();
+  measureWrap();
   var now = Date.now();
   var touch = { identifier: mouseId, clientX: e.clientX, clientY: e.clientY, radiusX: 0 };
   traceTouch(0, touch, now);
