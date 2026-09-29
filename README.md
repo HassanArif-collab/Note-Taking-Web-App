@@ -34,9 +34,12 @@ thickness, with 24 colours to choose from.
   be tapped as well. Drag it to a side and it docks there and stays while you
   write. "Hold pen for pop-up" in the menu turns it off.
 - **Shapes** — with Shape assist on (pen panel), draw a line or a shape and
-  keep the pen still at the end for half a second: it snaps to a straight
-  line, rectangle or ellipse before you lift. Lift straight away and the
-  stroke stays exactly as drawn.
+  keep the pen still at the end for half a second: it snaps before you lift.
+  It knows triangles, rectangles and squares at any angle, diamonds,
+  pentagons, hexagons, circles and ellipses at any angle, arcs, angles and
+  zigzags (as straight pieces) and straight lines. Nearly level or upright
+  edges are made exactly so and nearly regular shapes regular; corners stay
+  sharp. Lift straight away and the stroke stays exactly as drawn.
 - **Auto palm rejection** — tap the palm button until it says "Palm: Auto"
   and write with your hand resting on the glass, no glove.
 - **Favourite pens grid** — the star on the pop-up (or "All pens" in the
@@ -119,11 +122,48 @@ change the note are not offered, and neither undo nor a page can be touched.
 Scroll, zoom and turn pages freely. The chip, or the same menu row, takes it
 back — your pen and its settings come back with it.
 
-### Notebooks and folders
+### The home screen, folders and the trash
 
-The **menu button** (top left) opens the notebook drawer. The **folder button**
-in its header puts the current notebook inside another, or back at the top
-level. A folder cannot be put inside its own child.
+The home is Samsung's tablet layout. The **rail** on the left has the search,
+**All notes**, **Favorites**, **Trash** and your **folders** (each with a
+colour; tap **+** or **Create folder** to make one). The notes show as
+miniatures of their first page, two to six across; the grid/list button and
+the sort menu (date modified, date created or title, favourites on top) sit
+at the top right, and the sidebar button folds the rail away.
+
+- **⋯ on a note:** open, rename, add to favourites, move to a folder, select,
+  delete.
+- **Long-press a note** to select several: the header turns blue with
+  favourite, move, rename and delete.
+- **⋯ on the chosen folder:** rename or recolour, a folder inside it, move it
+  into another folder, delete it (its notes move up a level — nothing is lost).
+- **Deleting a note moves it to the Trash** for 30 days, with **Undo** in the
+  message that says so. From the trash a note can be restored or deleted for
+  good; **⋮ → Empty trash** clears it.
+- **⋮ (top right):** select notes, create a folder, import a PDF, settings.
+
+### PDFs
+
+- **Home → ⋮ → Import PDF:** pick the PDF, tap the pages you want (a short
+  PDF comes in whole), and they become a new note named after the file — one
+  PDF page to a page, with room around it for notes.
+- **In a note → the Insert button (square +) on the toolbar → PDF pages:**
+  the pages go in after the page you are on, or choose **On this page** to lay
+  the first one under what you have already written.
+- A PDF page is the paper, not a mark: write, highlight and lasso on top of
+  it; the eraser, the lasso and scribble-to-erase never take it away. One
+  undo removes a whole import.
+- The iPad lets a web page keep about 5 MB, and each PDF page costs about
+  0.2 MB. The chooser shows how much the pages need and how much is free.
+
+### Side by side — a PDF or a picture beside your note
+
+**Insert → Open a PDF beside** (or **Open a picture beside**) opens it in a
+panel next to the page, to read while you write. The panel's button moves it
+**right, left, below or above**; the handle on the seam drags it bigger or
+smaller; **100%** zooms to 150% and 200%; **✕** closes it. The page moves
+over rather than being covered. What is open beside is not saved — open it
+again next time.
 
 ### Zoom window — for writing small
 
@@ -153,7 +193,7 @@ why it matters most for maths.
 
 ### Photos
 
-**Menu → Insert photo** puts a picture from the camera roll on the page — handy
+**Insert (square + on the toolbar) → Photo** puts a picture from the camera roll on the page — handy
 for a textbook problem you want to work on. It behaves like ink: lasso it to
 move or resize, erase it, undo it. It is shrunk before saving, because a full
 camera photo would fill the whole storage allowance on its own.

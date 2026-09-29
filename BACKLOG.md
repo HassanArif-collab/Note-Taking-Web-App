@@ -74,6 +74,32 @@ Build one at a time, copying how Samsung Notes does it.
 - **Note covers / book covers** (the recording's next chapter): a coloured or
   patterned cover per note and per folder.
 
+## Built 2026-09-29 from `References/Samsung Notes.html`
+- **Home rebuilt** — rail (search, All notes, Favorites, Trash, folders with
+  colours), page miniatures 2–6 across, sort menu, grid/list, ⋯ menu per note
+  and per folder, long-press multi-select with the blue bar, **Trash** with
+  Undo and 30 days, the app's own dialogs instead of browser prompts.
+- **PDF import** (page chooser; new note, or into a note after/onto a page),
+  PDF pages locked under the ink.
+- **Split view** — a PDF or picture beside the note, four placements,
+  resizable, zoom.
+- **Shapes** — triangles, tilted boxes, diamonds, pentagons, hexagons,
+  circles/ellipses at any angle, arcs, angles, levelled lines, sharp corners.
+
+## Still in that brief — the user chooses what is next
+1. **Lock notes** with a password (padlock on the card, hidden miniature).
+2. **Sort pages** — reorder / duplicate / delete pages from a thumbnail grid.
+3. **Selection bubble extras** — change colour, straighten, copy between notes.
+4. **Typed text formatting** — bold/italic/underline, bullet and checkbox lists.
+5. **Voice recording** in a note, with a player chip.
+6. **Sticky notes** — small coloured memo cards on the page.
+7. **Search inside notes** — typed text now; handwriting needs recognition.
+8. **Export** — save a note as PDF or images, share sheet.
+9. **Camera** — photograph a page straight into the note.
+10. **Page templates gallery upgrade** + **landscape pages**.
+11. **Note covers** for notes and folders.
+12. **Handwriting to text** (hard offline on an iPad 3).
+
 ## Pen pop-up extras (seen in the videos)
 - ~~Favourite pens inside the pop-up, each with its own colour.~~ **Done** —
   the pop-up's star opens a grid of favourite pens saved whole (type, colour
