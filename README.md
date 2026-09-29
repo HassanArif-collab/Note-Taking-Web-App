@@ -139,6 +139,12 @@ buttons on the strip do the same by hand: **‹** back, **›** forward, **↵**
 line, **✕** close. To put the box somewhere else, **tap the page above** —
 while the strip is open the page is for aiming, not writing.
 
+**Drag the round handle on the box's corner** to change the zoom: a smaller
+box makes your writing land smaller, a bigger one closer to its real size
+(from 2× to 4×; it starts at 3.2×). The box always keeps the strip's shape,
+so width and height change together — stretching one alone would squash the
+writing. The size is remembered.
+
 This exists because a passive disc stylus **cannot** write small. The contact
 patch is several millimetres across and its reported centre wanders inside it,
 so below roughly a centimetre the letters are limited by the hardware, not by

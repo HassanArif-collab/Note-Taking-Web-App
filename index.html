@@ -2536,6 +2536,8 @@ var settings = {
   homeList: false,            /* home shows one note to a row, not a grid */
   popDock: 0,                 /* pen pop-up docked: 0 no, 1 left edge, 2 right edge */
   popY: 0.5,                  /* ...and how far down that edge */
+  zwMag: 3.2,                 /* zoom window: how much bigger you write than
+                                 what lands - the box's corner handle sets it */
   margin: true,
   scrollHintShown: false,
   pen: PEN_BALL,
@@ -2721,6 +2723,7 @@ function applyStoredSettings(set) {
     if (typeof data.set.homeList === 'boolean') settings.homeList = data.set.homeList;
     if (typeof data.set.popDock === 'number') settings.popDock = lim(Math.round(data.set.popDock), 0, 2);
     if (typeof data.set.popY === 'number') settings.popY = lim(data.set.popY, 0, 1);
+    if (typeof data.set.zwMag === 'number') settings.zwMag = data.set.zwMag;   /* kept in range by zwGeom */
     if (typeof data.set.scrollHintShown === 'boolean') settings.scrollHintShown = data.set.scrollHintShown;
     if (typeof data.set.pen === 'number') settings.pen = lim(data.set.pen, 0, PENS.length - 1);
     if (typeof data.set.widthStep === 'number') settings.widthStep = lim(data.set.widthStep, 0, 5);
@@ -3779,16 +3782,17 @@ function render() {
  * everything downstream sees ordinary page coordinates.
  * ============================================================ */
 var ZW_FRAC = 0.42;        /* strip height, as a share of the view */
-var ZW_MAG  = 3.2;         /* how much bigger you write than what lands */
+var ZW_MAG_MIN = 2, ZW_MAG_MAX = 4;   /* how far the corner handle takes settings.zwMag */
+var ZW_GRAB = 34;          /* screen px around the corner handle that grab it - a disc stylus is wide */
 var ZW_EDGE = 0.72;        /* advance once writing passes this much of the box */
 var ZW_STEP = 0.62;        /* ...and move it along by this much of a box */
 var zw = { on: false, x: 40, y: 0 };
 
 function zwGeom() {
-  var h = Math.round(viewH * ZW_FRAC);
+  var h = Math.round(viewH * ZW_FRAC), m = lim(settings.zwMag, ZW_MAG_MIN, ZW_MAG_MAX);
   return {
-    top: viewH - h, h: h, w: viewW,
-    bw: viewW / ZW_MAG, bh: h / ZW_MAG
+    top: viewH - h, h: h, w: viewW, mag: m,
+    bw: viewW / m, bh: h / m
   };
 }
 
@@ -3891,6 +3895,32 @@ function zwAdvance(maxX) {
   if (maxX < zwTarget().x + g.bw * ZW_EDGE) return;
   zwNext();
 }
+/* THE CORNER HANDLE SETS THE ZOOM. The box is the strip shrunk, so the two
+ * always share a shape - a box stretched on its own would squash the
+ * writing. Dragging the corner in makes the box smaller, so what you write
+ * lands smaller; out, larger. The top-left corner stays put. */
+function zwPagePt(cx, cy) {
+  return { x: (cx - wrapRect.left) / zoom + scrollX, y: (cy - wrapRect.top) / zoom + scrollY };
+}
+/* the handle, in wrap-relative screen px */
+function zwCorner() {
+  var g = zwGeom();
+  return { x: (zw.x + g.bw - scrollX) * zoom, y: (zw.y + g.bh - scrollY) * zoom };
+}
+function zwGrab(st, touch) {
+  var g = zwGeom(), h = zwCorner(), p = zwPagePt(touch.clientX, touch.clientY);
+  if (dist(touch.clientX - wrapRect.left, touch.clientY - wrapRect.top, h.x, h.y) > ZW_GRAB) return false;
+  st.ox = zw.x + g.bw - p.x;     /* the finger is rarely dead on the corner */
+  st.oy = zw.y + g.bh - p.y;
+  return true;
+}
+function zwResize(st, touch) {
+  var g = zwGeom(), p = zwPagePt(touch.clientX, touch.clientY);
+  /* the box whose corner is nearest the finger, along its diagonal */
+  var s = (p.x + st.ox - zw.x) * g.w + (p.y + st.oy - zw.y) * g.h;
+  settings.zwMag = s > 0 ? lim((g.w * g.w + g.h * g.h) / s, ZW_MAG_MIN, ZW_MAG_MAX) : ZW_MAG_MAX;
+  requestRender();
+}
 /* the arrows sit on the strip's top edge, at the right */
 function zwBarPlace() {
   var bar = byId('zwBar');
@@ -3936,8 +3966,11 @@ function drawZoomWindow(c) {
   c.strokeRect(zw.x, zw.y, g.bw, g.bh);
   c.setLineDash ? c.setLineDash([]) : 0;
 
-  /* the strip itself */
+  /* the strip itself - drawn over the corner handle when the box's corner
+     is down behind it */
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  var hc = zwCorner();
+  drawResizeHandle(c, hc.x, hc.y, 9, 2, 'rgba(226,35,26,0.95)');
   var P = PAPERS[settings.paperColor] || PAPERS[0];
   c.fillStyle = P.desk;
   c.fillRect(0, g.top, g.w, g.h);
@@ -3948,9 +3981,9 @@ function drawZoomWindow(c) {
   c.clip();
 
   /* document -> strip: no page zoom, no page scroll, just the box */
-  c.setTransform(dpr * ZW_MAG, 0, 0, dpr * ZW_MAG,
-                 dpr * (0 - zw.x * ZW_MAG),
-                 dpr * (g.top - zw.y * ZW_MAG));
+  c.setTransform(dpr * g.mag, 0, 0, dpr * g.mag,
+                 dpr * (0 - zw.x * g.mag),
+                 dpr * (g.top - zw.y * g.mag));
   drawPaperPages(c, zw.y - 4, zw.y + g.bh + 4);
   /* strokes are drawn rather than the tiles scaled up: a tile is only one
      device pixel per document pixel, and magnified it would be visibly
@@ -3975,7 +4008,7 @@ function drawZoomWindow(c) {
   c.font = '11px -apple-system, Helvetica, sans-serif';
   c.textAlign = 'left';
   c.textBaseline = 'alphabetic';
-  c.fillText('tap the page to move the box', 10, g.top + 15);
+  c.fillText('tap the page to move the box, drag its corner to zoom', 10, g.top + 15);
 }
 
 /* ---------- resize ---------- */
@@ -5516,7 +5549,7 @@ function docPoint(t) {
     /* inside the strip the page's own zoom and scroll do not apply: the
        box is a window onto the document, placed in document coordinates */
     var g = zwGeom();
-    return { x: zw.x + sx / ZW_MAG, y: zw.y + (sy - g.top) / ZW_MAG };
+    return { x: zw.x + sx / g.mag, y: zw.y + (sy - g.top) / g.mag };
   }
   return {
     x: sx / zoom + scrollX,
@@ -6078,7 +6111,7 @@ function beginTouch(touch, now, burst) {
      touch up there puts the box somewhere else rather than drawing, which
      is the only way to start a new line without leaving the strip. */
   if (zw.on && !zwHit(touch.clientX - wrapRect.left, touch.clientY - wrapRect.top)) {
-    st.kind = 'zwplace';
+    st.kind = zwGrab(st, touch) ? 'zwsize' : 'zwplace';
     touchStates[id] = st;
     return;
   }
@@ -6482,6 +6515,9 @@ function moveTouch(touch, now) {
   var st = touchStates[touch.identifier];
   if (!st) return;
   holdMove(touch.identifier, touch.clientX, touch.clientY);
+  if (st.kind === 'zwsize') { zwResize(st, touch); return; }
+  /* aiming only: kept out of the probe update below, which could ink it */
+  if (st.kind === 'zwplace') { st.cx = touch.clientX; st.cy = touch.clientY; return; }
   var pt = docPoint(touch);
 
   if (st.kind === 'erase') {
@@ -6936,11 +6972,15 @@ function endTouch(touch, now, cancelled) {
   /* the other finger went without making a gesture: show the line again */
   if (st.kind === 'probe' && st.state === 'palm') releaseHeldInk();
 
+  if (st.kind === 'zwsize') {
+    /* its height changed under it: back onto a ruled line, and remembered */
+    zwMoveTo(zw.x, zwOnLine(zw.y, zwPage()));
+    saveSoon();
+    return;
+  }
   if (st.kind === 'zwplace') {
     if (!cancelled) {
-      var g = zwGeom();
-      var pp = { x: (st.cx - wrapRect.left) / zoom + scrollX,
-                 y: (st.cy - wrapRect.top) / zoom + scrollY };
+      var g = zwGeom(), pp = zwPagePt(st.cx, st.cy);
       zw.x = pp.x - g.bw / 2;
       zw.y = pp.y - g.bh / 2;
       zwClamp();
@@ -8220,31 +8260,32 @@ function drawSelectionOverlays(c) {
   if (c.setLineDash) c.setLineDash([]);
 
   /* resize handle on the bottom-right corner (Samsung-style) */
-  if (!dragSt) {
-    var hr = Math.max(5.5, 7 / zoom);
-    c.fillStyle = '#FFFFFF';
-    c.strokeStyle = '#0381FE';
-    c.lineWidth = 1.6 / zoom;
-    c.beginPath();
-    c.arc(rx1, ry1, hr, 0, Math.PI * 2);
-    c.fill();
-    c.stroke();
-    /* tiny diagonal double arrow = "drag to resize" */
-    var dIn = hr * 0.5, dOut = hr * 0.38;
-    c.beginPath();
-    c.moveTo(rx1 - dIn, ry1 - dIn);
-    c.lineTo(rx1 + dIn, ry1 + dIn);
-    c.moveTo(rx1 + dIn, ry1 + dIn);
-    c.lineTo(rx1 + dIn - dOut, ry1 + dIn);
-    c.moveTo(rx1 + dIn, ry1 + dIn);
-    c.lineTo(rx1 + dIn, ry1 + dIn - dOut);
-    c.moveTo(rx1 - dIn, ry1 - dIn);
-    c.lineTo(rx1 - dIn + dOut, ry1 - dIn);
-    c.moveTo(rx1 - dIn, ry1 - dIn);
-    c.lineTo(rx1 - dIn, ry1 - dIn + dOut);
-    c.stroke();
-  }
+  if (!dragSt) drawResizeHandle(c, rx1, ry1, Math.max(5.5, 7 / zoom), 1.6 / zoom, '#0381FE');
   c.restore();
+}
+
+/* a white disc with a diagonal double arrow: "drag to resize" */
+function drawResizeHandle(c, x, y, r, lw, col) {
+  c.fillStyle = '#FFFFFF';
+  c.strokeStyle = col;
+  c.lineWidth = lw;
+  c.beginPath();
+  c.arc(x, y, r, 0, Math.PI * 2);
+  c.fill();
+  c.stroke();
+  var dIn = r * 0.5, dOut = r * 0.38;
+  c.beginPath();
+  c.moveTo(x - dIn, y - dIn);
+  c.lineTo(x + dIn, y + dIn);
+  c.moveTo(x + dIn, y + dIn);
+  c.lineTo(x + dIn - dOut, y + dIn);
+  c.moveTo(x + dIn, y + dIn);
+  c.lineTo(x + dIn, y + dIn - dOut);
+  c.moveTo(x - dIn, y - dIn);
+  c.lineTo(x - dIn + dOut, y - dIn);
+  c.moveTo(x - dIn, y - dIn);
+  c.lineTo(x - dIn, y - dIn + dOut);
+  c.stroke();
 }
 
 /* ============================================================
@@ -9839,7 +9880,7 @@ window.__mnHome = function () {
 window.__mnHold = function () { holdCheck(); };
 window.__mnShape = function () { if (shapeId !== null) shapeCheck(shapeId); };
 window.__mnTidy = function () { return tidyRun(); };
-window.__mnZW = function () { var g = zwGeom(); return { on: zw.on, x: zw.x, y: zw.y, bw: g.bw, bh: g.bh, top: g.top }; };
+window.__mnZW = function () { var g = zwGeom(); return { on: zw.on, x: zw.x, y: zw.y, bw: g.bw, bh: g.bh, top: g.top, mag: g.mag }; };
 
 /* ---------- event wiring ---------- */
 function onTouchStart(e) {

@@ -578,6 +578,35 @@ check('...and at the end of a line going on starts the next one, back at the mar
       zdLast.x + zdLast.bw > 700 && Math.abs(zd.zw().y - zd2.y - (zd2.y - zd0.y)) < 1 && Math.abs(zd.zw().x - zd0.x) < 1,
       'line end at ' + Math.round(zdLast.x + zdLast.bw) + ', then y ' + Math.round(zd.zw().y) + ' x ' + Math.round(zd.zw().x));
 
+/* the box's corner handle sets the zoom: in is smaller and a bigger zoom,
+   the shape is always the strip's, and the choice is remembered */
+function zwDrag(a, x, y, dx, dy) {
+  a.down(11, x, y); a.tick(30);
+  a.moveTo(11, x + dx / 2, y + dy / 2); a.tick(30);
+  a.moveTo(11, x + dx, y + dy); a.tick(30);
+  a.up(11); a.tick(300); a.flushFrames();
+}
+var ze = zwApp(), ze0 = ze.zw();
+zwDrag(ze, ze0.x + ze0.bw - 5, ze0.y + ze0.bh + 4 + WRAPTOP, -40, -12);   /* near the corner, not on it */
+var ze1 = ze.zw();
+check('dragging the box corner in makes the box smaller - a bigger zoom',
+      ze1.bw < ze0.bw - 25 && ze1.mag > ze0.mag + 0.3,
+      'width ' + Math.round(ze0.bw) + ' -> ' + Math.round(ze1.bw) + ', zoom ' + ze0.mag.toFixed(2) + ' -> ' + ze1.mag.toFixed(2));
+check('...keeping the strip\'s shape, drawing nothing and remembered',
+      Math.abs(ze1.bw / ze1.bh - ze0.bw / ze0.bh) < 0.01 && ze.strokes().length === 0 &&
+      Math.abs(ze.state().set.zwMag - ze1.mag) < 0.001,
+      'shape ' + (ze0.bw / ze0.bh).toFixed(3) + ' -> ' + (ze1.bw / ze1.bh).toFixed(3) + ', ' + ze.strokes().length + ' strokes');
+ze.stroke({ id: 1, x0: 60, y0: ze1.top + 120 + WRAPTOP, x1: 360, y1: ze1.top + 140 + WRAPTOP, speed: 0.3, wobble: 2 });
+ze.tick(200); ze.flushFrames();
+var zes = ze.strokes()[0], zeMin = 1e9, zeMax = -1e9;
+if (zes) for (zq = 0; zq < zes.pts.length; zq++) { zeMin = Math.min(zeMin, zes.pts[zq][0]); zeMax = Math.max(zeMax, zes.pts[zq][0]); }
+check('...and writing then lands at the new zoom',
+      !!zes && Math.abs((zeMax - zeMin) - 300 / ze1.mag) < 12,
+      zes ? Math.round(zeMax - zeMin) + 'px for 300px of hand at ' + ze1.mag.toFixed(2) : 'no stroke');
+var zf = zwApp(), zf0 = zf.zw();
+zwDrag(zf, zf0.x + zf0.bw, zf0.y + zf0.bh + WRAPTOP, 400, 200);
+check('dragging it far out stops at 2x', Math.abs(zf.zw().mag - 2) < 0.001, zf.zw().mag.toFixed(2));
+
 
 /* ---------- tidy writing ----------
  * Writing drifts off the line. The fix is geometry, not recognition:
