@@ -249,6 +249,20 @@ body.dark #nbActions button { color: #F2F3F5; }
    Dragged to a side it docks half off the edge and stays while you write.
    Every item sits at the disc's centre and is moved out by a transform,
    so opening and closing is the same one animation run either way. */
+/* the zoom window's arrows, on the strip's top edge at the right */
+#zwBar {
+  position: absolute; right: 10px; top: 0; z-index: 17; display: none; padding: 3px; white-space: nowrap;
+  border-radius: 22px; background: rgba(255,255,255,0.94); box-shadow: 0 2px 10px rgba(0,0,0,0.16);
+}
+#zwBar.on { display: block; }
+.zw-b {
+  position: relative; display: inline-block; vertical-align: top; width: 46px; height: 38px;
+  border: 0; padding: 0; background: none; border-radius: 19px; color: #3C4043;
+}
+.zw-b:active { background: rgba(0,0,0,0.08); }
+.zw-b svg { position: absolute; left: 50%; top: 50%; margin: -11px 0 0 -11px; }
+body.dark #zwBar { background: rgba(40,42,48,0.94); }
+body.dark .zw-b { color: #E8EAED; }
 #penPop { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 18; display: none; }
 #penPop.on { display: block; }
 /* FROSTED GLASS, not a plate. Samsung's disc is a blurred window onto the
@@ -1479,6 +1493,22 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
       </linearGradient>
     </defs>
   </svg>
+
+  <!-- the zoom window's arrows: back, on, new line, close -->
+  <div id="zwBar">
+    <button id="zwBack" class="zw-b" aria-label="Back along the line">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 L8 12 L15 19"/></svg>
+    </button>
+    <button id="zwNext" class="zw-b" aria-label="On along the line">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5 L16 12 L9 19"/></svg>
+    </button>
+    <button id="zwLine" class="zw-b" aria-label="Next line">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5 V11 a3 3 0 0 1 -3 3 H6"/><path d="M10 10 L6 14 L10 18"/></svg>
+    </button>
+    <button id="zwClose" class="zw-b" aria-label="Close the zoom window">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6 L18 18 M18 6 L6 18"/></svg>
+    </button>
+  </div>
 
   <!-- pen pop-up: hold the pen still and this opens at the nib -->
   <div id="penPop">
@@ -3770,38 +3800,128 @@ function zwHit(sx, sy) {
 
 function zwClamp() {
   var g = zwGeom();
-  if (zw.x < 0) zw.x = 0;
-  if (zw.x > Math.max(0, viewW - g.bw)) zw.x = Math.max(0, viewW - g.bw);
+  if (zw.x < docX0) zw.x = docX0;
+  if (zw.x > Math.max(docX0, docW - g.bw)) zw.x = Math.max(docX0, docW - g.bw);
   if (zw.y < 0) zw.y = 0;
   if (docH && zw.y > Math.max(0, docH - g.bh)) zw.y = Math.max(0, docH - g.bh);
 }
 
-/* walk the box along the line, and wrap to the next one at the margin */
-function zwAdvance(maxX) {
-  var g = zwGeom();
-  if (maxX < zw.x + g.bw * ZW_EDGE) return;
-  zw.x += g.bw * ZW_STEP;
-  if (zw.x + g.bw > viewW) {
-    zw.x = 40;
-    zw.y += Math.max(settings.spacing || 32, g.bh * 0.55);
+/* SAMSUNG'S ZOOM PAD MOVES ON BY ITSELF, AND BACK AND FORTH ON COMMAND.
+ * Writing into the shaded end of the strip carries the box on along the
+ * line; at the end of the line it drops to the next ruled line at the
+ * margin, and off the bottom of a page onto the next one. Every move is a
+ * glide, the strip travelling with the box, rather than a jump - and the
+ * arrows on the strip do the same by hand: back, on, new line. It used to
+ * jump, and wrap at the edge of the SCREEN rather than of the page. */
+var zwAnim = null, zwAnimRAF = 0;
+function zwPage() {
+  var g = zwGeom(), t = zwTarget();
+  return lim(Math.floor((horiz() ? t.x + g.bw / 2 : t.y + g.bh / 2) / pageSpan()), 0, pageCount() - 1);
+}
+function zwLineStart(p) { return pageOrigin(p) + MARGIN_X - 12; }    /* the box's left edge, just before the margin */
+function zwLineEnd(p) { return pageRight(p) - 6; }
+function zwPageTop(p) { return horiz() ? 0 : p * pageSpan(); }
+/* where the box is going - the end of a glide under way, or where it is */
+function zwTarget() { return zwAnim ? { x: zwAnim.x1, y: zwAnim.y1 } : { x: zw.x, y: zw.y }; }
+/* the ruled line nearest y sits 65% of the way down the box: a line to
+   write on, room above it for tall letters and below for tails */
+function zwOnLine(y, p) {
+  var g = zwGeom(), sp = settings.spacing || 32, top = zwPageTop(p);
+  var k = Math.round((y + g.bh * 0.65 - top - FIRST_BASE) / sp);
+  k = lim(k, 0, Math.floor((PAGE_H - 16 - FIRST_BASE) / sp));
+  return top + FIRST_BASE + k * sp - g.bh * 0.65;
+}
+function zwMoveTo(x, y) {
+  var g = zwGeom(), vh = (viewH - g.h) / zoom, vw = viewW / zoom, sy = scrollY, sx = scrollX;
+  /* keep the box on screen, above the strip */
+  if (y < scrollY + 8 || y + g.bh > scrollY + vh - 8) sy = y - vh * 0.3;
+  if (x < scrollX + 4 || x + g.bw > scrollX + vw - 4) sx = x - (vw - g.bw) / 2;
+  zwAnim = { x0: zw.x, y0: zw.y, x1: x, y1: y, sx0: scrollX, sy0: scrollY, sx1: sx, sy1: sy, t0: Date.now() };
+  if (!zwAnimRAF) zwAnimRAF = window.requestAnimationFrame(zwAnimStep);
+}
+function zwAnimStep() {
+  zwAnimRAF = 0;
+  var a = zwAnim;
+  if (!a) return;
+  var e = Math.min(1, (Date.now() - a.t0) / 220), t = 1 - Math.pow(1 - e, 3);
+  zw.x = a.x0 + (a.x1 - a.x0) * t;
+  zw.y = a.y0 + (a.y1 - a.y0) * t;
+  if (a.sy1 !== a.sy0 || a.sx1 !== a.sx0) {
+    scrollY = a.sy0 + (a.sy1 - a.sy0) * t;
+    scrollX = a.sx0 + (a.sx1 - a.sx0) * t;
+    clampScroll();
   }
+  if (e >= 1) zwAnim = null;
   zwClamp();
   requestRender();
+  if (zwAnim) zwAnimRAF = window.requestAnimationFrame(zwAnimStep);
+}
+/* on along the line, or onto the next line once at its end */
+function zwNext() {
+  var g = zwGeom(), p = zwPage(), t = zwTarget(), xMax = zwLineEnd(p) - g.bw;
+  if (t.x >= xMax - 1) { zwNewLine(); return; }
+  zwMoveTo(Math.min(t.x + g.bw * ZW_STEP, xMax), t.y);
+}
+/* back along the line, or to the end of the line above */
+function zwBack() {
+  var g = zwGeom(), p = zwPage(), t = zwTarget(), xMin = zwLineStart(p);
+  if (t.x <= xMin + 1) {
+    var y = t.y - (settings.spacing || 32);
+    if (y + g.bh * 0.65 < zwPageTop(p) + FIRST_BASE - 1) return;      /* the first line of the page */
+    zwMoveTo(zwLineEnd(p) - g.bw, y);
+    return;
+  }
+  zwMoveTo(Math.max(t.x - g.bw * ZW_STEP, xMin), t.y);
+}
+/* the next ruled line, back at the margin - and over onto the next page
+   when this one is full, making it if it is the last */
+function zwNewLine() {
+  var g = zwGeom(), p = zwPage(), t = zwTarget(), n = activeNote();
+  var y = zwOnLine(t.y, p) + (settings.spacing || 32);
+  if (y + g.bh * 0.65 > zwPageTop(p) + PAGE_H - 16) {
+    p += 1;
+    if (n && p >= pageCount()) { n.minPages = Math.max(n.minPages || 1, p + 1); recomputeDoc(); saveSoon(); }
+    y = zwOnLine(zwPageTop(p), p);
+  }
+  zwMoveTo(zwLineStart(p), y);
+}
+/* writing that reaches into the shaded end of the strip carries it on */
+function zwAdvance(maxX) {
+  var g = zwGeom();
+  if (maxX < zwTarget().x + g.bw * ZW_EDGE) return;
+  zwNext();
+}
+/* the arrows sit on the strip's top edge, at the right */
+function zwBarPlace() {
+  var bar = byId('zwBar');
+  if (!bar) return;
+  bar.className = zw.on ? 'on' : '';
+  if (zw.on) bar.style.top = Math.round((wrapRect ? wrapRect.top : 102) + zwGeom().top + 8) + 'px';
 }
 
 function zwToggle() {
   zw.on = !zw.on;
+  zwAnim = null;
   if (zw.on) {
-    /* open onto whatever is in the middle of what you are looking at */
-    var g = zwGeom();
-    zw.x = 40;
-    zw.y = scrollY + (viewH / zoom) * 0.28;
+    /* open at the margin, on a ruled line in the upper part of what you
+       are looking at */
+    var g = zwGeom(), p = currentPage() - 1;
+    zw.x = zwLineStart(p);
+    zw.y = zwOnLine(scrollY + (viewH / zoom) * 0.28, p);
     zwClamp();
     toast('Write in the strip - it lands in the box above');
   }
+  zwBarPlace();
   applyPalmUI();
   requestRender();
 }
+(function () {
+  var b = byId('zwBack'), n = byId('zwNext'), l = byId('zwLine'), c = byId('zwClose');
+  if (b) b.addEventListener('click', zwBack);
+  if (n) n.addEventListener('click', zwNext);
+  if (l) l.addEventListener('click', zwNewLine);
+  if (c) c.addEventListener('click', function () { if (zw.on) zwToggle(); });
+})();
 
 function drawZoomWindow(c) {
   var g = zwGeom();
@@ -3842,12 +3962,19 @@ function drawZoomWindow(c) {
   }
   c.restore();
 
-  /* a lip along the top edge so the strip reads as a separate surface */
+  /* the shaded end: writing that reaches in here carries the box on */
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.fillStyle = P.dark ? 'rgba(255,255,255,0.06)' : 'rgba(3,129,254,0.06)';
+  c.fillRect(g.w * ZW_EDGE, g.top, g.w * (1 - ZW_EDGE), g.h);
+  c.fillStyle = P.dark ? 'rgba(255,255,255,0.18)' : 'rgba(3,129,254,0.22)';
+  c.fillRect(Math.round(g.w * ZW_EDGE), g.top, 1, g.h);
+  /* a lip along the top edge so the strip reads as a separate surface */
   c.fillStyle = 'rgba(226,35,26,0.85)';
   c.fillRect(0, g.top, g.w, 2);
   c.fillStyle = P.dark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.38)';
   c.font = '11px -apple-system, Helvetica, sans-serif';
+  c.textAlign = 'left';
+  c.textBaseline = 'alphabetic';
   c.fillText('tap the page to move the box', 10, g.top + 15);
 }
 
@@ -3869,6 +3996,7 @@ function resizeView() {
   invalidateAll();
   wrapRect = canvasWrap.getBoundingClientRect();
   popPlace();
+  zwBarPlace();
   if (refOn) wrapRect = { left: wrapRect.left, top: wrapRect.top + REF_BAR_H,
                           width: wrapRect.width, height: wrapRect.height };
   clampScroll();

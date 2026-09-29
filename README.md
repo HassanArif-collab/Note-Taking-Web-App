@@ -127,13 +127,16 @@ level. A folder cannot be put inside its own child.
 
 ### Zoom window — for writing small
 
-**⋮ menu → Zoom window.** The bottom of the screen becomes a strip that
+**Settings → Zoom window.** The bottom of the screen becomes a strip that
 magnifies a small box of the page. Write large in the strip; it lands small
-in the box, at about a third the size.
+in the box, at about a third the size. The box opens at the margin, sitting
+on a ruled line.
 
-The box walks along the line on its own as you reach its right edge, and wraps
-to the next line at the margin, so a whole line can be written without
-touching anything else. To put it somewhere else, **tap the page above** —
+Writing that reaches the shaded right end of the strip slides the box on to
+the right; at the end of the line it drops to the start of the next ruled
+line, and after the last line onto the next page (making one if needed). The
+buttons on the strip do the same by hand: **‹** back, **›** forward, **↵** new
+line, **✕** close. To put the box somewhere else, **tap the page above** —
 while the strip is open the page is for aiming, not writing.
 
 This exists because a passive disc stylus **cannot** write small. The contact

@@ -558,6 +558,26 @@ check('tapping the page moves the box there',
 check('...and leaves no ink where it was tapped', zc.strokes().length === 0,
       zc.strokes().length + ' strokes');
 
+/* Samsung's pad: arrows on the strip, a new line, and the end of the line */
+function zwPress(a, id) { a.els[id]._fire('click', {}); a.tick(300); a.flushFrames(); }
+var zd = zwApp(), zd0 = zd.zw();
+zwPress(zd, 'zwNext');
+var zd1 = zd.zw();
+check('the forward arrow glides the box on along the line',
+      zd1.x > zd0.x + 50 && Math.abs(zd1.y - zd0.y) < 1, Math.round(zd0.x) + ' -> ' + Math.round(zd1.x));
+zwPress(zd, 'zwBack');
+check('...and the back arrow brings it back', Math.abs(zd.zw().x - zd0.x) < 1, Math.round(zd.zw().x));
+zwPress(zd, 'zwLine');
+var zd2 = zd.zw();
+check('the new-line arrow goes one ruled line down, at the margin',
+      zd2.y - zd0.y > 25 && zd2.y - zd0.y < 50 && Math.abs(zd2.x - zd0.x) < 1,
+      'y ' + Math.round(zd0.y) + ' -> ' + Math.round(zd2.y) + ', x ' + Math.round(zd2.x));
+var zdLast = zd2, zdK;
+for (zdK = 0; zdK < 8 && zd.zw().y === zd2.y; zdK++) { zdLast = zd.zw(); zwPress(zd, 'zwNext'); }
+check('...and at the end of a line going on starts the next one, back at the margin',
+      zdLast.x + zdLast.bw > 700 && Math.abs(zd.zw().y - zd2.y - (zd2.y - zd0.y)) < 1 && Math.abs(zd.zw().x - zd0.x) < 1,
+      'line end at ' + Math.round(zdLast.x + zdLast.bw) + ', then y ' + Math.round(zd.zw().y) + ' x ' + Math.round(zd.zw().x));
+
 
 /* ---------- tidy writing ----------
  * Writing drifts off the line. The fix is geometry, not recognition:
