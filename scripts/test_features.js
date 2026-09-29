@@ -1719,13 +1719,38 @@ var pd = scApp(), pd0 = pd.strokes().length;
 pd.down(1, 400, 400); pd.tick(450); pd.win.__mnHold(); pd.up(1); pd.tick(400); pd.flushFrames();
 check('a dot held for 450ms is still a dot, not the pop-up', pd.pen().pop === '' && pd.strokes().length === pd0 + 1,
       pd.pen().pop + ', ' + (pd.strokes().length - pd0) + ' marks');
-holdOpen(pd, 2, 300, 450);
-for (var pk = 1; pk <= 8; pk++) { pd.tick(16); pd.moveTo(2, 300 + pk * 10, 450 + pk * 3); }
-pd.tick(16); pd.up(2); pd.tick(150); pd.flushFrames();
-var pdS = pd.strokes()[pd.strokes().length - 1];
-check('a pause before writing: the pop-up gives way and the whole stroke is kept',
-      pd.pen().pop === '' && pd.strokes().length === pd0 + 2 && pdS && pdS.pts[0][0] < 305,
-      pd.pen().pop + ', ' + (pd.strokes().length - pd0) + ' marks, starts at ' + (pdS ? Math.round(pdS.pts[0][0]) : '-'));
+/* the pen that opened it keeps pointing: slide, then lift to pick */
+function slide(a, id, pts) { for (var q = 0; q < pts.length; q++) { a.tick(16); a.moveTo(id, pts[q][0], pts[q][1]); } }
+var ps = scApp(), ps0 = ps.strokes().length;
+holdOpen(ps, 2, 400, 450);
+slide(ps, 2, [[420, 450], [445, 450], [466, 450]]);             /* onto the colour dot, 66px right */
+check('holding on, sliding onto the colour opens the colours - no writing',
+      ps.pen().pop === 'float col' && ps.strokes().length === ps0, ps.pen().pop + ', ' + (ps.strokes().length - ps0) + ' marks');
+var psC = ps.els.ppCols.children, psK = -1, psA;
+for (var pq = 0; pq < psC.length; pq++) { if (psC[pq].style.opacity === '1') { psK = pq; break; } }
+psA = 150;                                                     /* the second slot of the ring: grey */
+slide(ps, 2, [[400 + 66 * Math.cos(psA * Math.PI / 180), 450 + 66 * Math.sin(psA * Math.PI / 180)]]);
+ps.up(2); ps.tick(50); ps.flushFrames();
+check('...and lifting on a colour picks it, the pop-up stays',
+      psK === 0 && ps.pen().color === '#7F7F7F' && ps.pen().pop === 'float' &&
+      ps.strokes().length === ps0, ps.pen().color + ' (slot ' + psK + '), ' + ps.pen().pop + ', ' + (ps.strokes().length - ps0) + ' marks');
+var pw0 = ps.pen().w;
+holdOpen(ps, 3, 400, 450);
+slide(ps, 3, [[380, 450], [355, 450], [334, 450]]);             /* onto the width, 66px left */
+check('sliding onto the width opens the width dial', ps.pen().pop === 'float size', ps.pen().pop);
+slide(ps, 3, [[340, 480], [360, 505], [380, 514]]);             /* round the ring, down and clockwise? no - anticlockwise */
+var pwMid = ps.pen().w;
+slide(ps, 3, [[360, 505], [340, 480], [334, 450], [340, 420], [360, 395], [380, 386]]);
+ps.up(3); ps.tick(50); ps.flushFrames();
+check('...turning round the dial changes the width both ways, and lifting keeps it',
+      pwMid !== pw0 && ps.pen().w !== pwMid && ps.strokes().length === ps0,
+      'from ' + pw0 + ' to ' + pwMid + ' to ' + ps.pen().w);
+holdOpen(ps, 4, 400, 450);
+slide(ps, 4, [[400, 420], [400, 400], [400, 430], [400, 450]]);  /* off the middle and back onto it */
+check('sliding back onto the pen in the middle brings out the row of pens', ps.pen().pop === 'float pens', ps.pen().pop);
+slide(ps, 4, [[430, 450], [452, 452]]);                          /* one pen along the row, 52px right */
+ps.up(4); ps.tick(50); ps.flushFrames();
+check('...and lifting on another pen picks it', ps.pen().pen === 1 && ps.pen().pop === 'float', 'pen ' + ps.pen().pen + ', ' + ps.pen().pop);
 
 var pm = scApp({ palmLevel: 2 });
 holdOpen(pm, 1, 500, 400);

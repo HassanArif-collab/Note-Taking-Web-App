@@ -258,16 +258,41 @@ body.dark #nbActions button { color: #F2F3F5; }
    filter the 0.74 white alone still looks close enough to walk away from. */
 #ppDisc {
   position: absolute; left: -88px; top: -88px; width: 176px; height: 176px;
-  border-radius: 50%; background: rgba(255,255,255,0.74);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
-  backdrop-filter: blur(14px) saturate(160%);
-  box-shadow: 0 10px 34px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.5) inset,
-              0 0 0 1px rgba(0,0,0,0.07);
   opacity: 0; -webkit-transform: scale(0.2); transform: scale(0.2);
   -webkit-transition: -webkit-transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.06), opacity 0.12s ease-out;
   transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.06), opacity 0.12s ease-out;
 }
 #penPop.show #ppDisc { opacity: 1; -webkit-transform: scale(1); transform: scale(1); }
+#ppFace {
+  position: absolute; left: 0; top: 0; width: 176px; height: 176px;
+  border-radius: 50%; background: rgba(255,255,255,0.74);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
+  box-shadow: 0 10px 34px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.5) inset,
+              0 0 0 1px rgba(0,0,0,0.07);
+  -webkit-transition: -webkit-transform 0.22s ease-out, opacity 0.18s ease-out;
+  transition: transform 0.22s ease-out, opacity 0.18s ease-out;
+}
+/* the pens come out Samsung's way: the disc fades, the pen in hand stays
+   where it was (the row's own copy takes its place) and the others slide out */
+#penPop.m-pens #ppFace { opacity: 0; -webkit-transform: scale(0.72); transform: scale(0.72); }
+#penPop.m-pens #ppCore { opacity: 0; pointer-events: none; }
+/* the width dial: the stroke itself in the middle, the number beside it */
+#ppWave {
+  position: absolute; left: 56px; top: 72px; width: 64px; height: 32px; z-index: 3;
+  opacity: 0; pointer-events: none; -webkit-transition: opacity 0.15s; transition: opacity 0.15s;
+}
+#penPop.m-size #ppWave { opacity: 1; }
+#penPop.m-size #ppCore svg { opacity: 0; }
+#ppNum {
+  position: absolute; left: 88px; top: 88px; z-index: 1; min-width: 34px; height: 30px; margin: -15px 0 0 -17px;
+  padding: 0 6px; -webkit-box-sizing: border-box; box-sizing: border-box; border-radius: 15px;
+  background: #FFFFFF; box-shadow: 0 2px 8px rgba(0,0,0,0.18); color: #202124;
+  font-size: 15px; font-weight: 700; line-height: 30px; text-align: center; opacity: 0;
+  -webkit-transition: -webkit-transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.1), opacity 0.16s;
+  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.1), opacity 0.16s;
+}
+#ppCore svg { -webkit-transition: opacity 0.15s; transition: opacity 0.15s; }
 #ppCore {
   position: absolute; left: 46px; top: 46px; width: 84px; height: 84px; z-index: 2;
   border: 0; padding: 0; border-radius: 50%; overflow: hidden; background: #FFFFFF;
@@ -297,9 +322,13 @@ body.dark #nbActions button { color: #F2F3F5; }
 .pp-c.on i { box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4px #0381FE; }
 .pp-w { width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; }
 .pp-w.on { background: rgba(3,129,254,0.14); }
-.pp-pen { width: 40px; height: 100px; margin: -50px 0 0 -20px; overflow: hidden; }
+.pp-pen { width: 40px; height: 100px; margin: -66px 0 0 -20px; overflow: hidden; z-index: 2; }
 .pp-pen canvas { position: absolute; left: 0; top: 0; width: 40px; height: 24px; }
-.pp-pen span { position: absolute; left: 0; top: 22px; width: 40px; height: 120px; }
+.pp-pen span { position: absolute; left: 0; top: 28px; width: 40px; height: 120px; }
+#penPop.m-pens .pp-pen {
+  -webkit-transition: -webkit-transform 0.26s cubic-bezier(0.2, 0.9, 0.3, 1.08), opacity 0.2s;
+  transition: transform 0.26s cubic-bezier(0.2, 0.9, 0.3, 1.08), opacity 0.2s;
+}
 @-webkit-keyframes ppFade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ppFade { from { opacity: 0; } to { opacity: 1; } }
 #ppBand svg { -webkit-animation: ppFade 0.2s ease-out; animation: ppFade 0.2s ease-out; }
@@ -1311,8 +1340,9 @@ body.dark .sz-stop, body.dark .pg-dot i { background: #55585F; }
 body.dark .pg-dot.on i { background: #C4C7CC; }
 body.dark #sizeKnob { background: #2B2D33; color: #E8EAED; }
 body.dark .sw.on { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12), 0 0 0 2px #1D1E22, 0 0 0 4px #61A8FF; }
-body.dark #ppDisc { background: rgba(32,34,39,0.78); box-shadow: 0 10px 34px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.10) inset, 0 0 0 1px rgba(255,255,255,0.07); }
+body.dark #ppFace { background: rgba(32,34,39,0.78); box-shadow: 0 10px 34px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.10) inset, 0 0 0 1px rgba(255,255,255,0.07); }
 body.dark #ppCore { background: #2B2D33; }
+body.dark #ppNum { background: #2B2D33; color: #E8EAED; }
 body.dark .pp-c.on i { box-shadow: 0 0 0 2px #202227, 0 0 0 4px #61A8FF; }
 body.dark #eraserPanel .ep-h, body.dark #shapeRow .sh-h { color: #8C8C8C; }
 body.dark .ep-mode, body.dark .sh-mode { background: #26282C; color: #B8B8BC; }
@@ -1453,7 +1483,10 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
   <!-- pen pop-up: hold the pen still and this opens at the nib -->
   <div id="penPop">
     <div id="ppDisc">
+      <div id="ppFace"></div>
       <div id="ppBand"></div>
+      <canvas id="ppWave" width="128" height="64"></canvas>
+      <div id="ppNum"></div>
       <div id="ppPens"></div>
       <div id="ppCols"></div>
       <div id="ppWs"></div>
@@ -10487,20 +10520,31 @@ function openPenPanel() {
 /* ---------- pen pop-up ----------
  * Samsung Notes' "pens in pop-up view", which the S Pen's button opens at
  * the nib. A disc stylus has no button, so here it is holding the pen
- * still. Your own recordings set how long: no dot made in Glove mode was
- * held longer than 550ms, and 0.8% of strokes paused 600ms before moving
- * off - for those the pop-up closes the moment the pen moves on, and the
- * stroke is kept from its first point.
+ * still: no dot made in Glove mode was held longer than 550ms (recorded).
+ *
+ * The pen that opened it stays down and POINTS. Slide onto the colour or
+ * the width and its ring opens; slide onto a colour, a width or a pen and
+ * it is picked the moment the pen lifts - no lifting and tapping. (Moving
+ * used to close it and carry on writing, reading the hold as a pause in a
+ * stroke; the user wants to choose, not write.)
+ *
+ * The pens come out Samsung's way: the disc fades, the pen in hand stays
+ * exactly where it was, and the others slide out beside it along a gentle
+ * band, each with a sample of its stroke above the nib. The width is a
+ * dial: the chosen width stays put beside its number while the others turn
+ * round the ring under the finger, and the middle shows the stroke itself.
  *
  * Floating, it closes at the next touch on the page, and a tap that only
- * closes it leaves no dot. Dragged to a side it docks half off the edge,
- * like Samsung's, and stays up while you write.
- * Glove mode only: in the palm modes a resting hand is also a contact that
- * does not move, and it would open this every time it settled. */
-var HOLD_MS = 600, HOLD_PX = 8, POP_ESCAPE = 24;
-var PP_R = 66, PP_FAN = 132, PP_EDGE = 34, PP_TOP = 102;
+ * closes it leaves no dot. Dragged to a side it docks half off the edge and
+ * stays up while you write. */
+var HOLD_MS = 600, HOLD_PX = 8;
+var PP_R = 66, PP_EDGE = 34, PP_TOP = 102;
+var PP_ROW = 52;           /* the pens in the row sit this far apart... */
+var PP_ARC = 0.0011;       /* ...along a gentle dome, y = PP_ARC * x^2 */
+var PP_DIAL = 30;          /* the width dial turns one width per 30 degrees */
 var hold = null;
-var pop = { on: false, x: 0, y: 0, open: '', off: 0, drag: null, hideT: null, band: '' };
+var pop = { on: false, x: 0, y: 0, open: '', off: 0, drag: null, hideT: null, band: '',
+            hot: null, x0: 0, y0: 0, left: false, dial: null, shift: 0, turning: false };
 
 function holdArm(id, now) {
   holdDisarm();
@@ -10526,18 +10570,15 @@ function holdCheck() {
   if (inkNow[h.id]) { inkNow[h.id].held = true; requestRender(); }
   traceVerdict('pen-pop', h.id, now);
   popShow(h.x, h.y);
+  pop.x0 = h.x; pop.y0 = h.y; pop.left = false;
 }
-/* moving on after it opened was a pause before writing, not a choice */
+/* the pen still down after the pop-up opened points into it */
 function holdMove(id, x, y) {
   if (!hold || hold.id !== id) return;
-  var d = dist(hold.x, hold.y, x, y);
-  if (!hold.fired) { if (d > HOLD_PX) holdDisarm(); return; }
-  if (d <= POP_ESCAPE) return;
-  holdDisarm();
-  popHide();
-  if (inkNow[id]) { inkNow[id].held = false; requestRender(); }
+  if (!hold.fired) { if (dist(hold.x, hold.y, x, y) > HOLD_PX) holdDisarm(); return; }
+  popPoint(x, y);
 }
-/* the lift of the hold that opened the pop-up draws nothing */
+/* the lift of the hold that opened the pop-up draws nothing - it picks */
 function holdEnd(st) {
   if (!hold || hold.id !== st.id) return false;
   var fired = hold.fired;
@@ -10546,6 +10587,7 @@ function holdEnd(st) {
   delete inkNow[st.id];
   if (lassoId === st.id) lassoId = null;
   if (eraserTouchId === st.id) eraserTouchId = null;
+  popRelease();
   requestRender();
   return true;
 }
@@ -10553,29 +10595,45 @@ function holdEnd(st) {
 function ppBase() { return settings.popDock === 1 ? 0 : settings.popDock === 2 ? 180 : -90; }
 function ppXY(r, deg) { var a = deg * Math.PI / 180; return [r * Math.cos(a), r * Math.sin(a)]; }
 function ppTf(el, t) { el.style.webkitTransform = t; el.style.transform = t; }
-/* out on its ring, or folded back into the middle while its group is shut */
-function ppSet(el, r, deg, rot, shown, fold) {
-  var p = shown || !fold ? ppXY(r, deg) : [0, 0];
-  ppTf(el, 'translate(' + Math.round(p[0]) + 'px,' + Math.round(p[1]) + 'px) rotate(' + Math.round(rot) +
-           'deg) scale(' + (shown ? 1 : fold ? 0.3 : 0.6) + ')');
+function ppAng(x, y) { return Math.atan2(y - pop.y, x - pop.x) * 180 / Math.PI; }
+/* place one item: out at (x, y), or folded into the middle while its group
+   is shut; the one under the pointing pen swells */
+function ppPut(el, x, y, rot, shown, fold, hot) {
+  if (!shown && fold) { x = 0; y = 0; }
+  ppTf(el, 'translate(' + Math.round(x) + 'px,' + Math.round(y) + 'px) rotate(' + Math.round(rot) +
+           'deg) scale(' + (shown ? (hot ? 1.3 : 1) : fold ? 0.3 : 0.6) + ')');
   el.style.opacity = shown ? '1' : '0';
   el.style.pointerEvents = shown ? 'auto' : 'none';
 }
+function ppSet(el, r, deg, rot, shown, fold, hot) {
+  var p = ppXY(r, deg);
+  ppPut(el, p[0], p[1], rot, shown, fold, hot);
+}
 /* angles, 0 = right and 90 = down. Docked, everything moves round to the
-   half of the disc that is still on screen.
-   Floating, two more join the ring: the star at 315 opens the favourites
-   grid and the panel icon at 225 opens the docked sidebar - both in the
-   empty upper corners, clear of the colour at the right and the width on
-   the left. Docked there is no room left in the visible half for either,
-   so they are folded away and reached by floating the disc first. */
+   half of the disc that is still on screen. Floating, the star at 315 opens
+   the favourites and the panel icon at 225 the docked sidebar; docked there
+   is no room left for either, so they are reached by floating it first. */
 function ppAngles() {
   var b = ppBase();
-  if (!settings.popDock) return { col: 0, size: 180, erase: 118, lasso: 62, more: 90, fav: 315, dock: 225, r0: 120, r1: 420, rs: 30, s0: 110, s1: 250 };
-  return { col: b - 75, size: b - 25, erase: b + 25, lasso: b + 75, more: b + 96, fav: b - 150, dock: b + 150, r0: b - 96, r1: b + 72, rs: 24, s0: b - 70, s1: b + 70 };
+  if (!settings.popDock) return { col: 0, size: 180, erase: 118, lasso: 62, more: 90, fav: 315, dock: 225, r0: 120, r1: 420, rs: 30 };
+  return { col: b - 75, size: b - 25, erase: b + 25, lasso: b + 75, more: b + 96, fav: b - 150, dock: b + 150, r0: b - 96, r1: b + 72, rs: 24 };
 }
 function ppSlots(A) { return Math.round((A.r1 - A.r0) / A.rs) + 1; }
-/* the pens fan out above the nib, unless the toolbar is in the way */
-function ppFan() { return settings.popDock ? ppBase() : (pop.y - PP_FAN - 70 > PP_TOP ? -90 : 90); }
+/* the width dial: the chosen width sits at this angle, beside its number */
+function ppDialAt() { return settings.popDock ? ppBase() : 180; }
+function ppDialAngle(k) { return ppDialAt() - (k - settings.widthStep) * PP_DIAL; }
+/* a pen's place in the row: the pen in hand at the middle, the others either
+   side along the dome. Docked, the row runs down the edge instead. */
+function ppRowSlot(i) {
+  var n = PENS.length, half = Math.floor(n / 2);
+  return ((i - settings.pen + half + n) % n) - half;        /* the others either side, in turn */
+}
+function ppRowPos(i) {
+  var d = ppRowSlot(i) * PP_ROW, c = d * d * PP_ARC, tilt = Math.atan(2 * PP_ARC * d) * 180 / Math.PI;
+  if (!settings.popDock) return { x: d + pop.shift, y: c, rot: tilt };
+  var s = settings.popDock === 1 ? 1 : -1;
+  return { x: -s * c, y: d, rot: s * 90 - s * tilt };
+}
 function ppDot(step) {
   var p = PENS[settings.pen], w = p.wMin + (p.wMax - p.wMin) * step / 5;
   return Math.round(lim(5 + w * 1.2, 6, 24));
@@ -10587,14 +10645,26 @@ function ppInk(c) {
   if (settings.uiDark) return lum < 0.3 ? '#E8EAED' : c;
   return lum > 0.85 ? '#C3C7CC' : c;
 }
-function ppBandSvg(a0, a1) {
-  var p0 = ppXY(PP_FAN, a0), p1 = ppXY(PP_FAN, a1);
-  var d = 'M' + (200 + p0[0]).toFixed(1) + ' ' + (200 + p0[1]).toFixed(1) + 'A' + PP_FAN + ' ' + PP_FAN +
-          ' 0 0 1 ' + (200 + p1[0]).toFixed(1) + ' ' + (200 + p1[1]).toFixed(1);
-  return '<svg width="400" height="400" style="position:absolute;left:-200px;top:-200px">' +
-         '<path d="' + d + '" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="106" stroke-linecap="round"/>' +
-         '<path d="' + d + '" fill="none" stroke="' + (settings.uiDark ? '#202227' : '#FCFCFD') +
-         '" stroke-width="102" stroke-linecap="round"/></svg>';
+/* the band the pens stand on */
+function ppRowBandSvg() {
+  var pts = [], i, half = Math.floor(PENS.length / 2), t, x, y, p;
+  var a = { x: -half * PP_ROW + pop.shift, y: -half * PP_ROW }, b = { x: half * PP_ROW + pop.shift, y: half * PP_ROW };
+  for (i = 0; i <= 12; i++) {
+    t = i / 12;
+    if (!settings.popDock) {
+      x = a.x - 30 + (b.x - a.x + 60) * t;
+      y = (x - pop.shift) * (x - pop.shift) * PP_ARC - 16;
+    } else {
+      y = a.y - 30 + (b.y - a.y + 60) * t;
+      x = -(settings.popDock === 1 ? 1 : -1) * (y * y * PP_ARC - 16);
+    }
+    pts.push((400 + x).toFixed(1) + ' ' + (300 + y).toFixed(1));
+  }
+  p = 'M' + pts.join('L');
+  return '<svg width="800" height="600" style="position:absolute;left:-400px;top:-300px">' +
+         '<path d="' + p + '" fill="none" stroke="rgba(0,0,0,0.07)" stroke-width="122" stroke-linecap="round" stroke-linejoin="round"/>' +
+         '<path d="' + p + '" fill="none" stroke="' + (settings.uiDark ? 'rgba(32,34,39,0.94)' : 'rgba(252,252,253,0.96)') +
+         '" stroke-width="118" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 }
 
 function popPlace(free) {
@@ -10617,10 +10687,9 @@ function popShow(x, y) {
   closePanels();
   clearTimeout(pop.hideT);
   if (settings.popDock) { settings.popDock = 0; saveSoon(); }   /* held open, it comes to the pen */
-  pop.x = x; pop.y = y; pop.open = '';
+  pop.x = x; pop.y = y; pop.open = ''; pop.hot = null; pop.dial = null;
   popPlace();
   if (!pop.on) { pop.on = true; el.className = 'on'; void el.offsetWidth; }
-  el.className = 'on show';
   popPaint();
   setTimeout(function () { layoutReport('pop'); }, 500);
 }
@@ -10629,22 +10698,34 @@ function popHide() {
   var el = byId('penPop');
   pop.on = false;
   pop.open = '';
+  pop.hot = null;
   el.className = 'on';
   pop.hideT = setTimeout(function () { if (!pop.on) el.className = ''; }, 220);
 }
 function popOpen(what) {
+  var W = window.innerWidth || viewW || 1024, lo, hi;
   pop.open = pop.open === what ? '' : what;
+  pop.dial = null;
   if (pop.open === 'col') {
     var A = ppAngles(), at = COLORS.indexOf(settings.color), n = ppSlots(A);
     pop.off = lim(at < 0 ? 0 : at - Math.floor(n / 2), 0, COLORS.length - n);
   }
-  if (pop.open === 'pens') ppPaintPens();
+  if (pop.open === 'pens') {
+    /* the pen in hand stays where it was; the row slides over only if it
+       would run off the side of the screen */
+    pop.shift = 0;
+    lo = pop.x - Math.floor(PENS.length / 2) * PP_ROW - 30;
+    hi = pop.x + Math.floor(PENS.length / 2) * PP_ROW + 30;
+    if (!settings.popDock) pop.shift = lo < 8 ? 8 - lo : hi > W - 8 ? W - 8 - hi : 0;
+    ppPaintPens();
+  }
   popPaint();
 }
 function popPick(fn) {
   fn();
   if (tool !== 'pen') setTool('pen');
   pop.open = '';
+  pop.hot = null;
   applyPenUI();          /* repaints the pop-up too */
   saveSoon();
 }
@@ -10664,19 +10745,92 @@ function ppPaintPens() {
   }
 }
 
+/* which item is under a point (page coordinates), from the same geometry
+   popPaint lays them out with */
+function ppHit(x, y) {
+  var rx = x - pop.x, ry = y - pop.y, A = ppAngles(), open = pop.open, best = null, bd = 1e9, k, p, d, kids, n;
+  function near(el, px, py, rad, kind) {
+    d = dist(rx, ry, px, py);
+    if (d < rad && d < bd) { bd = d; best = { el: el, kind: kind }; }
+  }
+  if (open === 'pens') {
+    kids = byId('ppPens').children;
+    for (k = 0; k < kids.length; k++) {
+      p = ppRowPos(k);
+      if (settings.popDock ? Math.abs(ry - p.y) < 26 : Math.abs(rx - p.x) < 26 && ry > p.y - 70 && ry < p.y + 40) {
+        near(kids[k], p.x, p.y, 200, 'pen');
+      }
+    }
+    return best;
+  }
+  if (rx * rx + ry * ry < 44 * 44) return { el: byId('ppCore'), kind: 'core' };
+  if (open === 'col') {
+    kids = byId('ppCols').children; n = ppSlots(A);
+    for (k = 0; k < kids.length; k++) {
+      d = k - pop.off;
+      if (d > -0.5 && d < n - 0.5) { p = ppXY(PP_R, A.r0 + d * A.rs); near(kids[k], p[0], p[1], 24, 'colour'); }
+    }
+    p = ppXY(PP_R, A.more); near(byId('ppMore'), p[0], p[1], 24, 'more');
+  } else if (open === 'size') {
+    kids = byId('ppWs').children;
+    for (k = 0; k < kids.length; k++) { p = ppXY(PP_R, ppDialAngle(k)); near(kids[k], p[0], p[1], 22, 'width'); }
+  } else {
+    var items = [['ppCol', A.col, 'col'], ['ppSize', A.size, 'size'], ['ppErase', A.erase, 'tool'], ['ppLasso', A.lasso, 'tool']];
+    if (!settings.popDock) { items.push(['ppFav', A.fav, 'tool']); items.push(['ppDock', A.dock, 'tool']); }
+    for (k = 0; k < items.length; k++) { p = ppXY(PP_R, items[k][1]); near(byId(items[k][0]), p[0], p[1], 26, items[k][2]); }
+  }
+  return best;
+}
+/* the pointing pen moved: light up what it is over, and open a group the
+   moment it arrives on one - the colour, the width, or (after leaving it
+   once) the pen in the middle for the row of pens */
+function popPoint(x, y) {
+  if (!pop.on) return;
+  if (!pop.left && dist(x, y, pop.x0, pop.y0) > 30) pop.left = true;
+  /* turning the dial: the pen is the dial's, not pointing at dots */
+  if (pop.open === 'size' && pop.dial) { ppDialTo(x, y); popPaint(); return; }
+  var hit = ppHit(x, y), el = hit ? hit.el : null;
+  if (el === pop.hot) return;
+  pop.hot = el;
+  if (hit && hit.kind === 'col' && pop.open !== 'col') { popOpen('col'); return; }
+  if (hit && hit.kind === 'size' && pop.open !== 'size') { popOpen('size'); pop.hot = null; ppDialStart(x, y); popPaint(); return; }
+  if (hit && hit.kind === 'core' && pop.left && pop.open === '') { popOpen('pens'); return; }
+  popPaint();
+}
+/* the pointing pen lifted: pick whatever it was on */
+function popRelease() {
+  var el = pop.hot;
+  pop.hot = null;
+  pop.dial = null;
+  if (el && el._act) el._act();
+  else popPaint();
+}
+function ppDialStart(x, y) { pop.dial = { a0: ppAng(x, y), s0: settings.widthStep }; }
+/* turning the dial: round clockwise for thicker, back for thinner */
+function ppDialTo(x, y) {
+  var da = ppAng(x, y) - pop.dial.a0, s;
+  while (da > 180) da -= 360;
+  while (da < -180) da += 360;
+  s = lim(Math.round(pop.dial.s0 + da / PP_DIAL), 0, 5);
+  if (s !== settings.widthStep) { settings.widthStep = s; applyPenUI(); saveSoon(); }
+}
+
 function popPaint() {
   if (!pop.on) return;
-  var A = ppAngles(), open = pop.open, k, d, dot, ang;
+  var A = ppAngles(), open = pop.open, hot = pop.hot, k, d, dot, p, el;
+  byId('penPop').className = 'on show' + (open ? ' m-' + open : '') + (pop.turning ? ' turning' : '') +
+                             (pop.drag && pop.drag.moved && !pop.drag.turn ? ' moving' : '');
   var core = byId('ppCore'), key = settings.pen + settings.color;
   if (core.getAttribute('data-art') !== key) { core.innerHTML = penArt(settings.pen, settings.color); core.setAttribute('data-art', key); }
   ppTf(core, 'rotate(' + (settings.popDock ? ppBase() + 90 : 0) + 'deg)');
   var items = [['ppCol', A.col], ['ppSize', A.size], ['ppErase', A.erase], ['ppLasso', A.lasso]];
-  for (k = 0; k < items.length; k++) ppSet(byId(items[k][0]), PP_R, items[k][1], 0, !open, true);
-  ppSet(byId('ppMore'), PP_R, A.more, 0, open === 'col', true);
-  /* the star and the sidebar icon are floating-only: docked, the visible
-     half of the disc has no angle left free for either of them */
-  ppSet(byId('ppFav'), PP_R, A.fav, 0, !open && !settings.popDock, true);
-  ppSet(byId('ppDock'), PP_R, A.dock, 0, !open && !settings.popDock, true);
+  for (k = 0; k < items.length; k++) {
+    el = byId(items[k][0]);
+    ppSet(el, PP_R, items[k][1], 0, !open, true, el === hot);
+  }
+  ppSet(byId('ppMore'), PP_R, A.more, 0, open === 'col', true, byId('ppMore') === hot);
+  ppSet(byId('ppFav'), PP_R, A.fav, 0, !open && !settings.popDock, true, byId('ppFav') === hot);
+  ppSet(byId('ppDock'), PP_R, A.dock, 0, !open && !settings.popDock, true, byId('ppDock') === hot);
   byId('ppErase').className = 'pp-it' + (tool === 'eraser' ? ' on' : '');
   byId('ppLasso').className = 'pp-it' + (tool === 'select' ? ' on' : '');
   byId('ppCol').children[0].style.background = settings.color;
@@ -10688,26 +10842,34 @@ function popPaint() {
   var cols = byId('ppCols').children, n = ppSlots(A), pos;
   for (k = 0; k < cols.length; k++) {
     pos = k - pop.off;
-    ppSet(cols[k], PP_R, A.r0 + pos * A.rs, 0, open === 'col' && pos > -0.5 && pos < n - 0.5, open !== 'col');
+    ppSet(cols[k], PP_R, A.r0 + pos * A.rs, 0, open === 'col' && pos > -0.5 && pos < n - 0.5, open !== 'col', cols[k] === hot);
     cols[k].className = 'pp-c' + (COLORS[k] === settings.color ? ' on' : '');
   }
+  /* the width dial: the chosen width at its place, the others round the ring */
   var ws = byId('ppWs').children;
   for (k = 0; k < ws.length; k++) {
-    ppSet(ws[k], PP_R, A.s0 + (A.s1 - A.s0) * k / 5, 0, open === 'size', true);
+    ppSet(ws[k], PP_R, ppDialAngle(k), 0, open === 'size', true, ws[k] === hot);
     d = ppDot(k);
     dot = ws[k].children[0];
     dot.style.width = d + 'px'; dot.style.height = d + 'px';
     dot.style.background = ppInk(settings.color);
     ws[k].className = 'pp-w' + (k === settings.widthStep ? ' on' : '');
   }
-  var fan = ppFan(), pens = byId('ppPens').children;
+  var num = byId('ppNum');
+  ppSet(num, PP_R + 44, ppDialAt(), 0, open === 'size', true, false);
+  num.textContent = settings.widthStep + 1;
+  if (open === 'size') drawSquiggle(byId('ppWave'), settings.pen, currentPenWidth(), ppInk(settings.color));
+  /* the row of pens: the pen in hand stays where it was in the middle */
+  var pens = byId('ppPens').children;
   for (k = 0; k < pens.length; k++) {
-    ang = fan + (k - 2) * 25;
-    ppSet(pens[k], PP_FAN, ang, ang + 90, open === 'pens', true);
-    pens[k].className = 'pp-pen' + (k === settings.pen ? ' on' : '');
+    p = ppRowPos(k);
+    el = pens[k];
+    el.style.webkitTransitionDelay = el.style.transitionDelay = open === 'pens' ? Math.abs(ppRowSlot(k)) * 35 + 'ms' : '0ms';
+    ppPut(el, p.x, p.y - (el === hot ? 10 : 0), p.rot, open === 'pens', true, false);
+    el.className = 'pp-pen' + (k === settings.pen ? ' on' : '');
   }
-  var band = open === 'pens' ? fan + (settings.uiDark ? 'd' : 'l') : '';
-  if (band !== pop.band) { pop.band = band; byId('ppBand').innerHTML = band ? ppBandSvg(fan - 64, fan + 64) : ''; }
+  var band = open === 'pens' ? settings.popDock + ':' + settings.pen + ':' + pop.shift + (settings.uiDark ? 'd' : 'l') : '';
+  if (band !== pop.band) { pop.band = band; byId('ppBand').innerHTML = band ? ppRowBandSvg() : ''; }
 }
 
 function initPop() {
@@ -10715,6 +10877,7 @@ function initPop() {
   byId('ppCol').appendChild(document.createElement('i'));
   byId('ppSize').appendChild(document.createElement('i'));
   byId('ppMore').appendChild(document.createElement('i'));
+  function act(el, fn) { el._act = fn; el.addEventListener('click', fn); }
   for (i = 0; i < COLORS.length; i++) {
     (function (col) {
       var b = document.createElement('button');
@@ -10722,7 +10885,7 @@ function initPop() {
       b.setAttribute('aria-label', 'Colour ' + col);
       b.appendChild(document.createElement('i'));
       b.children[0].style.background = col;
-      b.addEventListener('click', function () { popPick(function () { settings.color = col; }); });
+      act(b, function () { popPick(function () { settings.color = col; }); });
       byId('ppCols').appendChild(b);
     })(COLORS[i]);
   }
@@ -10732,7 +10895,7 @@ function initPop() {
       b.className = 'pp-w';
       b.setAttribute('aria-label', 'Thickness ' + (step + 1));
       b.appendChild(document.createElement('i'));
-      b.addEventListener('click', function () { popPick(function () { settings.widthStep = step; }); });
+      act(b, function () { popPick(function () { settings.widthStep = step; }); });
       byId('ppWs').appendChild(b);
     })(i);
   }
@@ -10744,46 +10907,45 @@ function initPop() {
       cv.width = 80; cv.height = 48;
       b.appendChild(cv);
       b.appendChild(document.createElement('span'));
-      b.addEventListener('click', function () { popPick(function () { pickPen(idx); }); });
+      act(b, function () { popPick(function () { pickPen(idx); }); });
       byId('ppPens').appendChild(b);
     })(i);
   }
   byId('ppCore').addEventListener('click', function () { popOpen('pens'); });
   byId('ppCol').addEventListener('click', function () { popOpen('col'); });
   byId('ppSize').addEventListener('click', function () { popOpen('size'); });
-  byId('ppErase').addEventListener('click', function () { popTool('eraser'); });
-  byId('ppLasso').addEventListener('click', function () { popTool('select'); });
-  byId('ppMore').addEventListener('click', openPenPanel);
-  byId('ppFav').addEventListener('click', favGridToggle);
-  byId('ppDock').addEventListener('click', dockToggle);
+  act(byId('ppErase'), function () { popTool('eraser'); });
+  act(byId('ppLasso'), function () { popTool('select'); });
+  act(byId('ppMore'), openPenPanel);
+  act(byId('ppFav'), favGridToggle);
+  act(byId('ppDock'), dockToggle);
   /* drag the disc to move it (and to a side to dock it); drag round an
-     open ring to turn the colours or slide the width */
+     open ring to turn the colours or the width dial */
   disc.addEventListener('touchstart', function (e) {
     var t = e.changedTouches[0], rx = t.clientX - pop.x, ry = t.clientY - pop.y;
-    pop.drag = { x0: t.clientX, y0: t.clientY, px: pop.x, py: pop.y, moved: false, bg: e.target === disc,
+    pop.drag = { x0: t.clientX, y0: t.clientY, px: pop.x, py: pop.y, moved: false, bg: e.target === disc || e.target === byId('ppFace'),
                  turn: (pop.open === 'col' || pop.open === 'size') && rx * rx + ry * ry > 40 * 40,
-                 a0: Math.atan2(ry, rx) * 180 / Math.PI, off0: pop.off };
+                 a0: ppAng(t.clientX, t.clientY), off0: pop.off };
+    if (pop.drag.turn && pop.open === 'size') ppDialStart(t.clientX, t.clientY);
   }, false);
   disc.addEventListener('touchmove', function (e) {
-    var g = pop.drag, t = e.changedTouches[0], el = byId('penPop'), A = ppAngles();
+    var g = pop.drag, t = e.changedTouches[0], A = ppAngles();
     e.preventDefault();
     if (!g || (!g.moved && dist(g.x0, g.y0, t.clientX, t.clientY) < 10)) return;
     if (!g.moved) {
       g.moved = true;
-      if (!g.turn) { pop.open = ''; settings.popDock = 0; el.className = 'on show moving'; popPaint(); }
+      if (!g.turn) { pop.open = ''; settings.popDock = 0; popPaint(); }
     }
-    var a = Math.atan2(t.clientY - pop.y, t.clientX - pop.x) * 180 / Math.PI;
     if (g.turn && pop.open === 'col') {
-      var da = a - g.a0;
+      var da = ppAng(t.clientX, t.clientY) - g.a0;
       while (da > 180) da -= 360;
       while (da < -180) da += 360;
       pop.off = lim(g.off0 - da / A.rs, 0, COLORS.length - ppSlots(A));
-      el.className = 'on show turning';
+      pop.turning = true;
       popPaint();
-    } else if (g.turn) {
-      var span = A.s1 - A.s0, rel = ((a - A.s0) % 360 + 360) % 360;
-      setWidthStep(Math.round((rel <= span ? rel / span : rel > span / 2 + 180 ? 0 : 1) * 5));
-    } else {
+    } else if (g.turn && pop.dial) {
+      ppDialTo(t.clientX, t.clientY);
+    } else if (!g.turn) {
       pop.x = g.px + t.clientX - g.x0;
       pop.y = g.py + t.clientY - g.y0;
       popPlace(true);
@@ -10792,17 +10954,17 @@ function initPop() {
   disc.addEventListener('touchend', function () {
     var g = pop.drag, H = window.innerHeight || (viewH + PP_TOP) || 768, W = window.innerWidth || viewW || 1024;
     pop.drag = null;
+    pop.turning = false;
     if (!g || !pop.on) return;
-    byId('penPop').className = 'on show';
-    if (!g.moved) { if (g.bg && pop.open) { pop.open = ''; popPaint(); } return; }
-    if (g.turn) { pop.off = Math.round(pop.off); popPaint(); return; }
+    if (!g.moved) { if (g.bg && pop.open) { pop.open = ''; pop.dial = null; } popPaint(); return; }
+    if (g.turn) { pop.off = Math.round(pop.off); pop.dial = null; popPaint(); return; }
     settings.popDock = pop.x < 90 ? 1 : pop.x > W - 90 ? 2 : 0;
     if (settings.popDock) settings.popY = lim((pop.y - PP_TOP) / Math.max(1, H - PP_TOP), 0, 1);
     popPlace();
     popPaint();
     saveSoon();
   }, false);
-  if (settings.popDock) { pop.on = true; byId('penPop').className = 'on show'; popPlace(); popPaint(); }
+  if (settings.popDock) { pop.on = true; popPlace(); popPaint(); }
 }
 
 /* ============================================================
