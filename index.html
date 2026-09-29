@@ -8809,95 +8809,403 @@ function shapeCheck(id) {
     requestRender();
   }
 }
+/* THE RECOGNIZER. It knew three things: a line, a rectangle standing
+ * square to the page and an ellipse standing square to the page - so a
+ * triangle, a tilted box, a diamond or a hexagon came back as drawn - and
+ * it made its rectangle out of four points that the renderer then smoothed
+ * into a rounded blob. Now:
+ *
+ *   1. the stroke is resampled to evenly spaced points (a disc stylus
+ *      reports unevenly, and every measure below assumes even spacing);
+ *   2. its corners are found where the chord across a few neighbours gets
+ *      short (ShortStraw, Wolin et al. 2008);
+ *   3. closed: the straightened polygon (triangle, rectangle or square at
+ *      any angle, diamond, pentagon, hexagon) or the circle / ellipse at
+ *      any angle - whichever the points lie closer to; open: a line, the
+ *      straight pieces of an angle or a zigzag, or an arc of a circle.
+ *
+ * Near-level and near-upright edges are made exactly so, near-regular
+ * shapes are made regular, and the result is laid down as evenly spaced
+ * points with a point hard either side of each corner, so the corners stay
+ * sharp through the renderer's smoothing and the line keeps one width. */
+var SH_N = 72;             /* points a stroke is resampled to */
+var SH_SNAP = 7 * Math.PI / 180;   /* this near level, upright or 45 degrees is meant to be */
+var SH_SPEED = 0.5;        /* px/ms the made shape is "drawn" at: an even width */
+
+function shResample(p, N) {
+  var L = 0, i;
+  for (i = 1; i < p.length; i++) L += dist(p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]);
+  var step = L / (N - 1), out = [[p[0][0], p[0][1]]], acc = 0, ax = p[0][0], ay = p[0][1];
+  for (i = 1; i < p.length && out.length < N; i++) {
+    var bx = p[i][0], by = p[i][1], seg = dist(ax, ay, bx, by);
+    while (seg > 0 && acc + seg >= step && out.length < N) {
+      var t = (step - acc) / seg;
+      ax += (bx - ax) * t; ay += (by - ay) * t;
+      out.push([ax, ay]);
+      seg = dist(ax, ay, bx, by);
+      acc = 0;
+    }
+    acc += seg;
+    ax = bx; ay = by;
+  }
+  while (out.length < N) out.push([p[p.length - 1][0], p[p.length - 1][1]]);
+  return out;
+}
+/* indices of the corners: local minima of the straw that dip below the
+   median. A closed loop is read round, so a corner at the join counts once. */
+function shCorners(q, closed) {
+  var n = q.length, W = 3, straw = [], i, c, a, b, out = [], inRun = false, best = -1;
+  for (i = 0; i < n; i++) {
+    a = closed ? q[(i - W + n) % n] : q[Math.max(0, i - W)];
+    b = closed ? q[(i + W) % n] : q[Math.min(n - 1, i + W)];
+    straw.push(dist(a[0], a[1], b[0], b[1]));
+  }
+  var lo = closed ? 0 : W, hi = closed ? n : n - W;
+  var srt = straw.slice(lo, hi).sort(function (x, y) { return x - y; });
+  var thr = srt[Math.floor(srt.length / 2)] * 0.93;
+  if (closed) {
+    /* read round from a point outside any dip, so a dip across the join
+       is one corner, not two */
+    var s0 = -1;
+    for (i = 0; i < n; i++) if (straw[i] >= thr) { s0 = i; break; }
+    if (s0 < 0) return [];
+    for (c = 1; c <= n; c++) {
+      i = (s0 + c) % n;
+      if (straw[i] < thr) {
+        if (!inRun) { inRun = true; best = i; } else if (straw[i] < straw[best]) best = i;
+      } else if (inRun) { out.push(best); inRun = false; }
+    }
+  } else {
+    for (i = lo; i < hi; i++) {
+      if (straw[i] < thr) {
+        if (!inRun) { inRun = true; best = i; } else if (straw[i] < straw[best]) best = i;
+      } else if (inRun) { out.push(best); inRun = false; }
+    }
+    if (inRun) out.push(best);
+  }
+  out.sort(function (x, y) { return x - y; });
+  return out;
+}
+/* corners on a straight run are noise, not corners: drop the flattest
+   until every one left turns by a real angle */
+function shPrune(q, idx, closed) {
+  var v, i, m, worst, wa, ang;
+  idx = idx.slice();
+  for (;;) {
+    m = idx.length;
+    if (m < (closed ? 3 : 1)) return idx;
+    v = [];
+    if (!closed) v.push(q[0]);
+    for (i = 0; i < m; i++) v.push(q[idx[i]]);
+    if (!closed) v.push(q[q.length - 1]);
+    worst = -1; wa = 0;
+    for (i = closed ? 0 : 1; i < (closed ? v.length : v.length - 1); i++) {
+      ang = shInterior(v, i);
+      if (ang > 150 * Math.PI / 180 && ang > wa) { wa = ang; worst = closed ? i : i - 1; }
+    }
+    if (worst < 0) return idx;
+    idx.splice(worst, 1);
+  }
+}
+/* every stretch between two corners runs straight */
+function shStraight(q, idx, closed) {
+  var m = idx.length, k, i, i0, i1, a, b, L, n = q.length;
+  for (k = 0; k < (closed ? m : m + 1); k++) {
+    i0 = closed ? idx[k] : (k === 0 ? 0 : idx[k - 1]);
+    i1 = closed ? idx[(k + 1) % m] : (k === m ? n - 1 : idx[k]);
+    a = q[i0]; b = q[i1];
+    L = dist(a[0], a[1], b[0], b[1]);
+    if (L < 12) return false;
+    for (i = i0; i !== i1; i = (i + 1) % n) {
+      if (shSegDist(q[i][0], q[i][1], a, b) > Math.max(3.5, L * 0.09)) return false;
+    }
+  }
+  return true;
+}
+function shSegDist(px, py, a, b) { return segDist(px, py, a[0], a[1], b[0], b[1]); }
+function shPolyErr(q, v, closed) {
+  var s = 0, i, k, m = v.length, d, best;
+  for (i = 0; i < q.length; i++) {
+    best = 1e9;
+    for (k = 0; k < (closed ? m : m - 1); k++) {
+      d = shSegDist(q[i][0], q[i][1], v[k], v[(k + 1) % m]);
+      if (d < best) best = d;
+    }
+    s += best;
+  }
+  return s / q.length;
+}
+function shAngle(a, b) { return Math.atan2(b[1] - a[1], b[0] - a[0]); }
+/* the nearest multiple of `unit` when within SH_SNAP of it, else as it was */
+function shSnapA(t, unit) {
+  var r = Math.round(t / unit) * unit;
+  return Math.abs(t - r) < SH_SNAP ? r : t;
+}
+function shRot(p, c, t) {
+  var s = Math.sin(t), co = Math.cos(t), x = p[0] - c[0], y = p[1] - c[1];
+  return [c[0] + x * co - y * s, c[1] + x * s + y * co];
+}
+function shCentroid(v) {
+  var x = 0, y = 0, i;
+  for (i = 0; i < v.length; i++) { x += v[i][0]; y += v[i][1]; }
+  return [x / v.length, y / v.length];
+}
+/* an ellipse at any angle: the principal axes of the points, and the
+   extents along them */
+function shEllipse(q) {
+  var c = shCentroid(q), sxx = 0, syy = 0, sxy = 0, i, x, y;
+  for (i = 0; i < q.length; i++) {
+    x = q[i][0] - c[0]; y = q[i][1] - c[1];
+    sxx += x * x; syy += y * y; sxy += x * y;
+  }
+  var th = 0.5 * Math.atan2(2 * sxy, sxx - syy), co = Math.cos(th), si = Math.sin(th);
+  var u0 = 1e9, u1 = -1e9, v0 = 1e9, v1 = -1e9, u, v;
+  for (i = 0; i < q.length; i++) {
+    x = q[i][0] - c[0]; y = q[i][1] - c[1];
+    u = x * co + y * si; v = -x * si + y * co;
+    if (u < u0) u0 = u; if (u > u1) u1 = u; if (v < v0) v0 = v; if (v > v1) v1 = v;
+  }
+  var a = (u1 - u0) / 2, b = (v1 - v0) / 2, um = (u0 + u1) / 2, vm = (v0 + v1) / 2;
+  var cx = c[0] + um * co - vm * si, cy = c[1] + um * si + vm * co, err = 0, r, t, er;
+  for (i = 0; i < q.length; i++) {
+    x = q[i][0] - cx; y = q[i][1] - cy;
+    u = x * co + y * si; v = -x * si + y * co;
+    r = Math.sqrt(u * u + v * v);
+    t = Math.atan2(v, u);
+    er = a * b / Math.max(1e-6, Math.sqrt(b * Math.cos(t) * b * Math.cos(t) + a * Math.sin(t) * a * Math.sin(t)));
+    err += Math.abs(r - er);
+  }
+  return { cx: cx, cy: cy, a: a, b: b, th: th, err: err / q.length };
+}
+/* a circle through open points (Kasa's algebraic fit) */
+function shCircle(q) {
+  var n = q.length, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, sxz = 0, syz = 0, sz = 0, i, x, y, z;
+  for (i = 0; i < n; i++) {
+    x = q[i][0]; y = q[i][1]; z = x * x + y * y;
+    sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y; sxz += x * z; syz += y * z; sz += z;
+  }
+  /* solve [sxx sxy sx; sxy syy sy; sx sy n] [D E F] = -[sxz syz sz] */
+  var A = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, n]], B = [-sxz, -syz, -sz];
+  var det = function (m) {
+    return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
+           m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+  };
+  var d0 = det(A);
+  if (Math.abs(d0) < 1e-9) return null;
+  var sol = [], k, r2;
+  for (k = 0; k < 3; k++) {
+    var M = [A[0].slice(), A[1].slice(), A[2].slice()];
+    M[0][k] = B[0]; M[1][k] = B[1]; M[2][k] = B[2];
+    sol.push(det(M) / d0);
+  }
+  var cx = -sol[0] / 2, cy = -sol[1] / 2;
+  r2 = cx * cx + cy * cy - sol[2];
+  if (!(r2 > 0)) return null;
+  var r = Math.sqrt(r2), err = 0;
+  for (i = 0; i < n; i++) err += Math.abs(dist(q[i][0], q[i][1], cx, cy) - r);
+  return { cx: cx, cy: cy, r: r, err: err / n };
+}
+function shDiag(q) {
+  var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, i;
+  for (i = 0; i < q.length; i++) {
+    if (q[i][0] < x0) x0 = q[i][0]; if (q[i][0] > x1) x1 = q[i][0];
+    if (q[i][1] < y0) y0 = q[i][1]; if (q[i][1] > y1) y1 = q[i][1];
+  }
+  return { w: x1 - x0, h: y1 - y0, d: Math.sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)) };
+}
+function shRegular(v) {
+  var c = shCentroid(v), m = v.length, R = 0, i;
+  for (i = 0; i < m; i++) R += dist(v[i][0], v[i][1], c[0], c[1]);
+  R /= m;
+  var a0 = Math.atan2(v[0][1] - c[1], v[0][0] - c[0]), dir = shArea(v) < 0 ? -1 : 1, out = [];
+  for (i = 0; i < m; i++) {
+    var a = a0 + dir * i * 2 * Math.PI / m;
+    out.push([c[0] + R * Math.cos(a), c[1] + R * Math.sin(a)]);
+  }
+  return out;
+}
+function shArea(v) {
+  var s = 0, i, m = v.length;
+  for (i = 0; i < m; i++) s += v[i][0] * v[(i + 1) % m][1] - v[(i + 1) % m][0] * v[i][1];
+  return s / 2;
+}
+/* turn the whole shape so the edge nearest to level or upright lies
+   exactly so - the base of a triangle, the leg of a right angle - when it
+   nearly does already */
+function shLevel(v) {
+  var m = v.length, L = 0, lens = [], i, t, s, best = 1e9, rot = 0;
+  for (i = 0; i < m; i++) {
+    lens.push(dist(v[i][0], v[i][1], v[(i + 1) % m][0], v[(i + 1) % m][1]));
+    if (lens[i] > L) L = lens[i];
+  }
+  for (i = 0; i < m; i++) {
+    if (lens[i] < L * 0.3) continue;
+    t = shAngle(v[i], v[(i + 1) % m]);
+    s = shSnapA(t, Math.PI / 2);
+    if (s !== t || Math.abs(t - Math.round(t / (Math.PI / 2)) * Math.PI / 2) < 1e-9) {
+      if (Math.abs(s - t) < best) { best = Math.abs(s - t); rot = s - t; }
+    }
+  }
+  if (!rot) return v;
+  var c = shCentroid(v), out = [];
+  for (i = 0; i < m; i++) out.push(shRot(v[i], c, rot));
+  return out;
+}
+function shInterior(v, i) {
+  var m = v.length, a = v[(i - 1 + m) % m], b = v[i], c = v[(i + 1) % m];
+  var t1 = Math.atan2(a[1] - b[1], a[0] - b[0]), t2 = Math.atan2(c[1] - b[1], c[0] - b[0]);
+  var d = Math.abs(t1 - t2);
+  return d > Math.PI ? 2 * Math.PI - d : d;
+}
+function shPolygon(q, idx) {
+  var v = [], i, m;
+  for (i = 0; i < idx.length; i++) v.push(q[idx[i]]);
+  m = v.length;
+  var err = shPolyErr(q, v, true), ok = true, lens = [], L;
+  for (i = 0; i < m; i++) lens.push(dist(v[i][0], v[i][1], v[(i + 1) % m][0], v[(i + 1) % m][1]));
+  var lmin = Math.min.apply(null, lens), lmax = Math.max.apply(null, lens);
+  if (m === 4) {
+    for (i = 0; i < 4; i++) if (Math.abs(shInterior(v, i) - Math.PI / 2) > 16 * Math.PI / 180) ok = false;
+    if (ok) {
+      /* a rectangle at any angle: its edges' mean direction, folded to 90 degrees */
+      var s4 = 0, c4 = 0, t;
+      for (i = 0; i < 4; i++) { t = shAngle(v[i], v[(i + 1) % 4]); s4 += Math.sin(4 * t); c4 += Math.cos(4 * t); }
+      var th = shSnapA(Math.atan2(s4, c4) / 4, Math.PI / 4), co = Math.cos(th), si = Math.sin(th);
+      var c = shCentroid(q), u0 = 1e9, u1 = -1e9, w0 = 1e9, w1 = -1e9, x, y, u, w;
+      for (i = 0; i < q.length; i++) {
+        x = q[i][0] - c[0]; y = q[i][1] - c[1];
+        u = x * co + y * si; w = -x * si + y * co;
+        if (u < u0) u0 = u; if (u > u1) u1 = u; if (w < w0) w0 = w; if (w > w1) w1 = w;
+      }
+      var hu = (u1 - u0) / 2, hw = (w1 - w0) / 2, mu = (u0 + u1) / 2, mw = (w0 + w1) / 2;
+      if (Math.max(hu, hw) / Math.max(1e-6, Math.min(hu, hw)) < 1.12) hu = hw = (hu + hw) / 2;   /* a square */
+      var box = [[-hu, -hw], [hu, -hw], [hu, hw], [-hu, hw]], out = [];
+      for (i = 0; i < 4; i++) {
+        u = mu + box[i][0]; w = mw + box[i][1];
+        out.push([c[0] + u * co - w * si, c[1] + u * si + w * co]);
+      }
+      return { kind: hu === hw ? 'square' : 'rectangle', v: out, err: err };
+    }
+    return { kind: 'quad', v: shLevel(v), err: err };
+  }
+  if (lmax / Math.max(1e-6, lmin) < (m === 3 ? 1.14 : 1.25)) {
+    var reg = true, want = Math.PI - 2 * Math.PI / m;
+    for (i = 0; i < m; i++) if (Math.abs(shInterior(v, i) - want) > 16 * Math.PI / 180) reg = false;
+    if (reg) return { kind: m === 3 ? 'triangle' : m === 5 ? 'pentagon' : 'hexagon', v: shLevel(shRegular(v)), err: err };
+  }
+  return { kind: m === 3 ? 'triangle' : m === 5 ? 'pentagon' : 'hexagon', v: shLevel(v), err: err };
+}
+/* evenly spaced points along straight pieces, one hard either side of each
+   corner so the smoothing cannot round it */
+function shDense(v, closed) {
+  var out = [], m = v.length, segs = closed ? m : m - 1, i, k, a, b, L, ux, uy, n;
+  for (i = 0; i < segs; i++) {
+    a = v[i]; b = v[(i + 1) % m];
+    L = dist(a[0], a[1], b[0], b[1]);
+    if (L < 1e-6) continue;
+    ux = (b[0] - a[0]) / L; uy = (b[1] - a[1]) / L;
+    out.push([a[0], a[1]]);
+    if (L > 3) out.push([a[0] + ux * 0.6, a[1] + uy * 0.6]);
+    n = Math.max(1, Math.floor(L / 8));
+    for (k = 1; k < n; k++) out.push([a[0] + ux * L * k / n, a[1] + uy * L * k / n]);
+    if (L > 3) out.push([b[0] - ux * 0.6, b[1] - uy * 0.6]);
+  }
+  var e = closed ? v[0] : v[m - 1];
+  out.push([e[0], e[1]]);
+  return out;
+}
+function shCurve(cx, cy, a, b, th, t0, t1) {
+  var out = [], i, N = Math.max(24, Math.min(96, Math.round(Math.abs(t1 - t0) * Math.max(a, b) / 7))), t, u, w;
+  for (i = 0; i <= N; i++) {
+    t = t0 + (t1 - t0) * i / N;
+    u = a * Math.cos(t); w = b * Math.sin(t);
+    out.push([cx + u * Math.cos(th) - w * Math.sin(th), cy + u * Math.sin(th) + w * Math.cos(th)]);
+  }
+  return out;
+}
+/* p: the stroke's points. Returns { kind, pts: [[x,y],...] } or null. */
+function shapeFit(p, mode) {
+  var n = p.length, i;
+  if (n < 5) return null;
+  var len = 0;
+  for (i = 1; i < n; i++) len += dist(p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]);
+  if (len < 30) return null;
+  var q = shResample(p, SH_N), bb = shDiag(q), gap = dist(p[0][0], p[0][1], p[n - 1][0], p[n - 1][1]);
+
+  /* a LINE: every point close to the chord */
+  var A = q[0], Z = q[q.length - 1], L = dist(A[0], A[1], Z[0], Z[1]), dev = 0;
+  for (i = 0; i < q.length; i++) dev = Math.max(dev, shSegDist(q[i][0], q[i][1], A, Z));
+  if (L > 24 && dev < Math.max(4, L * 0.05)) {
+    var t = shAngle(A, Z), s = shSnapA(t, Math.PI / 4), e = s === t ? Z : shRot(Z, A, s - t);
+    return { kind: 'line', pts: [[A[0], A[1]], [e[0], e[1]]] };
+  }
+  if (mode !== SHAPE_SHAPE) return null;
+  if (bb.w < 18 && bb.h < 18) return null;
+
+  var closed = gap < Math.max(24, bb.d * 0.25);
+  if (closed) {
+    /* an overshoot past the start is the same loop drawn twice: cut it */
+    var cut = n - 1, best = gap;
+    for (i = n - 2; i > n / 2; i--) {
+      var d = dist(p[i][0], p[i][1], p[0][0], p[0][1]);
+      if (d < best) { best = d; cut = i; }
+    }
+    q = shResample(p.slice(0, cut + 1), SH_N);
+    q.pop();                                  /* the loop closes on itself */
+    var cr = shPrune(q, shCorners(q, true), true), el = shEllipse(q), poly = null;
+    if (cr.length >= 3 && cr.length <= 6 && shStraight(q, cr, true)) poly = shPolygon(q, cr);
+    var elOk = el.err < bb.d * 0.045, polyOk = poly && poly.err < bb.d * 0.035;
+    if (polyOk && (!elOk || poly.err < el.err * 0.9)) return { kind: poly.kind, pts: shDense(poly.v, true) };
+    if (elOk) {
+      var a = el.a, b = el.b, th = el.th;
+      if (Math.max(a, b) / Math.max(1e-6, Math.min(a, b)) < 1.14) { a = b = (a + b) / 2; th = 0; }   /* a circle */
+      else th = shSnapA(th, Math.PI / 2);
+      var ring = shCurve(el.cx, el.cy, a, b, th, 0, 2 * Math.PI);
+      return { kind: a === b ? 'circle' : 'ellipse', pts: ring };
+    }
+    return null;
+  }
+
+  /* open: an angle or a zigzag - straight pieces meeting at corners */
+  var oc = shPrune(q, shCorners(q, false), false), v = [A];
+  if (oc.length >= 1 && oc.length <= 3 && shStraight(q, oc, false)) {
+    for (i = 0; i < oc.length; i++) v.push(q[oc[i]]);
+    v.push(Z);
+    return { kind: 'polyline', pts: shDense(v, false) };
+  }
+  /* an arc: points on a circle, not all the way round */
+  var ci = shCircle(q);
+  if (ci && ci.err < Math.max(2.5, ci.r * 0.05) && ci.r < len * 2) {
+    var ta = Math.atan2(A[1] - ci.cy, A[0] - ci.cx), sweep = 0, prev = ta, cur;
+    for (i = 1; i < q.length; i++) {
+      cur = Math.atan2(q[i][1] - ci.cy, q[i][0] - ci.cx);
+      var dd = cur - prev;
+      if (dd > Math.PI) dd -= 2 * Math.PI;
+      if (dd < -Math.PI) dd += 2 * Math.PI;
+      sweep += dd;
+      prev = cur;
+    }
+    if (Math.abs(sweep) > 0.5 && Math.abs(sweep) < 5.8) {
+      return { kind: 'arc', pts: shCurve(ci.cx, ci.cy, ci.r, ci.r, 0, ta, ta + sweep) };
+    }
+  }
+  return null;
+}
 function tryReshape(s) {
-  var p = s.pts, n = p.length;
-  if (n < 5) return false;
-
-  /* stroke metrics */
-  var pathLen = 0, i;
-  for (i = 1; i < n; i++) pathLen += dist(p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]);
-  if (pathLen < 30) return false;
-  var net = dist(p[0][0], p[0][1], p[n - 1][0], p[n - 1][1]);
-  var straight = net / pathLen;
-
-  /* 1. LINE: nearly straight travel (either mode) */
-  if (straight > 0.88 && net > 24) {
-    s.pts = [p[0], p[n - 1]];
-    return true;
+  var f = shapeFit(s.pts, settings.shapeAssist);
+  if (!f) return false;
+  /* the made shape is laid down at an even pace, so every pen draws it
+     at one width - the hand's own speeds belong to the hand's own line */
+  var t = s.pts[0][2], out = [], i, pr = null;
+  for (i = 0; i < f.pts.length; i++) {
+    if (pr) t += Math.max(1, dist(pr[0], pr[1], f.pts[i][0], f.pts[i][1]) / SH_SPEED);
+    out.push([f.pts[i][0], f.pts[i][1], t]);
+    pr = f.pts[i];
   }
-
-  if (settings.shapeAssist !== SHAPE_SHAPE) return false;
-
-  /* bbox + closure */
-  var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-  for (i = 0; i < n; i++) {
-    if (p[i][0] < x0) x0 = p[i][0];
-    if (p[i][1] < y0) y0 = p[i][1];
-    if (p[i][0] > x1) x1 = p[i][0];
-    if (p[i][1] > y1) y1 = p[i][1];
-  }
-  var w = x1 - x0, h = y1 - y0;
-  if (w < 18 || h < 18) return false;
-  var diag = Math.sqrt(w * w + h * h);
-  if (net > Math.max(30, diag * 0.28)) return false;   /* not closed */
-
-  var t0 = p[0][2], t1 = p[n - 1][2];
-
-  /* 2. RECTANGLE: most points hug the bbox edges AND all four
-     corners are actually approached (a circle never gets close
-     to its bbox corners: the gap is ~0.41 x radius). */
-  var tol = Math.max(9, Math.max(w, h) * 0.16);
-  var fit = 0;
-  for (i = 0; i < n; i++) {
-    var dxo = Math.max(x0 - p[i][0], 0, p[i][0] - x1);
-    var dyo = Math.max(y0 - p[i][1], 0, p[i][1] - y1);
-    var out = Math.sqrt(dxo * dxo + dyo * dyo);
-    var inDist = Math.min(p[i][0] - x0, x1 - p[i][0], p[i][1] - y0, y1 - p[i][1]);
-    if ((out > 0 ? out : inDist) <= tol) fit++;
-  }
-  var ctol = Math.max(7, Math.min(w, h) * 0.15);
-  var cg = [false, false, false, false];
-  for (i = 0; i < n; i++) {
-    if (dist(p[i][0], p[i][1], x0, y0) < ctol) cg[0] = true;
-    if (dist(p[i][0], p[i][1], x1, y0) < ctol) cg[1] = true;
-    if (dist(p[i][0], p[i][1], x1, y1) < ctol) cg[2] = true;
-    if (dist(p[i][0], p[i][1], x0, y1) < ctol) cg[3] = true;
-  }
-  if (fit / n > 0.82 && cg[0] && cg[1] && cg[2] && cg[3]) {
-    var steps = 5;
-    var corners = [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]];
-    var rp = [];
-    for (i = 0; i < steps; i++) {
-      rp.push([corners[i][0], corners[i][1], t0 + (t1 - t0) * i / (steps - 1)]);
-    }
-    s.pts = rp;
-    return true;
-  }
-
-  /* 3. ELLIPSE (incl. circle): radial deviation from the bbox-
-     inscribed ellipse is small */
-  var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-  var rx = w / 2, ry = h / 2, rmax = Math.max(rx, ry);
-  var dev = 0;
-  for (i = 0; i < n; i++) {
-    var px = p[i][0] - cx, py = p[i][1] - cy;
-    var t = Math.atan2(py, px);
-    var er = Math.sqrt((rx * Math.cos(t)) * (rx * Math.cos(t)) + (ry * Math.sin(t)) * (ry * Math.sin(t)));
-    var r = Math.sqrt(px * px + py * py);
-    dev += Math.abs(r - er);
-  }
-  if (dev / n / rmax < 0.14) {
-    var steps2 = 28;
-    var ep = [];
-    for (i = 0; i < steps2; i++) {
-      var a = (i / (steps2 - 1)) * Math.PI * 2;
-      ep.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a), t0 + (t1 - t0) * i / (steps2 - 1)]);
-    }
-    s.pts = ep;
-    return true;
-  }
-
-  return false;
+  s.pts = out;
+  s.shape = f.kind;
+  s.bb = null;
+  return true;
 }
 
 /* ============================================================
@@ -10375,6 +10683,7 @@ window.__mnHome = function () {
 };
 window.__mnHold = function () { holdCheck(); };
 window.__mnShape = function () { if (shapeId !== null) shapeCheck(shapeId); };
+window.__mnShapeFit = function (pts, mode) { return shapeFit(pts, mode === undefined ? SHAPE_SHAPE : mode); };
 window.__mnTidy = function () { return tidyRun(); };
 window.__mnZW = function () { var g = zwGeom(); return { on: zw.on, x: zw.x, y: zw.y, bw: g.bw, bh: g.bh, top: g.top, mag: g.mag }; };
 

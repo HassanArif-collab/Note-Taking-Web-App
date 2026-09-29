@@ -1865,8 +1865,100 @@ for (shI = 1; shI <= 40; shI++) {
   sh.moveTo(3, 500 + 60 * Math.cos(shI / 40 * Math.PI * 2), 400 + 60 * Math.sin(shI / 40 * Math.PI * 2));
 }
 sh.tick(600); sh.win.__mnShape(); sh.up(3); sh.tick(50); sh.flushFrames();
-check('a circle drawn and then held becomes a clean circle',
-      sh.strokes().length === 3 && sh.strokes()[2].pts.length === 28, (sh.strokes()[2] ? sh.strokes()[2].pts.length : 0) + ' points');
+(function () {
+  var c = sh.strokes()[2], cx = 0, cy = 0, i, r, rmin = 1e9, rmax = 0, x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  if (c) {
+    /* the middle of its box: the closing point repeats the first, so an
+       average of the points leans toward it */
+    for (i = 0; i < c.pts.length; i++) {
+      x0 = Math.min(x0, c.pts[i][0]); x1 = Math.max(x1, c.pts[i][0]);
+      y0 = Math.min(y0, c.pts[i][1]); y1 = Math.max(y1, c.pts[i][1]);
+    }
+    cx = (x0 + x1) / 2; cy = (y0 + y1) / 2;
+    for (i = 0; i < c.pts.length; i++) {
+      r = Math.sqrt((c.pts[i][0] - cx) * (c.pts[i][0] - cx) + (c.pts[i][1] - cy) * (c.pts[i][1] - cy));
+      if (r < rmin) rmin = r; if (r > rmax) rmax = r;
+    }
+  }
+  check('a circle drawn and then held becomes a true circle',
+        sh.strokes().length === 3 && c.pts.length > 20 && rmax - rmin < 1.5,
+        c ? c.pts.length + ' points, radius ' + rmin.toFixed(1) + '..' + rmax.toFixed(1) : 'none');
+})();
+
+/* the recognizer itself, on shapes as a hand draws them: edges that wobble,
+   corners taken a little round, starting partway along an edge */
+function handShape(v, closed) {
+  var pts = [], m = v.length, k, i, seq = v.slice(), t = 0;
+  if (closed) seq.push(v[0]);
+  for (k = 0; k + 1 < seq.length; k++) {
+    var a = seq[k], b = seq[k + 1], L = Math.sqrt((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]));
+    var n = Math.max(6, Math.round(L / 5));
+    for (i = 0; i < n; i++) {
+      var w = Math.sin((pts.length + 1) * 1.7) * 1.8;
+      pts.push([a[0] + (b[0] - a[0]) * i / n + w, a[1] + (b[1] - a[1]) * i / n - w * 0.6]);
+    }
+  }
+  pts.push(seq[seq.length - 1].slice());
+  if (closed) { var s = Math.round(pts.length / m / 2); pts = pts.slice(s).concat(pts.slice(1, s + 2)); }
+  var out = [];
+  for (i = 0; i < pts.length; i++) {
+    var p0 = pts[Math.max(0, i - 1)], p2 = pts[Math.min(pts.length - 1, i + 1)];
+    out.push([(p0[0] + 2 * pts[i][0] + p2[0]) / 4, (p0[1] + 2 * pts[i][1] + p2[1]) / 4, (t += 16)]);
+  }
+  return out;
+}
+function turned(v, deg) {
+  var a = deg * Math.PI / 180, c = 0, d = 0, i;
+  for (i = 0; i < v.length; i++) { c += v[i][0] / v.length; d += v[i][1] / v.length; }
+  return v.map(function (p) {
+    var x = p[0] - c, y = p[1] - d;
+    return [c + x * Math.cos(a) - y * Math.sin(a), d + x * Math.sin(a) + y * Math.cos(a)];
+  });
+}
+function regular(m, r) {
+  var v = [], i;
+  for (i = 0; i < m; i++) v.push([400 + r * Math.cos(-Math.PI / 2 + i * 2 * Math.PI / m), 400 + r * Math.sin(-Math.PI / 2 + i * 2 * Math.PI / m)]);
+  return v;
+}
+var SQ = [[320, 320], [480, 320], [480, 480], [320, 480]];
+var shFit = sh.win.__mnShapeFit, shR;
+shR = shFit(handShape(regular(3, 110), true));
+check('a triangle is recognised', shR && shR.kind === 'triangle', shR ? shR.kind : 'nothing');
+shR = shFit(handShape(turned(SQ, 22), true));
+check('...a square drawn at a tilt stays a square, at that tilt', shR && shR.kind === 'square', shR ? shR.kind : 'nothing');
+shR = shFit(handShape(turned(SQ, 45), true));
+check('...a diamond', shR && shR.kind === 'square', shR ? shR.kind : 'nothing');
+shR = shFit(handShape(regular(6, 120), true));
+check('...a hexagon', shR && shR.kind === 'hexagon', shR ? shR.kind : 'nothing');
+shR = shFit(handShape([[200, 300], [300, 470], [430, 240]], false));
+check('...an angle, as two straight lines', shR && shR.kind === 'polyline', shR ? shR.kind : 'nothing');
+(function () {
+  var arc = [], i;
+  for (i = 0; i <= 40; i++) arc.push([400 + 120 * Math.cos(Math.PI * i / 40), 400 - 120 * Math.sin(Math.PI * i / 40) + Math.sin(i) * 1.2, i * 16]);
+  shR = shFit(arc);
+  check('...a half circle, as an arc', shR && shR.kind === 'arc', shR ? shR.kind : 'nothing');
+})();
+shR = shFit(handShape(turned(SQ, 3), true));
+(function () {
+  var sharp = 0, i, k, want = [[320, 320], [480, 320], [480, 480], [320, 480]];
+  if (shR) for (k = 0; k < 4; k++) for (i = 0; i < shR.pts.length; i++) {
+    if (Math.abs(shR.pts[i][0] - want[k][0]) < 8 && Math.abs(shR.pts[i][1] - want[k][1]) < 8) { sharp++; break; }
+  }
+  check('...and a nearly level square comes out level, with sharp corners',
+        shR && shR.kind === 'square' && sharp === 4, shR ? shR.kind + ', ' + sharp + ' corners where they belong' : 'nothing');
+})();
+(function () {
+  var p = [], i;
+  for (i = 0; i <= 30; i++) p.push([200 + i * 10, 300 + i * 0.6, i * 16]);    /* 3.4 degrees off level */
+  shR = shFit(p);
+  check('...a line nearly level is made level',
+        shR && shR.kind === 'line' && Math.abs(shR.pts[1][1] - shR.pts[0][1]) < 0.01, shR ? JSON.stringify(shR.pts) : 'nothing');
+})();
+(function () {
+  var p = [], i;
+  for (i = 0; i < 60; i++) p.push([200 + i * 6, 400 + 30 * Math.sin(i / 3) + 12 * Math.sin(i / 1.3), i * 16]);
+  check('...and a scrawl is left alone', shFit(p) === null, JSON.stringify(shFit(p) && shFit(p).kind));
+})();
 
 /* ---------- copy, cut and paste ---------- */
 function lassoAround(a, x0, y0, x1, y1) {
