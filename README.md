@@ -20,13 +20,25 @@ thickness, with 24 colours to choose from.
 
 - **Three favourite pens** sit in the toolbar, each holding pen, colour and
   width together. Tap one to write with it; tap the one you hold to change it.
-- **Pen pop-up** — hold the pen still for a moment (Glove mode) and a disc
-  opens at the nib, like Samsung's S Pen button: the pen in the middle, its
-  colour on the right, its width on the left, eraser and lasso below, and —
-  while it floats — a star and a panel icon at the bottom of the ring. Tap the
-  middle to fan out the pens, the colour for a ring of colours (drag round to
-  turn it), the width for the widths. Drag it to a side and it docks there
-  and stays while you write. "Hold pen for pop-up" in the menu turns it off.
+- **Pen pop-up** — hold the pen still for a moment (Glove mode, or Auto on
+  the line you are writing) and a disc opens at the nib, like Samsung's S Pen
+  button: the pen in the middle, its colour on the right, its width on the
+  left, eraser and lasso below, and — while it floats — a star and a panel
+  icon above. **Keep the pen down and slide**: onto the colour and a ring of
+  colours opens, onto the width and the width dial opens, off the middle and
+  back onto it and the pens come out; lift on a colour, width or pen to pick
+  it. The pens come out Samsung's way — the disc fades, your pen stays where
+  it was and the others slide out either side along a curved band. The width
+  dial keeps the chosen width at the left beside its number while the others
+  turn round the ring, with your stroke shown in the middle. Everything can
+  be tapped as well. Drag it to a side and it docks there and stays while you
+  write. "Hold pen for pop-up" in the menu turns it off.
+- **Shapes** — with Shape assist on (pen panel), draw a line or a shape and
+  keep the pen still at the end for half a second: it snaps to a straight
+  line, rectangle or ellipse before you lift. Lift straight away and the
+  stroke stays exactly as drawn.
+- **Auto palm rejection** — tap the palm button until it says "Palm: Auto"
+  and write with your hand resting on the glass, no glove.
 - **Favourite pens grid** — the star on the pop-up (or "All pens" in the
   sidebar) opens a grid of every pen saved whole: type, colour and width in
   one tap. Tap one to write with it; tap the one already in hand to switch
