@@ -1052,10 +1052,78 @@ test('Auto: a stroke written far below still lands once no pen comes above it', 
   autoLine(app, 1, 200, 330);
   app.tick(300);
   autoLine(app, 2, 200, 640, 20);
-  app.tick(500);                 /* past the grace, on the app's clock */
-  after(520, function () {      /* ...and the device's timer */
+  app.tick(2600);                          /* nothing came down above it */
+  autoLine(app, 3, 400, 645);              /* ...and the writing carries on down there */
+  after(300, function () {
     app.flushFrames();
-    check('Auto: both strokes are on the page', app.strokes().length === 2, app.strokes().length + ' strokes');
+    var low = app.strokes().filter(function (s) { return s.pts[0][1] > 500; }).length;
+    check('Auto: the strokes written down there are on the page', app.strokes().length === 3 && low === 2,
+          app.strokes().length + ' strokes, ' + low + ' low');
+    done();
+  });
+});
+
+/* recorded: the palm brushed low and lifted, and the pen only came back
+   2.4s later - a fixed half-second wait had already drawn the brush */
+test('Auto: a palm brush the pen returns above 2s later is never drawn', function (done) {
+  var app = freshAtLevel(4), i;
+  autoLine(app, 1, 200, 330);
+  app.tick(400);
+  app.down(2, 520, 640);
+  for (i = 1; i <= 20; i++) { app.tick(16); app.moveTo(2, 520 + i * 3, 640 + i); }
+  app.tick(16); app.up(2);
+  app.tick(2000);
+  autoLine(app, 3, 330, 336);
+  after(300, function () {
+    app.flushFrames();
+    var low = app.strokes().filter(function (s) { return s.pts[0][1] > 450; }).length;
+    check('Auto: the brush is gone, both pen strokes stay', app.strokes().length === 2 && low === 0,
+          app.strokes().length + ' strokes, ' + low + ' low');
+    done();
+  });
+});
+
+/* recorded: after a zoom the first palm touch below the writing was drawn,
+   because where the writing was had been kept as a screen position */
+test('Auto: after scrolling, a palm touch below the line is still the palm', function (done) {
+  var app = freshAtLevel(4), i;
+  autoLine(app, 1, 200, 330);
+  app.tick(1500);
+  app.down(8, 400, 520); app.tick(20); app.down(9, 520, 522);
+  for (i = 1; i <= 10; i++) { app.tick(16); app.moveTo(8, 400, 520 - i * 8); app.moveTo(9, 520, 522 - i * 8); app.flushFrames(); }
+  app.tick(16); app.up(8); app.up(9);
+  app.tick(400);
+  app.down(2, 520, 600);
+  for (i = 1; i <= 12; i++) { app.tick(16); app.moveTo(2, 520 + i * 3, 600 + i); }
+  app.tick(16); app.up(2);
+  app.tick(300);
+  autoLine(app, 3, 330, 256);              /* the pen, back on its line */
+  after(300, function () {
+    app.flushFrames();
+    check('Auto: the page scrolled and only the two pen strokes are on it',
+          app.geom().scrollY > 40 && app.strokes().length === 2,
+          'scrollY ' + Math.round(app.geom().scrollY) + ', ' + app.strokes().length + ' strokes');
+    done();
+  });
+});
+
+/* recorded: the palm sprouts new points every 50-200ms, and the pen landing
+   97ms after one was taken for a second finger and its stroke lost */
+test('Auto: the pen landing just after a palm point appears still writes', function (done) {
+  var app = freshAtLevel(4), i;
+  autoLine(app, 1, 200, 330);
+  app.tick(300);
+  app.down(5, 690, 600);
+  for (i = 0; i < 20; i++) { app.tick(16); app.moveTo(5, 690, 600 + (i % 2)); }
+  app.down(6, 720, 620);                   /* a fresh palm point */
+  app.tick(97);
+  autoLine(app, 2, 330, 330);              /* the pen, 97ms later, well above */
+  app.tick(50); app.up(6); app.up(5);
+  after(300, function () {
+    app.flushFrames();
+    var s = app.strokes();
+    check('Auto: the pen\'s stroke is on the page', s.length === 2 && s[1].pts[0][1] < 400,
+          s.length + ' strokes');
     done();
   });
 });

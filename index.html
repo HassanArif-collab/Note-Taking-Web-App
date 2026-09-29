@@ -6040,26 +6040,46 @@ var HAND_PROOF = 200;      /* this far above the hand, and writing, a touch is s
 var HAND_ZONE_M = 110;     /* further below the last stroke than this is where the hand lands:
                               recorded palms landed 100-400px below it, and only 1.9% of pen
                               strokes start that far down (they show a moment late, not lost) */
-var HAND_ZONE_T = 60000;   /* ...for this long after the stroke (the page scrolling forgets it) */
-var HAND_REVEAL = 1500;    /* a hidden stroke still going this long with no pen above it is the pen
-                              (recorded: the hand can rest alone 1.7s before the nib lands) */
+var HAND_ZONE_T = 60000;   /* ...for this long after the stroke */
+var HAND_REVEAL = 3000;    /* a hidden stroke still going this long with no pen above it is the pen */
 var HAND_BUSY = 1000;      /* this soon after a stroke you are mid-writing */
+var HAND_TOGETHER = 40;    /* touches landing this close together are one event: 86% of recorded
+                              finger pairs land within it, and the pen lands 300-500ms after the
+                              hand - though a palm sprouts new points every 50-200ms, so any
+                              wider and the pen was caught landing "with" one (recorded) */
 var HAND_SPOT_R = 120;     /* the hand is this big around a touch the iPad called a palm... */
 var HAND_SPOT_T = 1500;    /* ...for this long */
 var handSpots = [];        /* where the iPad cancelled a touch, and when */
 var HAND_RETRO = 1200;     /* a stroke nothing vouched for, finished this recently... */
 var handRecent = [];       /* ...is taken back if the pen then lands well above it */
-var handZone = null;       /* the bottom of the last stroke on screen, and when */
-var HAND_GRACE = 450;      /* a stroke far below the writing is shown this much later... */
-var handPend = [];         /* ...unless the pen lands above it first: those strokes */
+/* The bottom of the last stroke, kept in PAGE coordinates so it moves with the
+   page: it used to be a screen position and was thrown away at every scroll
+   or zoom, and the first palm touch after one was drawn - recorded. */
+var handZone = null;
+var HAND_PEND_MAX = 2500;  /* a hidden low stroke nothing vouched for either way is shown after this */
+var handPend = [];
+
+function strokeMaxY(s) {
+  var m = -1e9, i;
+  for (i = 0; i < s.pts.length; i++) { if (s.pts[i][1] > m) m = s.pts[i][1]; }
+  return m;
+}
+/* where the line being written is on the screen now, or null */
+function handLineY(now) {
+  return handZone && now - handZone.t < HAND_ZONE_T ? docToScreen(0, handZone.y).y : null;
+}
 
 function handBegin(st, now) {
-  var k, o, lower = [];
+  var k, o, lower = [], line;
   for (k in touchStates) {
     if (!touchStates.hasOwnProperty(k)) continue;
     o = touchStates[k];
     if (o.kind !== 'probe') continue;
-    if (st.cy <= o.cy - HAND_GAP) { lower.push(o); continue; }    /* that one is well below this */
+    /* that one is well below this, and landed before it: the hand, with the pen
+       now coming down above it. Landing together is not that - it is two
+       fingers (one in five recorded pinches had them 120px+ apart up and
+       down) or two points of the hand, and is dealt with as level. */
+    if (st.cy <= o.cy - HAND_GAP && (o.hpalm || now - o.t0 > HAND_TOGETHER)) { lower.push(o); continue; }
     /* below a touch, or level with the hand, or level with anything while
        mid-writing below the line: the hand */
     if (st.cy >= o.cy + HAND_GAP || o.hpalm || handMidLine(st, o, now)) {
@@ -6078,12 +6098,13 @@ function handBegin(st, now) {
     handPalm(lower[k], now);
   }
   if (handSpot(st.cx, st.cy, now)) { handPalm(st, now); return; }
-  handPendCheck(st.cy, now);
+  handPendCheck(st, now);
   handRetro(st.cy, now);
+  line = handLineY(now);
   st.state = 'ink';
-  st.wait = !!(handZone && now - handZone.t < HAND_ZONE_T && st.cy > handZone.y1 + HAND_ZONE_M);
-  st.onLine = !!(handZone && now - handZone.t < HAND_ZONE_T && Math.abs(st.cy - handZone.y1) < HAND_ZONE_M);
-  st.unsure = !(handZone && now - handZone.t < HAND_ZONE_T) || st.wait;
+  st.wait = line !== null ? st.cy > line + HAND_ZONE_M : handColdLow(st);
+  st.onLine = line !== null && Math.abs(st.cy - line) < HAND_ZONE_M;
+  st.unsure = line === null || st.wait;
 }
 function handPalm(o, now) {
   if (o.hpalm) return;
@@ -6094,22 +6115,23 @@ function handPalm(o, now) {
   if (inkNow[o.id]) { delete inkNow[o.id]; requestRender(); }
   traceVerdict(seen ? 'palm-shown' : 'palm', o.id, now);
 }
-/* A stroke that lifted far below the writing with nothing above it yet.
-   The hand lands 300-500ms before the pen, so a palm brush that has already
-   lifted is usually followed by the pen landing above it: shown only once
-   HAND_GRACE has passed without that. The timer is for the device; the
-   check at every touch is what a replay, running on recorded time, sees. */
+/* A stroke that lifted far below the writing with nothing above it yet. It
+   stays out of sight until the next touch settles it: the pen landing back
+   above it means it was the hand (recorded: a palm lifted 2.4s before the
+   nib came down 300px higher), writing carrying on beside it means it was
+   the pen. Nothing either way for HAND_PEND_MAX, and it is shown. The timer
+   is for the device; the check at every touch is what a replay sees. */
 function handDefer(st, s, now) {
-  var p = { st: st, s: s, y: st.maxCy || st.cy, t: now };
-  handPend.push(p);
-  setTimeout(function () { handPendCheck(null, Date.now()); }, HAND_GRACE + 20);
+  var lp = s.pts[s.pts.length - 1];
+  handPend.push({ st: st, s: s, y: strokeMaxY(s), lx: lp[0], ly: lp[1], t: now });
+  setTimeout(function () { handPendCheck(null, Date.now()); }, HAND_PEND_MAX + 20);
 }
-function handPendCheck(penY, now) {
+function handPendCheck(st, now) {
   var keep = [], i, p;
   for (i = 0; i < handPend.length; i++) {
     p = handPend[i];
-    if (now - p.t >= HAND_GRACE) commitInk(p.st, p.s, now);
-    else if (penY !== null && penY <= p.y - HAND_GAP) traceVerdict('palm-low', p.st.id, now);
+    if (now - p.t >= HAND_PEND_MAX) commitInk(p.st, p.s, p.t);
+    else if (st && st.cy <= docToScreen(0, p.y).y - HAND_GAP) traceVerdict('palm-low', p.st.id, now);
     else keep.push(p);
   }
   handPend = keep;
@@ -6126,7 +6148,8 @@ function handWaitDrop(st, now) {
    them apart: a scroll comes after a pause, the hand comes with the pen. */
 function handMidLine(a, b, now) {
   if (!handZone || now - handZone.t > HAND_BUSY) return false;
-  return a.cy > handZone.y1 + HAND_ZONE_M || b.cy > handZone.y1 + HAND_ZONE_M;
+  var line = handLineY(now);
+  return a.cy > line + HAND_ZONE_M || b.cy > line + HAND_ZONE_M;
 }
 /* The iPad knows how big a touch is even though it does not tell the page,
    and it cancels the ones it takes for a palm: in every pen-only session
@@ -6156,7 +6179,7 @@ function handRetro(penY, now) {
   for (i = 0; i < handRecent.length; i++) {
     r = handRecent[i];
     if (now - r.t > HAND_RETRO) continue;
-    if (penY <= r.y - HAND_GAP && n && n.strokes.indexOf(r.s) >= 0) {
+    if (penY <= docToScreen(0, r.y).y - HAND_GAP && n && n.strokes.indexOf(r.s) >= 0) {
       removeStroke(n, r.s);
       for (u = undoStack.length - 1; u >= 0; u--) {
         if (undoStack[u].t === 'add' && undoStack[u].s === r.s) { undoStack.splice(u, 1); updateUndoButtons(); break; }
@@ -6167,10 +6190,19 @@ function handRetro(penY, now) {
   }
   handRecent = keep;
 }
-/* fingers tapping do not include the hand: with a palm already down, the pen
-   landing beside two palm points is not a three-finger tap */
-function handDown() {
-  for (var k in touchStates) { if (touchStates.hasOwnProperty(k) && touchStates[k].hpalm) return true; }
+/* Fingers tapping do not include the hand: with a palm already down, or the
+   new touch landing well above one kept out of sight below the line (the pen
+   coming down over the hand - recorded, two strokes of a "+" were dropped as
+   "a two-finger tap" that way), it is not a two- or three-finger tap. A
+   hidden touch level with the new one is left alone: that is often the
+   first finger of a real tap made below the writing. */
+function handDown(touch) {
+  var k, o;
+  for (k in touchStates) {
+    if (!touchStates.hasOwnProperty(k)) continue;
+    o = touchStates[k];
+    if (o.hpalm || (o.wait && touch && touch.clientY <= o.cy - HAND_GAP)) return true;
+  }
   return false;
 }
 /* a tap made partly of palm is not two fingers asking for undo */
@@ -6184,9 +6216,20 @@ function handSpot(x, y, now) {
   }
   return false;
 }
+/* Nothing written yet to measure against (a new page, or a minute idle):
+   the hand comes down low on the writing hand's side, so a first touch
+   there is kept out of sight until it proves to be the pen - recorded, a
+   session's first two palm touches were drawn for want of this. */
+function handColdLow(st) {
+  var zx = (st.cx - wrapRect.left) / Math.max(viewW, 1), zy = (st.cy - wrapRect.top) / Math.max(viewH, 1);
+  if (zy < 0.5) return false;
+  if (settings.hand === HAND_R) return zx > 0.45;
+  if (settings.hand === HAND_L) return zx < 0.55;
+  return zy > 0.65;
+}
 function handOnLine(st, now) {
-  return st.state === 'ink' && !st.wait && !!handZone && now - handZone.t < HAND_ZONE_T &&
-         Math.abs(st.cy - handZone.y1) < HAND_ZONE_M;
+  var line = handLineY(now);
+  return st.state === 'ink' && !st.wait && line !== null && Math.abs(st.cy - line) < HAND_ZONE_M;
 }
 
 function holdYoungInk(now) {
@@ -6627,8 +6670,8 @@ function commitInk(st, s, now) {
   }
   n.strokes.push(s);
   if (settings.palmLevel === PALM_AUTO) {
-    handZone = { y1: st.maxCy || st.cy, t: now };
-    if (st.unsure) { handRecent.push({ s: s, y: st.maxCy || st.cy, t: now, id: st.id }); if (handRecent.length > 6) handRecent.shift(); }
+    handZone = { y: strokeMaxY(s), t: now };
+    if (st.unsure) { handRecent.push({ s: s, y: handZone.y, t: now, id: st.id }); if (handRecent.length > 6) handRecent.shift(); }
   }
   pushUndo({ t: 'add', s: s });
   var lp = s.pts[s.pts.length - 1];
@@ -6715,7 +6758,6 @@ function endTouch(touch, now, cancelled) {
   delete touchStates[touch.identifier];
   if (holdEnd(st)) return;
   st.cancelled = cancelled;
-  if (settings.palmLevel === PALM_AUTO && now - st.t0 < 20) handVetoTaps();
   if (st.hpalm) { handVetoTaps(); requestRender(); return; }
   if (cancelled && settings.palmLevel === PALM_AUTO && st.kind === 'probe' && st.state === 'ink' &&
       !(st.penProof && st.pathLen > 40 && now - st.t0 > 150)) {
@@ -6900,7 +6942,6 @@ function gestureMembers() {
 }
 
 function engageGesture(ids, now, pairDist, kind, bothMoving, fromD) {
-  handZone = null;     /* the page moves: the line on screen is somewhere else now */
   var c = gestureCentroid(true);
   if (!c) return;
   var i, o;
@@ -9621,7 +9662,7 @@ function onTouchStart(e) {
       var age0 = now - touchStates[tk].t0;
       if (age0 > oldest) oldest = age0;
     }
-    twoTap = oldest <= SC.TWOTAP_TOGETHER && !handDown() ? { t: now, moved: 0 } : null;
+    twoTap = oldest <= SC.TWOTAP_TOGETHER && !handDown(e.changedTouches[0]) ? { t: now, moved: 0 } : null;
   } else if (down > 2) twoTap = null;
   /* three fingers arriving together start the redo candidate. The same
      "together" rule as the undo: a hand already resting on the glass is
@@ -9634,7 +9675,7 @@ function onTouchStart(e) {
       var age3 = now - touchStates[tk3].t0;
       if (age3 > oldest3) oldest3 = age3;
     }
-    threeTap = oldest3 <= SC.TWOTAP_TOGETHER && !handDown() ? { t: now, moved: 0 } : null;
+    threeTap = oldest3 <= SC.TWOTAP_TOGETHER && !handDown(e.changedTouches[0]) ? { t: now, moved: 0 } : null;
   } else if (down > 3) threeTap = null;
   var ch = e.changedTouches;
   var burst = ch.length >= 2 || (e.touches && e.touches.length >= 3);
