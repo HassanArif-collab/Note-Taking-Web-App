@@ -218,6 +218,30 @@ App.prototype.confirmAll = function (yes) {
   this.win.confirm = function () { return yes !== false; };
   return this;
 };
+/* The home asks its questions in its own dialog, not window.prompt: type
+ * the answer (when it wants a name) and press its OK. */
+App.prototype.dlg = function (text) {
+  if (text !== undefined && text !== null) this.els.dlgInput.value = text;
+  this.els.dlgOk._fire('click', {});
+  this.flushFrames();
+  return this;
+};
+/* pick a row of the dialog's list - a folder - by its exact name */
+App.prototype.dlgPick = function (label) {
+  var rows = this.els.dlgList.children, i;
+  for (i = 0; i < rows.length; i++) {
+    if (rows[i]._lbl === label) { rows[i]._fire('click', {}); this.flushFrames(); return true; }
+  }
+  return false;
+};
+/* a row of the home's popover menu, by its exact label */
+App.prototype.popPick = function (label) {
+  var rows = this.els.hmPop.children, i;
+  for (i = 0; i < rows.length; i++) {
+    if (rows[i]._lbl === label) { rows[i]._fire('click', {}); this.flushFrames(); return true; }
+  }
+  return false;
+};
 
 /* Pretend the user picked a photo out of the camera roll. `url` may
  * carry a #WxH marker, which the Image stub reads as its dimensions. */

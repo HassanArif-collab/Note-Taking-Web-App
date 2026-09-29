@@ -77,166 +77,439 @@ input { font: inherit; }
 }
 body.reading #readChip { display: block; }
 
-/* ---------- notes home (Samsung list) ---------- */
-#notesGrid {
-  position: absolute; top: 56px; left: 0; right: 0; bottom: 0;
-  padding: 12px 4px; overflow-y: auto; -webkit-overflow-scrolling: touch;
-  text-align: center;
-}
-/* opening a folder scales the notes up into place, the way Samsung's
-   folder opens - the grid grows from a smaller, faded-in state to full */
-@-webkit-keyframes homeScaleUp {
-  from { -webkit-transform: scale(0.82); transform: scale(0.82); opacity: 0.3; }
-  to { -webkit-transform: scale(1); transform: scale(1); opacity: 1; }
-}
-@keyframes homeScaleUp {
-  from { -webkit-transform: scale(0.82); transform: scale(0.82); opacity: 0.3; }
-  to { -webkit-transform: scale(1); transform: scale(1); opacity: 1; }
-}
-#notesGrid.scale-up {
-  -webkit-animation: homeScaleUp 0.34s cubic-bezier(0.22, 0.9, 0.32, 1);
-  animation: homeScaleUp 0.34s cubic-bezier(0.22, 0.9, 0.32, 1);
-}
-.note-card {
-  position: relative;
-  display: inline-block; width: 46%; margin: 1.6%;
-  background: #FFFFFF; border-radius: 16px;
-  padding: 0; text-align: left;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-  vertical-align: top; cursor: pointer; overflow: hidden;
-}
-.note-card:active { background: #F7F9FB; }
-/* the preview: the note's first page drawn small, so a card shows what
-   is in the note the way Samsung's grid of miniatures does */
-.note-card .nc-prev {
-  display: block; width: 100%; height: 128px; overflow: hidden;
-  background: #FFFFFF; border-bottom: 1px solid #ECEFF2;
-}
-.note-card .nc-prev canvas { display: block; width: 100%; height: auto; }
-.note-card .nc-body { padding: 10px 14px 12px 14px; }
-.note-card .nc-title {
-  font-size: 16px; font-weight: 600; color: #1B1B1B;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.note-card .nc-sub { font-size: 13px; color: #8C8C8C; margin-top: 4px; }
-.note-card .nc-date { font-size: 12px; color: #A8A8A8; margin-top: 6px; }
-.star-btn {
-  position: absolute; right: 6px; top: 6px;
-  width: 38px; height: 38px;
-  display: -webkit-flex; display: flex;
-  -webkit-align-items: center; align-items: center;
-  -webkit-justify-content: center; justify-content: center;
-  color: #C0C4C8; border-radius: 50%;
-}
-.star-btn:active { background: #F0F2F5; }
-.star-btn.on { color: #F58300; }
-.star-btn.on svg path { fill: #F58300; }
-.nc-rename {
-  position: absolute; right: 6px; bottom: 6px;
-  width: 34px; height: 34px; border-radius: 50%;
-  display: -webkit-flex; display: flex;
-  -webkit-align-items: center; align-items: center;
-  -webkit-justify-content: center; justify-content: center;
-  color: #9AA0A8; border: 0; background: none;
-}
-.nc-rename:active { background: #F0F2F5; }
-.nc-rename.on { color: #0381FE; }
-/* list mode: one note to a row, a small preview on the left */
-#notesGrid.list .note-card { display: -webkit-flex; display: flex; width: auto; margin: 0 0 10px 0; }
-#notesGrid.list .note-card .nc-prev {
-  width: 96px; height: 96px; -webkit-flex: 0 0 96px; flex: 0 0 96px;
-  border-bottom: 0; border-right: 1px solid #ECEFF2;
-}
-#notesGrid.list .note-card .nc-body { -webkit-flex: 1; flex: 1; }
-body.dark .note-card .nc-prev { background: #101114; border-bottom-color: #2A2E34; }
-body.dark #notesGrid.list .note-card .nc-prev { border-right-color: #2A2E34; }
-#emptyHint {
-  position: absolute; top: 40%; left: 0; right: 0;
-  text-align: center; color: #A8A8A8; font-size: 15px; display: none;
-}
-#fabNew {
-  position: absolute; right: 20px; bottom: 20px;
-  width: 56px; height: 56px; border-radius: 50%;
-  background: #0381FE; color: #FFFFFF;
-  font-size: 34px; font-weight: 300; line-height: 54px; text-align: center;
-  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
-}
-#fabNew:active { background: #0270DB; }
-
-/* ---------- notebook drawer ---------- */
-#drawerBackdrop {
-  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.32); display: none; z-index: 39;
-}
-#drawer {
-  position: absolute; top: 0; left: 0; bottom: 0; width: 288px;
-  background: #FFFFFF; z-index: 40;
-  -webkit-transform: translateX(-102%); transform: translateX(-102%);
-  transition: -webkit-transform 0.22s ease-out; transition: transform 0.22s ease-out;
+/* ---------- notes home: a rail of folders beside a grid of notes ----------
+   Samsung Notes' tablet home (One UI 7/8): the search, All notes,
+   Favorites, Trash and the folders live in a rail on the left; the notes
+   are miniatures of their first page on the right. One UI's colours: a
+   #F7F8FA ground, white surfaces, one accent, soft shadows. Motion is
+   One UI's too - decelerate in, accelerate out, nothing bouncy. */
+#hmRail {
+  position: absolute; top: 0; left: 0; bottom: 0; width: 272px;
+  background: #F7F8FA; border-right: 1px solid #E8EBEF;
   display: -webkit-flex; display: flex;
   -webkit-flex-direction: column; flex-direction: column;
+  z-index: 3; -webkit-box-sizing: border-box; box-sizing: border-box;
+  -webkit-transition: -webkit-transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
-#drawer.open { -webkit-transform: none; transform: none; }
-#drawer .d-hdr {
-  height: 56px; border-bottom: 1px solid #E5E5E5;
+#hmRail.wide { width: 296px; }
+#hmRail.off { -webkit-transform: translateX(-101%); transform: translateX(-101%); }
+#hmRail.over { z-index: 8; box-shadow: 10px 0 36px rgba(0,0,0,0.16); }
+#hmRailScrim {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 7;
+  background: rgba(0,0,0,0); visibility: hidden;
+  -webkit-transition: background-color 0.3s, visibility 0s 0.3s;
+  transition: background-color 0.3s, visibility 0s 0.3s;
+}
+#hmRailScrim.on {
+  background: rgba(0,0,0,0.28); visibility: visible;
+  -webkit-transition: background-color 0.3s; transition: background-color 0.3s;
+}
+#hmRailTop { padding: 22px 16px 8px 16px; }
+#hmApp {
+  font-size: 25px; font-weight: 800; letter-spacing: -0.6px; color: #16181A;
+  padding: 2px 6px 14px 6px; white-space: nowrap;
+}
+#hmSearch { position: relative; height: 40px; border-radius: 20px; background: #EAECF0; }
+#hmSearch .hs-ic { position: absolute; left: 13px; top: 11px; color: #7B858E; pointer-events: none; }
+#searchInput {
+  display: block; width: 100%; height: 40px; border: 0; outline: 0;
+  background: transparent; border-radius: 20px; -webkit-appearance: none;
+  padding: 0 38px 0 39px; font-size: 15px; color: #16181A;
+  -webkit-box-sizing: border-box; box-sizing: border-box;
+  -webkit-user-select: text; user-select: text;
+}
+#searchInput::-webkit-input-placeholder { color: #8B939B; }
+#searchClear {
+  position: absolute; right: 4px; top: 4px; width: 32px; height: 32px;
+  border-radius: 50%; color: #7B858E; display: none;
+}
+#searchClear.on { display: block; }
+#searchClear svg { display: block; margin: 0 auto; }
+#hmRailScroll {
+  -webkit-flex: 1; flex: 1; min-height: 0; overflow-y: auto;
+  -webkit-overflow-scrolling: touch; padding: 8px 12px 12px 12px;
+}
+.hm-nav, .nb-row {
+  display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center;
+  width: 100%; height: 44px; border-radius: 12px; padding: 0 12px; margin: 1px 0;
+  -webkit-box-sizing: border-box; box-sizing: border-box;
+  text-align: left; color: #16181A;
+  -webkit-transition: background-color 0.16s; transition: background-color 0.16s;
+}
+.hm-nav:active, .nb-row:active { background: #ECEEF1; }
+.hm-nav.on, .nb-row.on { background: #E1EDFF; color: #0381FE; }
+.hm-nav.on .nm, .nb-row.on .nm { font-weight: 600; }
+.hm-nav svg { -webkit-flex: 0 0 22px; flex: 0 0 22px; margin-right: 12px; color: #4A5158; }
+.hm-nav.on svg { color: #0381FE; }
+.hm-nav .nm, .nb-row .nm {
+  -webkit-flex: 1; flex: 1; min-width: 0; font-size: 15px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hm-nav .ct, .nb-row .ct { font-size: 13px; color: #9AA3AB; margin-left: 8px; }
+.hm-nav.on .ct, .nb-row.on .ct { color: #0381FE; }
+.hm-sec {
   display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
-  padding: 0 6px; font-weight: 600; font-size: 16px;
+  height: 40px; margin: 16px 0 2px 0; padding: 0 2px 0 12px;
+  font-size: 13px; font-weight: 700; color: #7B858E;
 }
-#drawer .d-hdr .lbl { -webkit-flex: 1; flex: 1; padding-left: 10px; }
-#nbList { -webkit-flex: 1; flex: 1; overflow-y: auto; }
-.nb-row {
-  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
-  height: 52px; padding: 0 18px;
+.hm-sec span { -webkit-flex: 1; flex: 1; }
+.hm-sec .ct { -webkit-flex: none; flex: none; font-weight: 400; color: #9AA3AB; margin-right: 6px; }
+#newNbBtn {
+  width: 34px; height: 34px; border-radius: 50%; color: #0381FE;
+  font-size: 24px; line-height: 32px; font-weight: 300;
 }
-.nb-row:active { background: #F4F6F8; }
-.nb-row.on { background: rgba(3,129,254,0.10); }
-.nb-row.on .nm { color: #0381FE; font-weight: 600; }
-.nb-row .dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 14px; }
-.nb-row .nm { -webkit-flex: 1; flex: 1; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nb-row .ct {
-  /* it was a bare number set adrift at the end of the row, reading as a
-     stray digit rather than as a count of anything */
-  font-size: 12px; font-weight: 600; color: #7A7F87;
-  background: #EEF0F3; border-radius: 10px; padding: 2px 8px;
-  min-width: 12px; text-align: center;
+#newNbBtn:active { background: #E1EDFF; }
+.nb-item { position: relative; }
+.nb-row .chip {
+  -webkit-flex: 0 0 12px; flex: 0 0 12px; width: 12px; height: 12px;
+  border-radius: 4px; margin: 0 15px 0 5px;
 }
-body.dark .nb-row .ct { color: #A8ADB5; background: #2B2F36; }
-/* Rename and Move used to live in the drawer header and act on the
- * CURRENT notebook - so to rename one you first had to open it, and
- * nothing on screen said which one the buttons meant. The actions belong
- * on the row they act on.
- *
- * Above the drawer at 40, and its own scrim above that again, because the
- * panel scrim sits at 19 for the page and would be underneath all of
- * this. */
-.nb-item { display: -webkit-box; display: -webkit-flex; display: flex;
-           -webkit-align-items: center; align-items: center; }
-.nb-item .nb-row { -webkit-flex: 1; flex: 1; }
+.nb-row .sub { color: #9AA3AB; margin-right: 6px; font-size: 13px; }
 .nb-more {
-  width: 38px; height: 44px; border: 0; background: none; color: #9AA0A8;
-  font-size: 19px; font-weight: 700; line-height: 1; padding: 0 12px 0 0;
+  position: absolute; right: 2px; top: 5px; width: 36px; height: 34px;
+  border-radius: 17px; color: #0381FE; display: none;
 }
-.nb-more:active { color: #0381FE; }
-#nbActions {
-  position: fixed; z-index: 44; display: none; min-width: 190px;
-  background: #FFFFFF; border-radius: 12px; padding: 6px 0;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+.nb-more svg { display: block; margin: 0 auto; }
+.nb-item.on .nb-more { display: block; }
+.nb-item.on .nb-row .ct { visibility: hidden; }
+.hm-ghost {
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  width: 100%; height: 44px; border-radius: 12px; padding: 0 12px;
+  -webkit-box-sizing: border-box; box-sizing: border-box;
+  color: #8B939B; font-size: 15px; text-align: left;
 }
-#nbActions.on { display: block; }
-#nbActions button {
-  display: block; width: 100%; text-align: left; border: 0; background: none;
-  font-size: 15px; color: #1A1A1A; padding: 12px 18px;
+.hm-ghost:active { background: #ECEEF1; }
+.hm-ghost svg { margin: 0 12px 0 0; }
+#hmRailFoot { padding: 10px 16px 18px 16px; }
+#fabNew {
+  display: block; width: 100%; height: 50px; border-radius: 25px;
+  background: #0381FE; color: #FFFFFF; font-size: 15.5px; font-weight: 700;
+  box-shadow: 0 8px 20px rgba(3,129,254,0.30), 0 1px 3px rgba(3,129,254,0.25);
+  -webkit-transition: -webkit-transform 0.14s ease-out, background-color 0.14s;
+  transition: transform 0.14s ease-out, background-color 0.14s;
+}
+#fabNew svg { display: inline-block; vertical-align: -5px; margin: 0 6px 0 -4px; }
+#fabNew:active { background: #0270DB; -webkit-transform: scale(0.97); transform: scale(0.97); }
+
+#hmMain {
+  position: absolute; top: 0; right: 0; bottom: 0; left: 272px; background: #F7F8FA;
+  -webkit-transition: left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#hmMain.wide { left: 296px; }
+#hmMain.full { left: 0; }
+#hmHead, #hmSelBar {
+  position: absolute; top: 0; left: 0; right: 0; height: 76px;
+  padding: 0 14px 0 12px;
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
   -webkit-box-sizing: border-box; box-sizing: border-box;
 }
-#nbActions button.warn { color: #B3261E; }
-#nbActions .who {
-  font-size: 12px; font-weight: 700; color: #8A9099; padding: 6px 18px 8px 18px;
-  letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+#hmHead .ibtn { color: #4A5158; }
+#hmTitles { -webkit-flex: 1; flex: 1; min-width: 0; padding: 0 8px 0 6px; }
+#homeTitle {
+  font-size: 26px; font-weight: 700; letter-spacing: -0.5px; color: #16181A;
+  line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-#panelScrim.hi { z-index: 43; }
-body.dark #nbActions { background: #23272E; }
-body.dark #nbActions button { color: #F2F3F5; }
-#newNbBtn { height: 52px; color: #0381FE; font-size: 15px; font-weight: 600; text-align: left; padding: 0 18px; }
+#homeCount {
+  font-size: 13px; color: #7B858E; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* select mode: the header becomes the blue action bar */
+#hmSelBar {
+  z-index: 4; background: #0381FE; color: #FFFFFF; padding-left: 8px;
+  opacity: 0; visibility: hidden;
+  -webkit-transform: translateY(-10px); transform: translateY(-10px);
+  -webkit-transition: opacity 0.16s, -webkit-transform 0.16s, visibility 0s 0.16s;
+  transition: opacity 0.16s, transform 0.16s, visibility 0s 0.16s;
+}
+#hmSelBar.on {
+  opacity: 1; visibility: visible; -webkit-transform: none; transform: none;
+  -webkit-transition: opacity 0.2s, -webkit-transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.2s, transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#hmSelBar .ibtn { color: #FFFFFF; }
+#hmSelBar .ibtn:active { background: rgba(255,255,255,0.2); }
+#hmSelBar .ibtn.dis { opacity: 0.38; }
+#hmSelBar .ibtn.gone { display: none; }
+#hsCount { -webkit-flex: 1; flex: 1; font-size: 19px; font-weight: 700; padding-left: 4px; white-space: nowrap; }
+#hsAll {
+  height: 34px; padding: 0 15px; border-radius: 17px; margin-right: 6px;
+  font-size: 14px; font-weight: 600; color: #FFFFFF; background: rgba(255,255,255,0.18);
+}
+#hsAll:active { background: rgba(255,255,255,0.3); }
+
+#notesGrid {
+  position: absolute; top: 76px; left: 0; right: 0; bottom: 0;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 4px 8px 0 24px; -webkit-box-sizing: border-box; box-sizing: border-box;
+  display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap;
+  -webkit-align-content: flex-start; align-content: flex-start;
+  -webkit-align-items: flex-start; align-items: flex-start;
+}
+.hm-banner {
+  width: 100%; margin: 0 16px 16px 0; padding: 11px 14px; border-radius: 12px;
+  background: #ECEEF1; color: #4A5158; font-size: 13px;
+  -webkit-box-sizing: border-box; box-sizing: border-box;
+}
+.hm-end { width: 100%; height: 110px; }
+.nc {
+  position: relative; width: -webkit-calc(33.333% - 16px); width: calc(33.333% - 16px);
+  margin: 0 16px 22px 0; cursor: pointer;
+}
+#notesGrid.c2 .nc { width: -webkit-calc(50% - 16px); width: calc(50% - 16px); }
+#notesGrid.c4 .nc { width: -webkit-calc(25% - 16px); width: calc(25% - 16px); }
+#notesGrid.c5 .nc { width: -webkit-calc(20% - 16px); width: calc(20% - 16px); }
+#notesGrid.c6 .nc { width: -webkit-calc(16.666% - 16px); width: calc(16.666% - 16px); }
+.nc-prev {
+  position: relative; height: 0; padding-top: 75%; border-radius: 14px;
+  background-color: #FFFFFF; background-size: 100% auto;
+  background-position: 50% 0; background-repeat: no-repeat;
+  box-shadow: 0 0 0 1px #E3E7EB, 0 1px 3px rgba(16,24,40,0.07);
+  -webkit-transition: -webkit-transform 0.16s ease-out, box-shadow 0.16s;
+  transition: transform 0.16s ease-out, box-shadow 0.16s;
+}
+.nc:active .nc-prev, .nc.down .nc-prev { -webkit-transform: scale(0.965); transform: scale(0.965); }
+.nc-star {
+  position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 50%;
+  background: rgba(255,255,255,0.94); box-shadow: 0 1px 4px rgba(0,0,0,0.16); color: #F5B400;
+}
+.nc-star svg { display: block; margin: 4px auto 0 auto; }
+.nc-chk {
+  position: absolute; top: 9px; left: 9px; width: 24px; height: 24px; border-radius: 50%;
+  -webkit-box-sizing: border-box; box-sizing: border-box;
+  border: 2px solid #FFFFFF; background: rgba(0,0,0,0.18);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.22); color: #FFFFFF; display: none;
+}
+.nc-chk svg { display: block; margin: 3px auto 0 auto; opacity: 0; }
+#notesGrid.sel .nc-chk { display: block; -webkit-animation: chkIn 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.25); animation: chkIn 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.25); }
+.nc.sel .nc-chk { background: #0381FE; }
+.nc.sel .nc-chk svg { opacity: 1; }
+.nc.sel .nc-prev { box-shadow: 0 0 0 2.5px #0381FE, 0 2px 8px rgba(3,129,254,0.22); }
+@-webkit-keyframes chkIn { from { -webkit-transform: scale(0); } to { -webkit-transform: scale(1); } }
+@keyframes chkIn { from { transform: scale(0); } to { transform: scale(1); } }
+.nc-meta {
+  display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start;
+  padding: 9px 0 0 3px;
+}
+.nc-txt { -webkit-flex: 1; flex: 1; min-width: 0; }
+.nc-title {
+  font-size: 14.5px; font-weight: 600; color: #16181A; line-height: 1.3;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.nc-sub {
+  font-size: 12.5px; color: #7B858E; margin-top: 2px; line-height: 1.35;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.nc-sub i {
+  display: inline-block; width: 8px; height: 8px; border-radius: 2.5px;
+  margin: 0 5px 0 9px; vertical-align: 0;
+}
+.nc-more {
+  -webkit-flex: 0 0 30px; flex: 0 0 30px; width: 30px; height: 30px; margin: -3px -4px 0 0;
+  border-radius: 50%; color: #9AA3AB;
+}
+.nc-more:active { background: #E6E9ED; color: #4A5158; }
+.nc-more svg { display: block; margin: 0 auto; }
+#notesGrid.sel .nc-more { visibility: hidden; }
+/* list: one note to a row, a small miniature on the left */
+#notesGrid.list .nc {
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  width: -webkit-calc(100% - 16px); width: calc(100% - 16px); margin: 0 16px 10px 0;
+  padding: 9px; border-radius: 16px; background: #FFFFFF;
+  box-shadow: 0 0 0 1px #E8EBEF, 0 1px 2px rgba(16,24,40,0.05);
+  -webkit-box-sizing: border-box; box-sizing: border-box;
+}
+#notesGrid.list .nc-prev {
+  -webkit-flex: 0 0 76px; flex: 0 0 76px; width: 76px; height: 57px; padding-top: 0;
+  border-radius: 9px;
+}
+#notesGrid.list .nc-meta { -webkit-flex: 1; flex: 1; min-width: 0; padding: 0 2px 0 14px; -webkit-align-items: center; align-items: center; }
+#notesGrid.list .nc-title { font-size: 15.5px; }
+#notesGrid.list .nc-sub { font-size: 13px; margin-top: 3px; }
+#notesGrid.list .nc-star { top: 4px; right: 4px; width: 20px; height: 20px; }
+#notesGrid.list .nc-star svg { margin-top: 2.5px; width: 14px; height: 14px; }
+#notesGrid.list .nc-chk { top: 16px; left: 26px; }
+/* a folder opening: the notes rise into place one after another */
+@-webkit-keyframes ncIn {
+  from { opacity: 0; -webkit-transform: translateY(16px) scale(0.9); }
+  to { opacity: 1; -webkit-transform: none; }
+}
+@keyframes ncIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+#notesGrid.scale-up .nc {
+  -webkit-animation: ncIn 0.46s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: ncIn 0.46s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+#emptyHint {
+  position: absolute; top: 76px; left: 0; right: 0; bottom: 60px; display: none;
+  text-align: center; color: #7B858E; pointer-events: none;
+}
+#emptyHint.on { display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-justify-content: center; justify-content: center; -webkit-align-items: center; align-items: center; }
+#emptyHint .eh-ic {
+  width: 96px; height: 96px; border-radius: 50%; background: #ECEEF1; color: #9AA3AB;
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  -webkit-justify-content: center; justify-content: center; margin-bottom: 18px;
+}
+#emptyHint .eh-t { font-size: 18px; font-weight: 700; color: #4A5158; }
+#emptyHint .eh-c { font-size: 14px; margin-top: 6px; max-width: 300px; line-height: 1.45; }
+
+/* the home's popover menus: sort, more, a note's and a folder's actions */
+#hmScrim { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 19; display: none; }
+#hmScrim.on { display: block; }
+#hmPop {
+  position: absolute; z-index: 20; min-width: 232px; max-width: 300px; padding: 6px 0;
+  background: #FFFFFF; border-radius: 18px;
+  box-shadow: 0 14px 44px rgba(0,0,0,0.17), 0 0 0 1px rgba(0,0,0,0.04);
+  opacity: 0; visibility: hidden;
+  -webkit-transform: scale(0.9); transform: scale(0.9);
+  -webkit-transition: opacity 0.15s, -webkit-transform 0.15s, visibility 0s 0.15s;
+  transition: opacity 0.15s, transform 0.15s, visibility 0s 0.15s;
+}
+#hmPop.on {
+  opacity: 1; visibility: visible; -webkit-transform: none; transform: none;
+  -webkit-transition: opacity 0.2s, -webkit-transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.2s, transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hp-h { font-size: 12.5px; font-weight: 700; color: #8B939B; padding: 8px 18px 6px 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hp-row {
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  width: 100%; height: 46px; padding: 0 18px; text-align: left;
+  font-size: 15px; color: #16181A; white-space: nowrap;
+  -webkit-box-sizing: border-box; box-sizing: border-box;
+}
+.hp-row:active { background: #F1F3F5; }
+.hp-row .lbl { -webkit-flex: 1; flex: 1; }
+.hp-row svg { margin-right: 14px; color: #4A5158; -webkit-flex: none; flex: none; }
+.hp-row.on { color: #0381FE; font-weight: 600; }
+.hp-row.on svg { color: #0381FE; }
+.hp-row .dir { color: #0381FE; margin: 0 0 0 10px; }
+.hp-row.warn, .hp-row.warn svg { color: #D64545; }
+.hp-sep { height: 1px; background: #EEF0F2; margin: 5px 0; }
+.hp-sw {
+  position: relative; width: 36px; height: 21px; border-radius: 11px; background: #C9CFD5;
+  -webkit-transition: background-color 0.18s; transition: background-color 0.18s;
+}
+.hp-sw b {
+  position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 50%;
+  background: #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  -webkit-transition: -webkit-transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hp-sw.on { background: #0381FE; }
+.hp-sw.on b { -webkit-transform: translateX(15px); transform: translateX(15px); }
+
+/* dialogs: a name, a colour, a choice of folder, or are-you-sure */
+#dlg {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 70;
+  background: rgba(0,0,0,0); visibility: hidden;
+  -webkit-transition: background-color 0.2s, visibility 0s 0.2s;
+  transition: background-color 0.2s, visibility 0s 0.2s;
+}
+#dlg.on {
+  background: rgba(0,0,0,0.38); visibility: visible;
+  -webkit-transition: background-color 0.22s; transition: background-color 0.22s;
+}
+#dlgBox {
+  position: absolute; top: 15%; left: 0; right: 0; margin: 0 auto;
+  width: 384px; max-width: 92%; padding: 22px 22px 12px 22px;
+  background: #FFFFFF; border-radius: 26px;
+  box-shadow: 0 18px 54px rgba(0,0,0,0.24);
+  -webkit-box-sizing: border-box; box-sizing: border-box;
+  opacity: 0; -webkit-transform: scale(0.92); transform: scale(0.92);
+  -webkit-transition: opacity 0.15s, -webkit-transform 0.18s cubic-bezier(0.3, 0, 0.8, 0.15);
+  transition: opacity 0.15s, transform 0.18s cubic-bezier(0.3, 0, 0.8, 0.15);
+}
+#dlg.on #dlgBox {
+  opacity: 1; -webkit-transform: none; transform: none;
+  -webkit-transition: opacity 0.2s, -webkit-transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.2s, transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#dlgTitle { font-size: 19px; font-weight: 700; color: #16181A; letter-spacing: -0.2px; }
+#dlgMsg { font-size: 14.5px; color: #4A5158; margin-top: 8px; line-height: 1.45; display: none; }
+#dlgMsg.on { display: block; }
+#dlgInput {
+  display: none; width: 100%; height: 48px; margin-top: 16px; padding: 0 14px;
+  border: 0; outline: 0; border-radius: 13px; background: #EEF0F3;
+  font-size: 16px; color: #16181A; -webkit-appearance: none;
+  -webkit-box-sizing: border-box; box-sizing: border-box;
+  -webkit-user-select: text; user-select: text;
+  -webkit-transition: box-shadow 0.15s, background-color 0.15s;
+  transition: box-shadow 0.15s, background-color 0.15s;
+}
+#dlgInput.on { display: block; }
+#dlgInput:focus { background: #FFFFFF; box-shadow: 0 0 0 2px #0381FE; }
+#dlgInput.bad { box-shadow: 0 0 0 2px #D64545; }
+#dlgColors { display: none; margin-top: 16px; }
+#dlgColors.on { display: -webkit-flex; display: flex; }
+.dc {
+  position: relative; width: 34px; height: 34px; border-radius: 50%; margin-right: 10px;
+  -webkit-transition: -webkit-transform 0.15s; transition: transform 0.15s;
+}
+.dc:active { -webkit-transform: scale(0.9); transform: scale(0.9); }
+.dc svg { display: block; margin: 0 auto; opacity: 0; color: #FFFFFF; }
+.dc.on svg { opacity: 1; }
+.dc.on { box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4px rgba(0,0,0,0.16); }
+#dlgList {
+  display: none; max-height: 300px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  margin: 12px -10px 0 -10px;
+}
+#dlgList.on { display: block; }
+#dlgBtns {
+  display: -webkit-flex; display: flex; -webkit-justify-content: flex-end; justify-content: flex-end;
+  margin-top: 16px;
+}
+#dlgBtns button {
+  height: 44px; padding: 0 18px; border-radius: 22px; margin-left: 4px;
+  font-size: 15px; font-weight: 600; color: #4A5158;
+}
+#dlgBtns button:active { background: #F1F3F5; }
+#dlgOk { color: #0381FE; }
+#dlgOk.warn { color: #D64545; }
+#dlgOk.gone { display: none; }
+@-webkit-keyframes dlgShake { 0%, 100% { -webkit-transform: none; } 25% { -webkit-transform: translateX(-6px); } 75% { -webkit-transform: translateX(6px); } }
+@keyframes dlgShake { 0%, 100% { transform: none; } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+#dlgBox.shake { -webkit-animation: dlgShake 0.24s; animation: dlgShake 0.24s; }
+
+/* moving between the home and a note: the note slides in from the side it
+   is going to, the home comes back from the other */
+@-webkit-keyframes viewIn { from { opacity: 0; -webkit-transform: translateX(30px); } to { opacity: 1; -webkit-transform: none; } }
+@keyframes viewIn { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: none; } }
+@-webkit-keyframes viewBack { from { opacity: 0; -webkit-transform: translateX(-24px); } to { opacity: 1; -webkit-transform: none; } }
+@keyframes viewBack { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+.view.enter { -webkit-animation: viewIn 0.34s cubic-bezier(0.16, 1, 0.3, 1); animation: viewIn 0.34s cubic-bezier(0.16, 1, 0.3, 1); }
+.view.back { -webkit-animation: viewBack 0.3s cubic-bezier(0.16, 1, 0.3, 1); animation: viewBack 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+
+body.dark #hmRail { background: #0B0B0C; border-right-color: #1F1F22; }
+body.dark #hmApp, body.dark #homeTitle, body.dark .nc-title, body.dark #dlgTitle { color: #FFFFFF; }
+body.dark #hmSearch { background: #1F1F22; }
+body.dark #searchInput { color: #FFFFFF; }
+body.dark .hm-nav, body.dark .nb-row { color: #E6E6E8; }
+body.dark .hm-nav svg { color: #A0A5AA; }
+body.dark .hm-nav:active, body.dark .nb-row:active, body.dark .hm-ghost:active { background: #1B1B1D; }
+body.dark .hm-nav.on, body.dark .nb-row.on { background: rgba(77,163,255,0.16); color: #4DA3FF; }
+body.dark .hm-nav.on svg, body.dark .hm-nav.on .ct, body.dark .nb-row.on .ct, body.dark .nb-more, body.dark #newNbBtn { color: #4DA3FF; }
+body.dark #newNbBtn:active { background: rgba(77,163,255,0.16); }
+body.dark #fabNew { background: #1F8BFF; box-shadow: 0 8px 20px rgba(0,0,0,0.5); }
+body.dark #hmMain { background: #000000; }
+body.dark #hmHead .ibtn { color: #C4C7CC; }
+body.dark #hmSelBar { background: #1463C4; }
+body.dark .nc-prev { box-shadow: 0 0 0 1px #2A2A2E, 0 1px 3px rgba(0,0,0,0.5); }
+body.dark .nc-more:active { background: #1F1F22; }
+body.dark #notesGrid.list .nc { background: #1B1B1D; box-shadow: 0 0 0 1px #2A2A2E; }
+body.dark .hm-banner, body.dark #emptyHint .eh-ic { background: #1B1B1D; color: #A0A5AA; }
+body.dark #emptyHint .eh-t { color: #E6E6E8; }
+body.dark #hmPop, body.dark #dlgBox { background: #232326; box-shadow: 0 14px 44px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06); }
+body.dark .hp-row, body.dark .hp-row svg { color: #E6E6E8; }
+body.dark .hp-row:active, body.dark #dlgBtns button:active { background: #2C2C30; }
+body.dark .hp-row.on, body.dark .hp-row.on svg, body.dark .hp-row .dir, body.dark #dlgOk { color: #4DA3FF; }
+body.dark .hp-sep { background: #2F2F33; }
+body.dark #dlgMsg, body.dark #dlgBtns button { color: #B4B8BE; }
+body.dark #dlgInput { background: #1B1B1D; color: #FFFFFF; }
+body.dark #dlgInput:focus { background: #111113; }
 
 /* ---------- editor canvas ---------- */
 #drawView { background: #F1F2F4; overflow: hidden; }
@@ -916,6 +1189,8 @@ body.dark #pvDirName { color: #A8ADB5; }
 #toast.show {
   opacity: 1; -webkit-transform: translateX(-50%) translateY(0); transform: translateX(-50%) translateY(0);
 }
+#toast.act { pointer-events: auto; padding-right: 8px; }
+#toast .ta { color: #6FB1FF; font-size: 14px; font-weight: 700; padding: 0 10px; margin-left: 12px; height: 22px; }
 
 /* ---------- export overlay ---------- */
 .overlay {
@@ -1241,24 +1516,6 @@ body.dark #tokenInput { background: #26282D; color: #E8E8E8; border-color: #3A43
   z-index: 14; display: none;
 }
 
-/* search bar (home) */
-#searchBar {
-  position: absolute; top: 56px; left: 0; right: 0; height: 54px;
-  background: #FFFFFF; border-bottom: 1px solid #E5E5E5;
-  display: none; padding: 9px 14px; z-index: 12;
-}
-#searchInput {
-  display: block; height: 36px; width: 100%;
-  background: #F1F2F4; border: 0; outline: 0;
-  border-radius: 10px; padding: 0 64px 0 12px;
-  font-size: 15px; color: #1B1B1B;
-}
-#searchCancelBtn {
-  position: absolute; right: 14px; top: 16px;
-  color: #0381FE; font-size: 14px; font-weight: 600;
-  padding: 0 2px;
-}
-
 /* ---------- shape assist row (pen palette) ---------- */
 #shapeRow { margin-top: 12px; }
 #shapeRow .sh-h { font-size: 12px; color: #8C8C8C; margin-bottom: 6px; }
@@ -1322,24 +1579,8 @@ body.dark .hdr { background: #1B1C1F; border-bottom: 1px solid #2A2B2F; }
 body.dark .hdr .ttl { color: #E8E8E8; }
 body.dark .ibtn { color: #B8B8BC; }
 body.dark .ibtn:active { background: #26282C; }
-body.dark .note-card { background: #1D1E22; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
-body.dark .note-card:active { background: #24262B; }
-body.dark .note-card .nc-title { color: #E8E8E8; }
-body.dark .note-card .nc-sub { color: #8C8C8C; }
-body.dark .note-card .nc-date { color: #74747C; }
-body.dark .star-btn { color: #5A5C62; }
-body.dark .star-btn.on { color: #F58300; }
-body.dark #notesGrid { background: transparent; }
 body.dark #palmBtn { background: #26282C; color: #B8B8BC; }
 body.dark #palmBtn.med, body.dark #palmBtn.maxed { color: #61A8FF; background: rgba(61,140,255,0.16); }
-body.dark #searchBar { background: #1B1C1F; border-bottom-color: #2A2B2F; }
-body.dark #searchInput { background: #26282C; color: #E8E8E8; }
-body.dark #searchCancelBtn { color: #61A8FF; }
-body.dark #drawer { background: #1B1C1F; }
-body.dark #drawer .d-hdr { border-bottom-color: #2A2B2F; color: #E8E8E8; }
-body.dark .nb-row:active { background: #26282C; }
-body.dark .nb-row .nm { color: #E8E8E8; }
-body.dark #newNbBtn { color: #61A8FF; }
 body.dark #toolbar { background: rgba(29,30,34,0.97); border-color: rgba(255,255,255,0.08); }
 body.dark .tb-btn { color: #A8ABB0; }
 body.dark .tb-btn:active { background: #26282C; }
@@ -1389,57 +1630,67 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
 
 <!-- ============ NOTES HOME ============ -->
 <div id="homeView" class="view on">
-  <div class="hdr">
-    <button id="menuBtn" class="ibtn" aria-label="Notebooks">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-        <line x1="3.5" y1="6.5" x2="20.5" y2="6.5"/><line x1="3.5" y1="12" x2="20.5" y2="12"/><line x1="3.5" y1="17.5" x2="20.5" y2="17.5"/>
-      </svg>
-    </button>
-    <div class="ttl left" id="homeTitle">Notes</div>
-    <button id="homeSortBtn" class="ibtn" aria-label="Sort notes">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M4 7 h13"/><path d="M4 12 h9"/><path d="M4 17 h5"/>
-        <path d="M18.5 9.5 v8"/><path d="M16 15 l2.5 2.5 L21 15"/>
-      </svg>
-    </button>
-    <button id="homeViewBtn" class="ibtn" aria-label="Grid or list">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-        <rect x="4" y="4" width="7" height="7" rx="1.2"/>
-        <rect x="13" y="4" width="7" height="7" rx="1.2"/>
-        <rect x="4" y="13" width="7" height="7" rx="1.2"/>
-        <rect x="13" y="13" width="7" height="7" rx="1.2"/>
-      </svg>
-    </button>
-    <button id="searchBtn" class="ibtn" aria-label="Search notes">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
-        <circle cx="11" cy="11" r="6.2"/><path d="M15.6 15.6 L20 20"/>
-      </svg>
-    </button>
+  <div id="hmRail">
+    <div id="hmRailTop">
+      <div id="hmApp">MathNotes</div>
+      <div id="hmSearch">
+        <svg class="hs-ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="6.6"/><path d="M15.8 15.8 L20.5 20.5"/></svg>
+        <input id="searchInput" type="text" placeholder="Search notes" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <button id="searchClear" aria-label="Clear the search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6.5 6.5 L17.5 17.5 M17.5 6.5 L6.5 17.5"/></svg></button>
+      </div>
+    </div>
+    <div id="hmRailScroll">
+      <div id="hmNav"></div>
+      <div class="hm-sec"><span>Folders</span><button id="newNbBtn" aria-label="Create folder">+</button></div>
+      <div id="nbList"></div>
+      <button id="newNbRow" class="hm-ghost"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5 v14 M5 12 h14"/></svg>Create folder</button>
+    </div>
+    <div id="hmRailFoot">
+      <button id="fabNew"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5 v14 M5 12 h14"/></svg>Create note</button>
+    </div>
   </div>
-  <div id="searchBar">
-    <input id="searchInput" type="text" placeholder="Search notes" autocapitalize="off" autocorrect="off">
-    <button id="searchCancelBtn">Cancel</button>
+  <div id="hmMain">
+    <div id="hmHead">
+      <button id="railBtn" class="ibtn" aria-label="Show or hide the folders">
+        <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M9.5 4.5 v15"/></svg>
+      </button>
+      <div id="hmTitles"><div id="homeTitle">All notes</div><div id="homeCount"></div></div>
+      <button id="homeSortBtn" class="ibtn" aria-label="Sort notes">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7 h13"/><path d="M4 12 h9"/><path d="M4 17 h5"/><path d="M18.5 9.5 v8"/><path d="M16 15 l2.5 2.5 L21 15"/></svg>
+      </button>
+      <button id="homeViewBtn" class="ibtn" aria-label="Grid or list"></button>
+      <button id="homeMoreBtn" class="ibtn" aria-label="More">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5.5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="18.5" r="1.8"/></svg>
+      </button>
+    </div>
+    <div id="hmSelBar">
+      <button id="hsClose" class="ibtn" aria-label="Done selecting"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6 L18 18 M18 6 L6 18"/></svg></button>
+      <div id="hsCount">Select notes</div>
+      <button id="hsAll">All</button>
+      <button id="hsFav" class="ibtn" aria-label="Favorite"></button>
+      <button id="hsMove" class="ibtn" aria-label="Move to folder"></button>
+      <button id="hsRename" class="ibtn" aria-label="Rename"></button>
+      <button id="hsRestore" class="ibtn" aria-label="Restore"></button>
+      <button id="hsDel" class="ibtn" aria-label="Delete"></button>
+    </div>
+    <div id="notesGrid"></div>
+    <div id="emptyHint"></div>
   </div>
-  <div id="notesGrid"></div>
-  <div id="emptyHint">No notes yet.<br>Tap the blue + button to create one.</div>
-  <button id="fabNew" aria-label="New note">+</button>
+  <div id="hmRailScrim"></div>
+  <div id="hmScrim"></div>
+  <div id="hmPop"></div>
 </div>
 
-<!-- ============ NOTEBOOK DRAWER ============ -->
-<div id="drawerBackdrop"></div>
-<div id="drawer">
-  <div class="d-hdr">
-    <button id="drawerCloseBtn" class="ibtn">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-        <line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/>
-      </svg>
-    </button>
-    <div class="lbl">Notebooks</div>
-    <div style="width:36px"></div>
+<!-- ============ DIALOG ============ -->
+<div id="dlg">
+  <div id="dlgBox">
+    <div id="dlgTitle"></div>
+    <div id="dlgMsg"></div>
+    <input id="dlgInput" type="text" autocapitalize="sentences" autocorrect="off" spellcheck="false">
+    <div id="dlgColors"></div>
+    <div id="dlgList"></div>
+    <div id="dlgBtns"><button id="dlgCancel">Cancel</button><button id="dlgOk">OK</button></div>
   </div>
-  <div id="nbList"></div>
-  <button id="newNbBtn">+ New notebook</button>
-  <div id="nbActions"></div>
 </div>
 
 <!-- ============ EDITOR ============ -->
@@ -1776,24 +2027,9 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
   <!-- kebab menu -->
   <div id="moreMenu"></div>
 
-  <div id="toast"></div>
-  <div id="warning"></div>
 
   <input id="photoInput" type="file" accept="image/*"
          style="position:absolute;left:-9999px;width:1px;height:1px;">
-
-  <!-- backup and restore -->
-  <div id="backupOverlay" class="overlay">
-    <div id="backupHint">Backup and restore</div>
-    <div id="backupInfo"></div>
-    <textarea id="backupText" autocapitalize="off" autocorrect="off" spellcheck="false"
-              placeholder="Tap Copy my notes to make a backup, or paste a backup here and tap Restore."></textarea>
-    <div id="backupRow">
-      <button id="backupCloseBtn">Close</button>
-      <button id="backupImportBtn">Restore</button>
-      <button id="backupExportBtn">Copy my notes</button>
-    </div>
-  </div>
 
   <!-- diagnostics report (copy out) -->
   <div id="traceOverlay" class="overlay">
@@ -1832,17 +2068,6 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
       </div>
     </div>
     <button id="tplCloseBtn">Close</button>
-  </div>
-
-  <!-- settings screen: every setting grouped and explained -->
-  <div id="settingsOverlay" class="overlay">
-    <div id="settingsBox">
-      <div id="settingsHead">
-        <div id="settingsTitle">Settings</div>
-        <button id="settingsCloseBtn">Close</button>
-      </div>
-      <div id="settingsBody"></div>
-    </div>
   </div>
 
   <!-- testing drills -->
@@ -1888,6 +2113,33 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
     <button id="exportCloseBtn">Close</button>
   </div>
 </div>
+
+<!-- ============ SHARED BY THE HOME AND THE EDITOR ============ -->
+  <div id="toast"></div>
+  <div id="warning"></div>
+  <!-- backup and restore -->
+  <div id="backupOverlay" class="overlay">
+    <div id="backupHint">Backup and restore</div>
+    <div id="backupInfo"></div>
+    <textarea id="backupText" autocapitalize="off" autocorrect="off" spellcheck="false"
+              placeholder="Tap Copy my notes to make a backup, or paste a backup here and tap Restore."></textarea>
+    <div id="backupRow">
+      <button id="backupCloseBtn">Close</button>
+      <button id="backupImportBtn">Restore</button>
+      <button id="backupExportBtn">Copy my notes</button>
+    </div>
+  </div>
+
+  <!-- settings screen: every setting grouped and explained -->
+  <div id="settingsOverlay" class="overlay">
+    <div id="settingsBox">
+      <div id="settingsHead">
+        <div id="settingsTitle">Settings</div>
+        <button id="settingsCloseBtn">Close</button>
+      </div>
+      <div id="settingsBody"></div>
+    </div>
+  </div>
 
 <script>
 /* ============================================================
@@ -2483,7 +2735,7 @@ var eraserPanel = byId('eraserPanel'), sizeRow = byId('sizeRow');
 var moreMenu = byId('moreMenu'), toastEl = byId('toast'), warningEl = byId('warning');
 var pageView = byId('pageView'), pvDown = byId('pvDown'), pvAcross = byId('pvAcross'),
     pvDirName = byId('pvDirName'), pvColors = byId('pvColors');
-var drawer = byId('drawer'), drawerBackdrop = byId('drawerBackdrop'), nbList = byId('nbList');
+var nbList = byId('nbList');
 var exportOverlay = byId('exportOverlay'), exportImg = byId('exportImg');
 var traceOverlay = byId('traceOverlay'), traceText = byId('traceText');
 var backupOverlay = byId('backupOverlay'), backupText = byId('backupText');
@@ -2494,7 +2746,7 @@ var selBarEl = byId('selBar'), selDelBtn = byId('selDelBtn'), selCopyBtn = byId(
 var selSmallBtn = byId('selSmallBtn'), selBigBtn = byId('selBigBtn');
 var textOverlayEl = byId('textOverlay'), textAreaEl = byId('textArea');
 var textDoneBtn = byId('textDoneBtn'), textCancelBtn = byId('textCancelBtn');
-var searchBtn = byId('searchBtn'), searchBarEl = byId('searchBar'), searchInputEl = byId('searchInput'), searchCancelBtn = byId('searchCancelBtn');
+var searchInputEl = byId('searchInput');
 var shapeOffBtn = byId('shapeOffBtn'), shapeLineBtn = byId('shapeLineBtn'), shapeShapeBtn = byId('shapeShapeBtn');
 
 var ctx = null;
@@ -2532,8 +2784,12 @@ var settings = {
   hold: true,                 /* holding the pen still opens the pen pop-up */
   reading: false,             /* reading mode: scroll, zoom and turn pages,
                                  but nothing on the page can be marked */
-  homeSort: 'fav',            /* home order: fav, title or date */
+  homeKind: 'all',            /* what the home shows: all, fav, trash or nb (a folder) */
+  homeSort: 'mod',            /* home order: mod(ified), cr(eated) or title */
+  homeDesc: true,             /* ...newest or Z first */
+  favTop: true,               /* favourites before the rest */
   homeList: false,            /* home shows one note to a row, not a grid */
+  railHidden: false,          /* the folder rail folded away */
   popDock: 0,                 /* pen pop-up docked: 0 no, 1 left edge, 2 right edge */
   popY: 0.5,                  /* ...and how far down that edge */
   zwMag: 3.2,                 /* zoom window: how much bigger you write than
@@ -2572,12 +2828,26 @@ function fmtDate(ms) {
 function genId() { return 'n' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36); }
 
 /* ---------- toast ---------- */
-var toastTimer = null;
-function toast(msg) {
+var toastTimer = null, toastAct = null;
+/* act = { lbl, fn }: a button in the toast, Samsung's "Moved to trash  Undo" */
+function toast(msg, act) {
   toastEl.textContent = msg;
-  toastEl.className = 'show';
+  toastAct = act || null;
+  if (act) {
+    var b = document.createElement('button');
+    b.className = 'ta';
+    b.textContent = act.lbl;
+    b.addEventListener('click', function () {
+      var a = toastAct;
+      toastAct = null;
+      toastEl.className = '';
+      if (a) a.fn();
+    });
+    toastEl.appendChild(b);
+  }
+  toastEl.className = 'show' + (act ? ' act' : '');
   if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(function () { toastEl.className = ''; toastTimer = null; }, 1900);
+  toastTimer = setTimeout(function () { toastEl.className = ''; toastTimer = null; toastAct = null; }, act ? 4500 : 1900);
 }
 function showWarning(msg) {
   warningEl.textContent = msg;
@@ -2719,7 +2989,17 @@ function applyStoredSettings(set) {
     if (typeof data.set.endless === 'boolean') settings.endless = data.set.endless;
     if (typeof data.set.hold === 'boolean') settings.hold = data.set.hold;
     if (typeof data.set.reading === 'boolean') settings.reading = data.set.reading;
-    if (typeof data.set.homeSort === 'string') settings.homeSort = data.set.homeSort;
+    if (typeof data.set.homeSort === 'string') {
+      /* the old home sorted by 'fav' (favourites, then date) or 'date' */
+      var hs = data.set.homeSort;
+      settings.homeSort = hs === 'title' || hs === 'cr' ? hs : 'mod';
+      if (hs === 'date') settings.favTop = false;
+    }
+    if (typeof data.set.homeDesc === 'boolean') settings.homeDesc = data.set.homeDesc;
+    else if (settings.homeSort === 'title') settings.homeDesc = false;
+    if (typeof data.set.favTop === 'boolean') settings.favTop = data.set.favTop;
+    if (typeof data.set.homeKind === 'string') settings.homeKind = data.set.homeKind;
+    if (typeof data.set.railHidden === 'boolean') settings.railHidden = data.set.railHidden;
     if (typeof data.set.homeList === 'boolean') settings.homeList = data.set.homeList;
     if (typeof data.set.popDock === 'number') settings.popDock = lim(Math.round(data.set.popDock), 0, 2);
     if (typeof data.set.popY === 'number') settings.popY = lim(data.set.popY, 0, 1);
@@ -2821,6 +3101,7 @@ function noteRecord(n) {
            /* side by side is the note's own, not the viewer's: a note
               written across stays across on whatever it is opened on */
            horiz: n.horiz ? 1 : 0, pw: n.pw || 0,
+           trash: n.trash || 0,        /* when it went to the trash */
            strokes: serializeNote(n) };
 }
 
@@ -3013,7 +3294,7 @@ function imageFor(s) {
   if (im) return im;
   if (!s.src) return null;
   im = new Image();
-  im.onload = function () { invalidateAll(); requestRender(); };
+  im.onload = function () { invalidateAll(); requestRender(); thumbsStale(); };
   im.src = s.src;
   imgCache[s.id] = im;
   return im;
@@ -8986,7 +9267,6 @@ function doImport() {
      list - otherwise a successful restore looks like a blank page */
   showView('home');
   renderHome();
-  renderDrawer();
   toast('Restored: ' + r.added + ' added, ' + r.replaced + ' updated');
 }
 
@@ -9802,7 +10082,7 @@ window.__mnRef = {
 };
 window.__mnNb = {
   move: moveNotebook, rename: renameNotebook, del: deleteNotebook,
-  actions: openNbActions, close: closeNbActions
+  actions: folderMenu, close: hpClose
 };
 window.__mnGeom = function () {
   var pw = [], pp;
@@ -9861,21 +10141,22 @@ window.__mnTint = function () {
            toolbar: byId('toolbar').style.background };
 };
 window.__mnHome = function () {
-  var cards = notesGrid.children, i, c, k, prevs = 0, renames = 0, titles = [];
-  for (i = 0; i < cards.length; i++) {
-    c = cards[i];
-    var hasPrev = false, hasRename = false;
-    for (k = 0; k < c.children.length; k++) {
-      if (c.children[k].className === 'nc-prev') hasPrev = true;
-      if (c.children[k].className === 'nc-rename') hasRename = true;
-    }
-    if (hasPrev) prevs++;
-    if (hasRename) renames++;
-    titles.push(c.children[1] && c.children[1].children[0] ? c.children[1].children[0].textContent : '');
+  var kids = notesGrid.children, cards = [], i, c, prevs = 0, mores = 0, titles = [], ids = [];
+  for (i = 0; i < kids.length; i++) {
+    c = kids[i];
+    if (!c._id) continue;
+    cards.push(c);
+    if (c.children[0] && c.children[0].className === 'nc-prev') prevs++;
+    if (c._more) mores++;
+    titles.push(c._title);
+    ids.push(c._id);
   }
-  return { cards: cards.length, previews: prevs, renames: renames,
-           list: notesGrid.className.indexOf('list') >= 0,
-           sort: settings.homeSort, titles: titles };
+  return { cards: cards.length, previews: prevs, mores: mores, titles: titles, ids: ids, els: cards,
+           list: notesGrid.className.indexOf('list') >= 0, cols: homeCols,
+           sort: settings.homeSort, desc: settings.homeDesc, kind: homeKind(),
+           sel: homeSel ? selIds().length : -1, title: homeTitle.textContent,
+           count: byId('homeCount').textContent, empty: emptyHint.className === 'on',
+           rail: hmRail.className, main: hmMain.className };
 };
 window.__mnHold = function () { holdCheck(); };
 window.__mnShape = function () { if (shapeId !== null) shapeCheck(shapeId); };
@@ -10071,7 +10352,7 @@ window.addEventListener('pagehide', doSaveNow);
    not the part that never arrives */
 window.addEventListener('pagehide', function () { liveTick(); });
 window.addEventListener('beforeunload', doSaveNow);
-window.addEventListener('resize', function () { resizeView(); });
+window.addEventListener('resize', function () { resizeView(); if (homeOn()) layoutHome(); });
 window.addEventListener('orientationchange', function () { setTimeout(resizeView, 350); });
 
 /* ============================================================
@@ -10092,155 +10373,943 @@ function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-/* ---------- home (search + favorites + cards) ---------- */
-/* a note's first page drawn small, for the home grid's preview. The same
-   paper and the same strokes the page itself uses, so the miniature cannot
-   drift from the note it stands for. */
-function noteThumb(n, w) {
+/* ---------- home ----------
+ * Samsung Notes' tablet home. The rail on the left holds the search, the
+ * three places every note can be seen from - all of them, the favourites,
+ * the trash - and the folders; the pane on the right shows the notes of
+ * whichever is chosen, each as a miniature of its first page.
+ *
+ * Deleting is no longer for good: a note goes to the trash, stays thirty
+ * days and comes back with one tap, and the toast that says it went offers
+ * to undo it. Long-press a note to select several; the header turns into
+ * the blue action bar. Every question the home asks - a name, a colour, a
+ * folder, are you sure - is its own dialog, not the browser's grey prompt. */
+var TRASH_MS = 30 * 24 * 3600 * 1000;
+var FOLDER_COLORS = ['#F58300', '#F5B400', '#0FA958', '#0B8CC8', '#0381FE', '#7C5CFC', '#E86FA8'];
+var hmRail = byId('hmRail'), hmMain = byId('hmMain'), hmPop = byId('hmPop');
+var homeSel = null;              /* select mode: { ids: { noteId: 1 } } */
+var homeShown = [];              /* the notes on screen, in order */
+var cardEls = {};                /* note id -> its card */
+var homeCols = 3;
+var railOpen = false;            /* the rail slid over a narrow screen */
+var THUMB_W = 240, THUMB_H = 180;
+var thumbCache = {}, thumbQ = [], thumbRAF = 0, thumbWaitImg = false, thumbLater = null;
+
+function svgIc(inner, size) {
+  size = size || 22;
+  return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+         'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
+}
+var ICP = {
+  notes: '<rect x="5" y="3.5" width="14" height="17" rx="3"/><path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4"/>',
+  star: '<path d="M12 3.8l2.5 5.1 5.6.8-4 3.9.9 5.6L12 16.6l-5 2.6.9-5.6-4-3.9 5.6-.8z"/>',
+  trash: '<path d="M4.5 6.5h15M9.5 6.5V5c0-.8.7-1.5 1.5-1.5h2c.8 0 1.5.7 1.5 1.5v1.5M6.5 6.5l.9 12.3c.1 1 .9 1.7 1.9 1.7h5.4c1 0 1.8-.7 1.9-1.7l.9-12.3M10 10.5v6M14 10.5v6"/>',
+  folder: '<path d="M3.5 7.5c0-1.1.9-2 2-2h4l2 2.2h7c1.1 0 2 .9 2 2v7.8c0 1.1-.9 2-2 2h-13c-1.1 0-2-.9-2-2z"/>',
+  search: '<circle cx="10.8" cy="10.8" r="6.6"/><path d="M15.8 15.8L20.5 20.5"/>'
+};
+var IC = {
+  notes: svgIc(ICP.notes), star: svgIc(ICP.star), trash: svgIc(ICP.trash), folder: svgIc(ICP.folder),
+  starOn: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.3l2.7 5.5 6 .9-4.35 4.25 1 6L12 17.1l-5.37 2.85 1-6L3.3 9.7l6-.9z"/></svg>',
+  starFull: '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.3l2.7 5.5 6 .9-4.35 4.25 1 6L12 17.1l-5.37 2.85 1-6L3.3 9.7l6-.9z"/></svg>',
+  pen: svgIc('<path d="M4 16.5L15 5.5a2.3 2.3 0 0 1 3.5 3.5L7.5 20H4v-3.5z"/><path d="M13.5 7l3.5 3.5"/>'),
+  restore: svgIc('<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4h4"/>'),
+  grid: svgIc('<rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/>'),
+  list: svgIc('<rect x="4" y="5" width="5" height="5" rx="1.3"/><rect x="4" y="14" width="5" height="5" rx="1.3"/><path d="M12 7.5h8M12 16.5h8"/>'),
+  more: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
+  check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  open: svgIc('<path d="M14 4.5h5.5V10M19.5 4.5L11 13M17.5 14v4c0 1.1-.9 2-2 2h-9.5c-1.1 0-2-.9-2-2V8.5c0-1.1.9-2 2-2h4"/>'),
+  select: svgIc('<circle cx="12" cy="12" r="8"/><path d="M8.5 12.2l2.4 2.4 4.8-4.8"/>'),
+  newFolder: svgIc(ICP.folder + '<path d="M12 11v5M9.5 13.5h5"/>'),
+  gear: svgIc('<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4L6 18M18 18l-1.6-1.6M7.6 7.6L6 6"/>'),
+  pdf: svgIc('<path d="M7 3.5h7l4.5 4.5v11c0 .8-.7 1.5-1.5 1.5H7c-.8 0-1.5-.7-1.5-1.5v-14c0-.8.7-1.5 1.5-1.5z"/><path d="M13.5 3.5V8.5h5"/><path d="M8.5 13.5h7M8.5 16.5h5"/>')
+};
+
+function homeOn() { return homeView.className.indexOf('on') >= 0; }
+function nbOfNote(id) {
+  for (var i = 0; i < notebooks.length; i++) {
+    if (notebooks[i].notes.indexOf(id) >= 0) return i;
+  }
+  return -1;
+}
+function allNoteIds() {
+  var out = [], i, j;
+  for (i = 0; i < notebooks.length; i++) {
+    for (j = 0; j < notebooks[i].notes.length; j++) out.push(notebooks[i].notes[j]);
+  }
+  return out;
+}
+function nbLiveCount(i) {
+  var ids = notebooks[i].notes, c = 0, j;
+  for (j = 0; j < ids.length; j++) if (notes[ids[j]] && !notes[ids[j]].trash) c++;
+  return c;
+}
+function homeKind() {
+  var k = settings.homeKind;
+  if (k === 'nb') return notebooks[curNotebook] ? 'nb' : 'all';
+  return k === 'fav' || k === 'trash' ? k : 'all';
+}
+function homeQuery() {
+  return String(searchInputEl.value || '').replace(/^\s+|\s+$/g, '').toLowerCase();
+}
+/* a note's name, star and trash date live in its own record: saveSoon only
+   marks the OPEN note for writing, so changing another one has to say so */
+function touchNote(id) { markDirty(id); saveSoon(); }
+
+function homeCounts() {
+  var ids = allNoteIds(), c = { all: 0, fav: 0, trash: 0 }, i, n;
+  for (i = 0; i < ids.length; i++) {
+    n = notes[ids[i]];
+    if (!n) continue;
+    if (n.trash) c.trash++;
+    else { c.all++; if (n.fav) c.fav++; }
+  }
+  return c;
+}
+
+function homeIds() {
+  var q = homeQuery(), kind = homeKind(), out = [], i, n, id, nbi;
+  var src = kind === 'nb' && !q ? notebooks[curNotebook].notes : allNoteIds();
+  var trash = kind === 'trash' && !q;
+  for (i = 0; i < src.length; i++) {
+    id = src[i]; n = notes[id];
+    if (!n) continue;
+    if (trash ? !n.trash : n.trash) continue;
+    if (kind === 'fav' && !q && !n.fav) continue;
+    if (q) {
+      nbi = nbOfNote(id);
+      if (((n.title || 'Untitled') + ' ' + (nbi >= 0 ? notebooks[nbi].title : '')).toLowerCase().indexOf(q) < 0) continue;
+    }
+    out.push(id);
+  }
+  out.sort(homeCmp(trash));
+  return out;
+}
+function homeCmp(trash) {
+  var key = settings.homeSort, desc = settings.homeDesc, favTop = settings.favTop && !trash;
+  return function (a, b) {
+    var x = notes[a], y = notes[b], d;
+    if (trash) return (y.trash || 0) - (x.trash || 0);
+    if (favTop) { d = (y.fav ? 1 : 0) - (x.fav ? 1 : 0); if (d) return d; }
+    if (key === 'title') {
+      var ta = (x.title || 'Untitled').toLowerCase(), tb = (y.title || 'Untitled').toLowerCase();
+      d = ta < tb ? -1 : (ta > tb ? 1 : 0);
+    } else if (key === 'cr') d = (x.cr || 0) - (y.cr || 0);
+    else d = (x.mod || 0) - (y.mod || 0);
+    return desc ? -d : d;
+  };
+}
+
+function pad2(v) { return (v < 10 ? '0' : '') + v; }
+function fmtWhen(ms) {
+  if (!ms) return '';
+  var d = new Date(ms), now = new Date();
+  var M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var day0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (ms >= day0 && ms < day0 + 86400000) return 'Today ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  if (ms >= day0 - 86400000 && ms < day0) return 'Yesterday';
+  return M[d.getMonth()] + ' ' + d.getDate() + (d.getFullYear() !== now.getFullYear() ? ', ' + d.getFullYear() : '');
+}
+
+/* ---- the rail ---- */
+function renderRail(c) {
+  var nav = byId('hmNav'), kind = homeKind(), q = homeQuery(), i;
+  nav.innerHTML = '';
+  railNav(nav, 'all', IC.notes, 'All notes', c.all, !q && kind === 'all');
+  railNav(nav, 'fav', IC.star, 'Favorites', c.fav, !q && kind === 'fav');
+  railNav(nav, 'trash', IC.trash, 'Trash', c.trash, !q && kind === 'trash');
+  nbList.innerHTML = '';
+  var sel = kind === 'nb' && !q ? curNotebook : -1, tree = folderTree(-1);
+  for (i = 0; i < tree.length; i++) railRow(tree[i].i, tree[i].d, sel);
+}
+function railNav(box, kind, icon, label, count, on) {
+  var b = document.createElement('button');
+  b.className = 'hm-nav' + (on ? ' on' : '');
+  b.innerHTML = icon + '<span class="nm">' + label + '</span><span class="ct">' + (count || '') + '</span>';
+  b.addEventListener('click', function () { openHomeKind(kind); });
+  box.appendChild(b);
+}
+/* every folder in tree order, each with its depth - leaving out one folder
+   and everything under it, when a folder is being moved */
+function folderTree(skip) {
+  var out = [], seen = {}, i;
+  var skipId = skip >= 0 && notebooks[skip] ? notebooks[skip].id : null;
+  function level(pid, d) {
+    if (d > 5) return;
+    for (var k = 0; k < notebooks.length; k++) {
+      if ((notebooks[k].parent || null) !== pid || seen[k]) continue;
+      if (notebooks[k].id === skipId) { seen[k] = 1; continue; }
+      seen[k] = 1;
+      out.push({ i: k, d: d });
+      level(notebooks[k].id, d + 1);
+    }
+  }
+  level(null, 0);
+  /* anything whose parent has gone is still reachable, at the top */
+  for (i = 0; i < notebooks.length; i++) {
+    if (seen[i] || notebooks[i].id === skipId) continue;
+    if (skipId && isDescendantOf(i, skipId)) continue;
+    seen[i] = 1;
+    out.push({ i: i, d: 0 });
+    level(notebooks[i].id, 1);
+  }
+  return out;
+}
+function railRow(i, depth, sel) {
+  var nb = notebooks[i];
+  var item = document.createElement('div');
+  item.className = 'nb-item' + (i === sel ? ' on' : '');
+  var row = document.createElement('button');
+  row.className = 'nb-row' + (i === sel ? ' on' : '');
+  row.style.paddingLeft = (12 + depth * 18) + 'px';
+  var cnt = nbLiveCount(i);
+  row.innerHTML = '<span class="chip" style="background:' + nb.color + '"></span>' +
+    '<span class="nm">' + escapeHtml(nb.title) + '</span><span class="ct">' + (cnt || '') + '</span>';
+  row.addEventListener('click', function () { openFolder(i); });
+  row.addEventListener('contextmenu', function (e) { if (e && e.preventDefault) e.preventDefault(); folderMenu(i, row); });
+  var more = document.createElement('button');
+  more.className = 'nb-more';
+  more.innerHTML = IC.more;
+  more.setAttribute('aria-label', 'Folder actions');
+  more.addEventListener('click', function (ev) {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    folderMenu(i, more);
+  });
+  item.appendChild(row);
+  item.appendChild(more);
+  nbList.appendChild(item);
+}
+function openHomeKind(kind) {
+  settings.homeKind = kind;
+  searchInputEl.value = '';
+  byId('searchClear').className = '';
+  homeSel = null;
+  railOpen = false;
+  hpClose();
+  notesGrid.scrollTop = 0;
+  saveSoon();
+  renderHome(true);
+}
+function openFolder(i) { curNotebook = i; openHomeKind('nb'); }
+
+/* ---- the layout: rail beside the notes, or slid over them ---- */
+function layoutHome() {
+  var W = homeView.offsetWidth || 1024;
+  var mode = W < 700 ? 'over' : (W >= 1000 ? 'wide' : 'norm');
+  var shown = mode === 'over' ? railOpen : !settings.railHidden;
+  hmRail.className = (mode === 'wide' ? 'wide' : '') + (mode === 'over' ? ' over' : '') + (shown ? '' : ' off');
+  hmMain.className = shown && mode !== 'over' ? (mode === 'wide' ? 'wide' : '') : 'full';
+  byId('hmRailScrim').className = mode === 'over' && shown ? 'on' : '';
+  var mainW = W - (shown && mode !== 'over' ? (mode === 'wide' ? 296 : 272) : 0);
+  homeCols = settings.homeList ? 1 : lim(Math.floor((mainW - 32) / 212), 2, 6);
+  notesGrid.className = gridClass();
+}
+function gridClass() {
+  return 'c' + homeCols + (settings.homeList ? ' list' : '') + (homeSel ? ' sel' : '');
+}
+function toggleRail() {
+  if ((homeView.offsetWidth || 1024) < 700) railOpen = !railOpen;
+  else { settings.railHidden = !settings.railHidden; saveSoon(); }
+  layoutHome();
+}
+
+/* ---- the pane ---- */
+function renderHome(anim) {
+  var c = homeCounts(), kind = homeKind(), q = homeQuery(), i;
+  renderRail(c);
+  layoutHome();
+  var ids = homeIds();
+  homeShown = ids;
+  if (homeSel) {
+    var keep = {};
+    for (i = 0; i < ids.length; i++) if (homeSel.ids[ids[i]]) keep[ids[i]] = 1;
+    homeSel.ids = keep;
+  }
+  homeHead(kind, q, ids.length);
+  notesGrid.innerHTML = '';
+  cardEls = {};
+  thumbQ = [];
+  if (kind === 'trash' && !q && ids.length) {
+    var ban = document.createElement('div');
+    ban.className = 'hm-banner';
+    ban.textContent = 'Notes in the trash are deleted for good after 30 days.';
+    notesGrid.appendChild(ban);
+  }
+  for (i = 0; i < ids.length; i++) notesGrid.appendChild(homeCard(ids[i], i, anim, kind, q));
+  if (ids.length) {
+    var end = document.createElement('div');
+    end.className = 'hm-end';
+    notesGrid.appendChild(end);
+  }
+  emptyState(ids.length ? null : kind, q);
+  paintSelBar();
+  if (anim) {
+    notesGrid.className = gridClass() + ' scale-up';
+    setTimeout(function () { notesGrid.className = gridClass(); }, 1000);
+  }
+  if (thumbQ.length && !thumbRAF) thumbRAF = window.requestAnimationFrame(thumbPump);
+}
+function homeHead(kind, q, n) {
+  var t, sub = '', where = '';
+  if (q) {
+    t = 'Search';
+    sub = n ? (n === 1 ? '1 note found' : n + ' notes found') : 'Nothing found';
+  } else {
+    if (kind === 'fav') t = 'Favorites';
+    else if (kind === 'trash') t = 'Trash';
+    else if (kind === 'nb') {
+      var nb = notebooks[curNotebook];
+      t = nb.title;
+      var pi = nb.parent ? notebookIndexById(nb.parent) : -1;
+      if (pi >= 0) where = 'In ' + notebooks[pi].title + '  ·  ';
+    } else t = 'All notes';
+    sub = where + (n === 1 ? '1 note' : (n ? n + ' notes' : 'No notes'));
+  }
+  homeTitle.textContent = t;
+  byId('homeCount').textContent = sub;
+  byId('homeViewBtn').innerHTML = settings.homeList ? IC.grid : IC.list;
+}
+function emptyState(kind, q) {
+  if (kind === null) { emptyHint.className = ''; return; }
+  var ic = ICP.notes, t = 'No notes', c = 'Tap Create note to start writing.';
+  if (q) { ic = ICP.search; t = 'No results'; c = 'Nothing here is called “' + q + '”.'; }
+  else if (kind === 'trash') { ic = ICP.trash; t = 'The trash is empty'; c = 'Deleted notes wait here for 30 days, in case you want them back.'; }
+  else if (kind === 'fav') { ic = ICP.star; t = 'No favorites yet'; c = 'Tap ⋯ on a note and choose Add to favorites.'; }
+  emptyHint.innerHTML = '<div class="eh-ic">' + svgIc(ic, 42) + '</div><div class="eh-t">' + t +
+                        '</div><div class="eh-c">' + escapeHtml(c) + '</div>';
+  emptyHint.className = 'on';
+}
+
+function homeCard(id, idx, anim, kind, q) {
+  var n = notes[id];
+  var card = document.createElement('div');
+  card.className = 'nc' + (homeSel && homeSel.ids[id] ? ' sel' : '');
+  card._id = id;
+  card._title = n.title || 'Untitled';
+  if (anim) {
+    var dl = Math.min(idx, 14) * 32 + 'ms';
+    card.style.webkitAnimationDelay = dl;
+    card.style.animationDelay = dl;
+  }
+  var prev = document.createElement('div');
+  prev.className = 'nc-prev';
+  prev.style.backgroundColor = (PAPERS[settings.paperColor] || PAPERS[0]).bg;
+  var hit = thumbCache[id];
+  if (hit && hit.key === thumbKey(n)) { if (hit.url) prev.style.backgroundImage = 'url(' + hit.url + ')'; }
+  else thumbQ.push({ n: n, box: prev });
+  if (n.fav && !n.trash) {
+    var star = document.createElement('span');
+    star.className = 'nc-star';
+    star.innerHTML = IC.starOn;
+    prev.appendChild(star);
+  }
+  var chk = document.createElement('span');
+  chk.className = 'nc-chk';
+  chk.innerHTML = IC.check;
+  prev.appendChild(chk);
+  card.appendChild(prev);
+
+  var meta = document.createElement('div');
+  meta.className = 'nc-meta';
+  var txt = document.createElement('div');
+  txt.className = 'nc-txt';
+  var ti = document.createElement('div');
+  ti.className = 'nc-title';
+  ti.textContent = n.title || 'Untitled';
+  txt.appendChild(ti);
+  var sub = document.createElement('div');
+  sub.className = 'nc-sub';
+  sub.innerHTML = cardSub(n, id, kind, q);
+  txt.appendChild(sub);
+  meta.appendChild(txt);
+  var more = document.createElement('button');
+  more.className = 'nc-more';
+  more.innerHTML = IC.more;
+  more.setAttribute('aria-label', 'Note actions');
+  more.addEventListener('click', function (ev) {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    noteMenu(id, more);
+  });
+  meta.appendChild(more);
+  card.appendChild(meta);
+  card._more = more;
+  tapHold(card, function () { cardTap(id); }, function () { cardHold(id); });
+  cardEls[id] = card;
+  return card;
+}
+function cardSub(n, id, kind, q) {
+  if (n.trash) {
+    var left = Math.max(1, Math.ceil((n.trash + TRASH_MS - Date.now()) / 86400000));
+    return left === 1 ? '1 day left' : left + ' days left';
+  }
+  var s = escapeHtml(fmtWhen(n.mod || n.cr));
+  if (kind !== 'nb' || q) {
+    var i = nbOfNote(id);
+    if (i >= 0) s += '<i style="background:' + notebooks[i].color + '"></i>' + escapeHtml(notebooks[i].title);
+  }
+  return s;
+}
+
+/* A card answers the moment the finger lifts - a div has no fast-tap of
+   its own, and iOS would otherwise hold every tap for 300ms - and a finger
+   held still on it for half a second selects instead. A finger that moves
+   is a scroll and does neither. The mouse (desktop testing) clicks, and
+   right-clicks to select. */
+function tapHold(el, onTap, onHold) {
+  var st = null;
+  el.addEventListener('touchstart', function (e) {
+    if (!e.touches || e.touches.length !== 1 || buttonOf(e.target)) { st = null; return; }
+    var t = e.touches[0];
+    st = { x: t.clientX, y: t.clientY, held: false };
+    st.timer = setTimeout(function () {
+      if (!st) return;
+      st.held = true;
+      onHold();
+    }, 480);
+  }, false);
+  el.addEventListener('touchmove', function (e) {
+    if (!st) return;
+    var t = e.touches[0];
+    if (Math.abs(t.clientX - st.x) > 10 || Math.abs(t.clientY - st.y) > 10) { clearTimeout(st.timer); st = null; }
+  }, false);
+  el.addEventListener('touchend', function (e) {
+    if (!st) return;
+    var s = st;
+    st = null;
+    clearTimeout(s.timer);
+    if (e.cancelable && e.preventDefault) e.preventDefault();   /* no late click: this was the tap */
+    if (!s.held) onTap();
+  }, false);
+  el.addEventListener('touchcancel', function () { if (st) { clearTimeout(st.timer); st = null; } }, false);
+  el.addEventListener('click', function (e) { if (!buttonOf(e && e.target)) onTap(); }, false);
+  el.addEventListener('contextmenu', function (e) { if (e && e.preventDefault) e.preventDefault(); onHold(); }, false);
+}
+function cardTap(id) {
+  if (homeSel) { toggleSel(id); return; }
+  var n = notes[id];
+  if (!n) return;
+  if (n.trash) { noteMenu(id, cardEls[id] && cardEls[id]._more); return; }
+  openNote(id, true);
+}
+function cardHold(id) {
+  if (!homeSel) homeSel = { ids: {} };
+  homeSel.ids[id] = 1;
+  paintSel();
+}
+
+/* ---- thumbnails: made once per version of a note, kept as a JPEG ---- */
+function thumbKey(n) {
+  return (n.mod || 0) + '|' + n.strokes.length + '|' + settings.paperColor + '|' + (n.pw || 0);
+}
+function noteThumbURL(n) {
+  var key = thumbKey(n), c = thumbCache[n.id];
+  if (c && c.key === key) return c.url;
+  thumbWaitImg = false;
+  var cv = noteThumb(n, THUMB_W, THUMB_H), url = '';
+  try { url = cv.toDataURL('image/jpeg', 0.86); } catch (e) { url = ''; }
+  /* a photo on the page that has not decoded yet would be kept as a grey
+     box for good - so that one is not remembered, and is made again */
+  thumbCache[n.id] = { key: thumbWaitImg ? '' : key, url: url };
+  return url;
+}
+function thumbPump() {
+  thumbRAF = 0;
+  var t0 = Date.now(), job, url;
+  while (thumbQ.length) {
+    job = thumbQ.shift();
+    url = noteThumbURL(job.n);
+    if (url) job.box.style.backgroundImage = 'url(' + url + ')';
+    if (Date.now() - t0 > 24) break;          /* a frame's worth, then hand the frame back */
+  }
+  if (thumbQ.length) thumbRAF = window.requestAnimationFrame(thumbPump);
+}
+function thumbsStale() {
+  if (!homeOn() || thumbLater) return;
+  thumbLater = setTimeout(function () { thumbLater = null; if (homeOn()) renderHome(); }, 120);
+}
+
+/* ---- select mode ---- */
+function selIds() {
+  var out = [], i;
+  if (!homeSel) return out;
+  for (i = 0; i < homeShown.length; i++) if (homeSel.ids[homeShown[i]]) out.push(homeShown[i]);
+  return out;
+}
+function toggleSel(id) {
+  if (homeSel.ids[id]) delete homeSel.ids[id];
+  else homeSel.ids[id] = 1;
+  paintSel();
+}
+function paintSel() {
+  var id;
+  notesGrid.className = gridClass();
+  for (id in cardEls) {
+    if (cardEls.hasOwnProperty(id)) cardEls[id].className = 'nc' + (homeSel && homeSel.ids[id] ? ' sel' : '');
+  }
+  paintSelBar();
+}
+function paintSelBar() {
+  var ids = selIds(), n = ids.length, trash = homeKind() === 'trash' && !homeQuery(), allFav = n > 0, i;
+  for (i = 0; i < n; i++) if (!notes[ids[i]].fav) allFav = false;
+  byId('hmSelBar').className = homeSel ? 'on' : '';
+  byId('hsCount').textContent = n ? (n === 1 ? '1 selected' : n + ' selected') : 'Select notes';
+  byId('hsAll').textContent = n && n === homeShown.length ? 'None' : 'All';
+  selBtn('hsFav', !trash, n > 0, allFav ? IC.starFull : IC.star);
+  selBtn('hsMove', !trash, n > 0, IC.folder);
+  selBtn('hsRename', !trash, n === 1, IC.pen);
+  selBtn('hsRestore', trash, n > 0, IC.restore);
+  selBtn('hsDel', true, n > 0, IC.trash);
+}
+function selBtn(id, show, on, icon) {
+  var b = byId(id);
+  b.className = 'ibtn' + (show ? '' : ' gone') + (on ? '' : ' dis');
+  b.innerHTML = icon;
+  b._on = show && on;
+}
+function selDone() { homeSel = null; paintSel(); }
+
+/* ---- what can be done to notes ---- */
+function setFav(ids, on) {
+  for (var i = 0; i < ids.length; i++) {
+    if (!notes[ids[i]]) continue;
+    notes[ids[i]].fav = on ? 1 : 0;
+    touchNote(ids[i]);
+  }
+  homeSel = null;
+  renderHome();
+  toast(on ? (ids.length === 1 ? 'Added to favorites' : ids.length + ' notes added to favorites')
+           : (ids.length === 1 ? 'Removed from favorites' : ids.length + ' notes removed from favorites'));
+}
+function renameNote(id) {
+  var n = notes[id];
+  if (!n) return;
+  dlgOpen({ title: 'Rename note', input: true, value: n.title || 'Untitled', placeholder: 'Note name', ok: 'Rename',
+    done: function (v) {
+      n.title = v;
+      n.mod = Date.now();
+      touchNote(id);
+      if (id === curNoteId) noteTitleBtn.textContent = v;
+      homeSel = null;
+      if (homeOn()) renderHome();
+    } });
+}
+function moveNotes(ids, to) {
+  var i, from, moved = 0;
+  if (!notebooks[to]) return;
+  for (i = 0; i < ids.length; i++) {
+    from = nbOfNote(ids[i]);
+    if (from < 0 || from === to) continue;
+    notebooks[from].notes.splice(notebooks[from].notes.indexOf(ids[i]), 1);
+    notebooks[to].notes.unshift(ids[i]);
+    moved++;
+  }
+  saveSoon();
+  homeSel = null;
+  renderHome();
+  toast(moved ? (moved === 1 ? 'Moved to ' : moved + ' notes moved to ') + notebooks[to].title
+              : 'Already in ' + notebooks[to].title);
+}
+function trashNotes(ids) {
+  var now = Date.now(), i;
+  for (i = 0; i < ids.length; i++) {
+    if (!notes[ids[i]]) continue;
+    notes[ids[i]].trash = now;
+    touchNote(ids[i]);
+  }
+  homeSel = null;
+  renderHome();
+  toast(ids.length === 1 ? 'Moved to the trash' : ids.length + ' notes moved to the trash',
+        { lbl: 'Undo', fn: function () { restoreNotes(ids, true); } });
+}
+function restoreNotes(ids, quiet) {
+  for (var i = 0; i < ids.length; i++) {
+    if (!notes[ids[i]]) continue;
+    delete notes[ids[i]].trash;
+    touchNote(ids[i]);
+  }
+  homeSel = null;
+  renderHome();
+  if (!quiet) toast(ids.length === 1 ? 'Note restored' : ids.length + ' notes restored');
+}
+function deleteForever(ids) {
+  var i, id, k;
+  for (i = 0; i < ids.length; i++) {
+    id = ids[i];
+    k = nbOfNote(id);
+    if (k >= 0) notebooks[k].notes.splice(notebooks[k].notes.indexOf(id), 1);
+    delete notes[id];
+    delete thumbCache[id];
+    dropNoteKey(id);
+    if (curNoteId === id) curNoteId = null;
+  }
+  doSaveNow();
+}
+function confirmDeleteForever(ids) {
+  dlgOpen({ title: ids.length === 1 ? 'Delete this note for good?' : 'Delete ' + ids.length + ' notes for good?',
+    msg: 'This cannot be undone.', ok: 'Delete', warn: true,
+    done: function () {
+      deleteForever(ids);
+      homeSel = null;
+      renderHome();
+      toast(ids.length === 1 ? 'Note deleted' : ids.length + ' notes deleted');
+    } });
+}
+function emptyTrash() {
+  var ids = [], all = allNoteIds(), i;
+  for (i = 0; i < all.length; i++) if (notes[all[i]] && notes[all[i]].trash) ids.push(all[i]);
+  if (!ids.length) return;
+  dlgOpen({ title: 'Empty the trash?', msg: (ids.length === 1 ? 'The note' : 'All ' + ids.length + ' notes') +
+    ' in the trash will be deleted for good.', ok: 'Empty trash', warn: true,
+    done: function () { deleteForever(ids); homeSel = null; renderHome(); toast('Trash emptied'); } });
+}
+/* thirty days after it was deleted, a note in the trash is gone */
+function purgeTrash() {
+  var old = [], now = Date.now(), k;
+  for (k in notes) {
+    if (notes.hasOwnProperty(k) && notes[k].trash && now - notes[k].trash > TRASH_MS) old.push(k);
+  }
+  if (old.length) deleteForever(old);
+}
+
+/* ---- folders ---- */
+function createFolder(parentId) {
+  dlgOpen({ title: parentId ? 'New folder inside' : 'Create folder', input: true, value: '',
+    placeholder: 'Folder name', colors: true, ok: 'Create',
+    color: FOLDER_COLORS[notebooks.length % FOLDER_COLORS.length],
+    done: function (name, color) {
+      var nb = { id: genId(), title: name, color: color, notes: [] };
+      if (parentId) nb.parent = parentId;
+      notebooks.push(nb);
+      curNotebook = notebooks.length - 1;
+      settings.homeKind = 'nb';
+      searchInputEl.value = '';
+      homeSel = null;
+      saveSoon();
+      renderHome(true);
+      toast('Folder created');
+    } });
+}
+function editFolder(i) {
+  var nb = notebooks[i];
+  if (!nb) return;
+  dlgOpen({ title: 'Edit folder', input: true, value: nb.title, placeholder: 'Folder name',
+    colors: true, color: nb.color, ok: 'Save',
+    done: function (name, color) {
+      nb.title = name;
+      nb.color = color;
+      saveSoon();
+      renderHome();
+    } });
+}
+function renameNotebook(i) { editFolder(i); }
+function pickFolder(title, done, cur) {
+  var tree = folderTree(-1), rows = [], i;
+  for (i = 0; i < tree.length; i++) {
+    rows.push({ lbl: notebooks[tree[i].i].title, color: notebooks[tree[i].i].color,
+                d: tree[i].d, val: tree[i].i, on: tree[i].i === cur });
+  }
+  dlgOpen({ title: title, list: rows, done: done });
+}
+/* Deleting a folder must not delete anything inside it. Its notes move to
+   the folder above it and its own folders take its place there, so the only
+   thing that disappears is the folder itself. */
+function deleteNotebook(i) {
+  var nb = notebooks[i];
+  if (!nb) return;
+  if (notebooks.length < 2) { toast('This is the only folder - there would be nowhere to keep notes'); return; }
+  var pIdx = nb.parent ? notebookIndexById(nb.parent) : -1;
+  if (pIdx < 0) pIdx = (i === 0 ? 1 : 0);
+  var into = notebooks[pIdx], live = nbLiveCount(i);
+  dlgOpen({ title: 'Delete “' + nb.title + '”?',
+    msg: live ? (live === 1 ? 'Its 1 note moves' : 'Its ' + live + ' notes move') + ' to “' + into.title +
+                '”. Nothing is lost.' : 'The folder is empty.',
+    ok: 'Delete', warn: true,
+    done: function () {
+      var q, at = notebookIndexById(nb.id);
+      if (at < 0) return;
+      for (q = 0; q < nb.notes.length; q++) into.notes.push(nb.notes[q]);
+      for (q = 0; q < notebooks.length; q++) {
+        if (notebooks[q].parent === nb.id) notebooks[q].parent = nb.parent || null;
+      }
+      notebooks.splice(at, 1);
+      curNotebook = Math.max(0, notebookIndexById(into.id));
+      saveSoon();
+      renderHome();
+      toast('Deleted “' + nb.title + '”');
+    } });
+}
+/* put a folder inside another, or back at the top */
+function moveNotebook(which) {
+  var cur = typeof which === 'number' ? which : curNotebook, nb = notebooks[cur];
+  if (!nb) return;
+  var tree = folderTree(cur), rows = [{ lbl: 'Top level', color: '', d: 0, val: -1, on: !nb.parent }], i;
+  for (i = 0; i < tree.length; i++) {
+    rows.push({ lbl: notebooks[tree[i].i].title, color: notebooks[tree[i].i].color,
+                d: tree[i].d + 1, val: tree[i].i, on: notebooks[tree[i].i].id === nb.parent });
+  }
+  dlgOpen({ title: 'Move “' + nb.title + '” into', list: rows,
+    done: function (v) {
+      if (v === -1) nb.parent = null;
+      else {
+        if (!notebooks[v] || v === cur || isDescendantOf(v, nb.id)) { toast('That would put the folder inside itself'); return; }
+        nb.parent = notebooks[v].id;
+      }
+      saveSoon();
+      renderHome();
+      toast(v === -1 ? 'Moved to the top level' : 'Moved into ' + notebooks[v].title);
+    } });
+}
+
+/* ---- menus ---- */
+function noteMenu(id, anchor) {
+  var n = notes[id];
+  if (!n) return;
+  var rows = n.trash ? [
+    { lbl: 'Restore', ic: IC.restore, act: function () { restoreNotes([id]); } },
+    { lbl: 'Delete for good', ic: IC.trash, warn: true, act: function () { confirmDeleteForever([id]); } }
+  ] : [
+    { lbl: 'Open', ic: IC.open, act: function () { openNote(id, true); } },
+    { lbl: 'Rename', ic: IC.pen, act: function () { renameNote(id); } },
+    { lbl: n.fav ? 'Remove from favorites' : 'Add to favorites', ic: IC.star, act: function () { setFav([id], !n.fav); } },
+    { lbl: 'Move to folder', ic: IC.folder, act: function () {
+        pickFolder('Move to folder', function (to) { moveNotes([id], to); }, nbOfNote(id)); } },
+    { lbl: 'Select', ic: IC.select, act: function () { cardHold(id); } },
+    { sep: true },
+    { lbl: 'Delete', ic: IC.trash, warn: true, act: function () { trashNotes([id]); } }
+  ];
+  hpOpen(anchor, rows, n.title || 'Untitled');
+}
+function folderMenu(i, anchor) {
+  var nb = notebooks[i];
+  if (!nb) return;
+  hpOpen(anchor, [
+    { lbl: 'Rename or recolor', ic: IC.pen, act: function () { editFolder(i); } },
+    { lbl: 'New folder inside', ic: IC.newFolder, act: function () { createFolder(nb.id); } },
+    { lbl: 'Move into another folder', ic: IC.folder, act: function () { moveNotebook(i); } },
+    { sep: true },
+    { lbl: 'Delete folder', ic: IC.trash, warn: true, act: function () { deleteNotebook(i); } }
+  ], nb.title);
+}
+function homeMenu(anchor) {
+  var trash = homeKind() === 'trash' && !homeQuery(), rows = [];
+  if (homeShown.length) rows.push({ lbl: 'Select notes', ic: IC.select, act: function () { homeSel = { ids: {} }; paintSel(); } });
+  if (trash) {
+    if (homeShown.length) rows.push({ lbl: 'Empty trash', ic: IC.trash, warn: true, act: emptyTrash });
+  } else {
+    rows.push({ lbl: 'Create folder', ic: IC.newFolder, act: function () { createFolder(null); } });
+    if (typeof pdfImportNew === 'function') rows.push({ lbl: 'Import PDF', ic: IC.pdf, act: pdfImportNew });
+  }
+  if (rows.length) rows.push({ sep: true });
+  rows.push({ lbl: 'Settings', ic: IC.gear, act: function () { openSettings(true); } });
+  hpOpen(anchor, rows);
+}
+function sortMenu(anchor) {
+  var k = settings.homeSort;
+  function row(key, lbl) {
+    return { lbl: lbl, on: k === key, dir: k === key ? (settings.homeDesc ? '↓' : '↑') : '',
+             act: function () { setSort(key); } };
+  }
+  hpOpen(anchor, [
+    row('mod', 'Date modified'), row('cr', 'Date created'), row('title', 'Title'),
+    { sep: true },
+    { lbl: 'Favorites on top', sw: !!settings.favTop, keep: true,
+      act: function () { settings.favTop = !settings.favTop; saveSoon(); renderHome(); sortMenu(anchor); } }
+  ], 'Sort by');
+}
+/* the same key again turns the order round; a new key starts the way it
+   is usually wanted - titles A to Z, dates newest first */
+function setSort(key) {
+  if (settings.homeSort === key) settings.homeDesc = !settings.homeDesc;
+  else { settings.homeSort = key; settings.homeDesc = key !== 'title'; }
+  saveSoon();
+  renderHome();
+}
+
+/* the popover: rows under a heading, opening from the button that asked */
+function hpOpen(anchor, rows, head) {
+  hmPop.innerHTML = '';
+  if (head) {
+    var h = document.createElement('div');
+    h.className = 'hp-h';
+    h.textContent = head;
+    hmPop.appendChild(h);
+  }
+  for (var i = 0; i < rows.length; i++) {
+    (function (r) {
+      if (r.sep) {
+        var s = document.createElement('div');
+        s.className = 'hp-sep';
+        hmPop.appendChild(s);
+        return;
+      }
+      var b = document.createElement('button');
+      b.className = 'hp-row' + (r.on ? ' on' : '') + (r.warn ? ' warn' : '');
+      b.innerHTML = (r.ic || '') + '<span class="lbl">' + r.lbl + '</span>' +
+        (r.dir ? '<span class="dir">' + r.dir + '</span>' : '') +
+        (r.sw !== undefined ? '<span class="hp-sw' + (r.sw ? ' on' : '') + '"><b></b></span>' : '');
+      b._lbl = r.lbl;
+      b.addEventListener('click', function () {
+        if (!r.keep) hpClose();
+        r.act(b);
+      });
+      hmPop.appendChild(b);
+    })(rows[i]);
+  }
+  var W = homeView.offsetWidth || 1024, H = homeView.offsetHeight || 768;
+  var ar = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect()
+         : { left: W / 2, right: W / 2, top: H / 2, bottom: H / 2 };
+  var pw = hmPop.offsetWidth || 240, ph = hmPop.offsetHeight || 220;
+  if (pw > 320) pw = 240;              /* not laid out yet: take a menu's width */
+  var x = lim(ar.right - pw, 8, W - pw - 8), y = ar.bottom + 6, up = false;
+  if (y + ph > H - 8) { y = Math.max(8, ar.top - ph - 6); up = true; }
+  hmPop.style.left = Math.round(x) + 'px';
+  hmPop.style.top = Math.round(y) + 'px';
+  var ox = Math.round(lim((ar.left + ar.right) / 2 - x, 0, pw)) + 'px ' + (up ? '100%' : '0');
+  hmPop.style.webkitTransformOrigin = ox;
+  hmPop.style.transformOrigin = ox;
+  hmPop.className = 'on';
+  byId('hmScrim').className = 'on';
+}
+function hpClose() {
+  hmPop.className = '';
+  byId('hmScrim').className = '';
+}
+
+/* ---- the dialog ---- */
+var dlgO = null, dlgColor = null;
+function dlgOpen(o) {
+  hpClose();
+  dlgO = o;
+  byId('dlgTitle').textContent = o.title || '';
+  var m = byId('dlgMsg');
+  m.textContent = o.msg || '';
+  m.className = o.msg ? 'on' : '';
+  var inp = byId('dlgInput');
+  inp.className = o.input ? 'on' : '';
+  inp.value = o.input ? (o.value || '') : '';
+  inp.setAttribute('placeholder', o.placeholder || '');
+  var cs = byId('dlgColors'), i;
+  cs.innerHTML = '';
+  cs.className = o.colors ? 'on' : '';
+  dlgColor = o.color || FOLDER_COLORS[0];
+  if (o.colors) {
+    for (i = 0; i < FOLDER_COLORS.length; i++) {
+      (function (col) {
+        var b = document.createElement('button');
+        b.className = 'dc' + (col === dlgColor ? ' on' : '');
+        b.style.background = col;
+        b.innerHTML = IC.check;
+        b.setAttribute('aria-label', 'Colour ' + col);
+        b.addEventListener('click', function () {
+          dlgColor = col;
+          for (var k = 0; k < cs.children.length; k++) cs.children[k].className = 'dc';
+          b.className = 'dc on';
+        });
+        cs.appendChild(b);
+      })(FOLDER_COLORS[i]);
+    }
+  }
+  var ls = byId('dlgList');
+  ls.innerHTML = '';
+  ls.className = o.list ? 'on' : '';
+  if (o.list) {
+    for (i = 0; i < o.list.length; i++) {
+      (function (r) {
+        var b = document.createElement('button');
+        b.className = 'nb-row' + (r.on ? ' on' : '');
+        b.style.paddingLeft = (14 + r.d * 18) + 'px';
+        b.innerHTML = (r.color ? '<span class="chip" style="background:' + r.color + '"></span>'
+                               : '<span class="chip" style="background:transparent"></span>') +
+                      '<span class="nm">' + escapeHtml(r.lbl) + '</span>';
+        b._lbl = r.lbl;
+        b.addEventListener('click', function () {
+          var d = dlgO;
+          dlgClose();
+          if (d) d.done(r.val);
+        });
+        ls.appendChild(b);
+      })(o.list[i]);
+    }
+  }
+  var ok = byId('dlgOk');
+  ok.textContent = o.ok || 'OK';
+  ok.className = (o.warn ? 'warn' : '') + (o.list ? ' gone' : '');
+  byId('dlgCancel').textContent = o.cancel || 'Cancel';
+  byId('dlg').className = 'on';
+  /* focusing in the same tap is what lets iOS raise the keyboard */
+  if (o.input) {
+    try {
+      inp.focus();
+      if (inp.setSelectionRange) inp.setSelectionRange(0, inp.value.length);
+    } catch (e) {}
+  }
+}
+function dlgClose() {
+  byId('dlg').className = '';
+  try { byId('dlgInput').blur(); } catch (e) {}
+  dlgO = null;
+}
+function dlgAccept() {
+  var o = dlgO, v = true;
+  if (!o || o.list) return;
+  if (o.input) {
+    v = String(byId('dlgInput').value || '').replace(/^\s+|\s+$/g, '');
+    if (!v) {
+      var box = byId('dlgBox');
+      box.className = '';
+      void box.offsetWidth;
+      box.className = 'shake';
+      byId('dlgInput').className = 'on bad';
+      return;
+    }
+  }
+  dlgClose();
+  o.done(v, dlgColor);
+}
+
+/* ---- settings opened from the home: only what is not about one note ---- */
+var settingsHome = false;
+function openSettings(fromHome) {
+  settingsHome = !!fromHome;
+  closePanels();
+  buildSettings();
+  byId('settingsOverlay').className = 'overlay on';
+  syncScrim();
+}
+
+/* a note's first page drawn small, for the home's miniatures - the same
+   paper and the same strokes the page itself uses, so a miniature cannot
+   drift from the note it stands for. Only the top of the page is drawn:
+   that is all a card shows. */
+function noteThumb(n, w, h) {
   var P = PAPERS[settings.paperColor] || PAPERS[0];
   var pw = Math.max(n.pw || PAGE_W_MIN, PAGE_W_MIN);
+  var k = w / pw, ph = h ? h / k : PAGE_H;
   var cv = document.createElement('canvas');
   cv.width = Math.round(w * dpr);
-  cv.height = Math.round(w * PAGE_H / pw * dpr);
+  cv.height = Math.round((h || w * PAGE_H / pw) * dpr);
   var c = cv.getContext('2d');
   if (!c) return cv;
-  var k = (w / pw) * dpr;
-  c.setTransform(k, 0, 0, k, 0, 0);
+  c.setTransform(k * dpr, 0, 0, k * dpr, 0, 0);
   c.fillStyle = P.bg;
   c.fillRect(0, 0, pw, PAGE_H);
   drawTplPattern(c, tplFor(n, 0), P, 0, 0, pw, MARGIN_X);
-  var i, s, bb;
+  var i, s, bb, im;
   for (i = 0; i < n.strokes.length; i++) {
     s = n.strokes[i];
     bb = strokeBBox(s);
-    if (n.horiz ? (bb.x1 < -8 || bb.x0 > pw + 8) : (bb.y1 < -8 || bb.y0 > PAGE_H + 8)) continue;
+    if (bb.y0 > ph + 8 || bb.y1 < -8 || bb.x1 < -8 || bb.x0 > pw + 8) continue;
+    if (s.pen === PEN_IMG) { im = imageFor(s); if (!im || !im.width) thumbWaitImg = true; }
     renderStrokeFull(c, s);
   }
   return cv;
 }
 
-function renderHome(filterText) {
-  var nb = notebooks[curNotebook];
-  homeTitle.textContent = nb ? nb.title : 'Notes';
-  notesGrid.className = settings.homeList ? 'list' : '';
-  notesGrid.innerHTML = '';
-  var q = (filterText === undefined ? searchInputEl.value : filterText);
-  q = String(q || '').toLowerCase();
-  var ids = nb ? nb.notes : [];
-  var shown = [], i;
-  for (i = 0; i < ids.length; i++) {
-    var nt = notes[ids[i]];
-    if (!nt) continue;
-    if (q && (nt.title || 'Untitled').toLowerCase().indexOf(q) < 0) continue;
-    shown.push(ids[i]);
-  }
-  /* the order the notes are listed in: favourites, title or date */
-  var sort = settings.homeSort;
-  shown.sort(function (a, b) {
-    var na = notes[a], nbv = notes[b];
-    if (sort === 'title') {
-      var ta = (na.title || 'Untitled').toLowerCase(), tb = (nbv.title || 'Untitled').toLowerCase();
-      if (ta !== tb) return ta < tb ? -1 : 1;
-    }
-    if (sort !== 'date') {
-      var fa = na.fav ? 1 : 0, fb = nbv.fav ? 1 : 0;
-      if (fa !== fb) return fb - fa;
-    }
-    return (nbv.mod || 0) - (na.mod || 0);
-  });
-  var j = 0;
-  for (i = 0; i < shown.length; i++) {
-    var n = notes[shown[i]];
-    var card = document.createElement('div');
-    card.className = 'note-card';
-
-    /* the preview: the note's first page drawn small, so a card shows what
-       is in the note the way Samsung's grid of miniatures does */
-    var prev = document.createElement('div');
-    prev.className = 'nc-prev';
-    prev.appendChild(noteThumb(n, 240));
-    card.appendChild(prev);
-
-    var body = document.createElement('div');
-    body.className = 'nc-body';
-
-    var titleEl = document.createElement('div');
-    titleEl.className = 'nc-title';
-    titleEl.textContent = n.title || 'Untitled';
-    body.appendChild(titleEl);
-
-    var subEl = document.createElement('div');
-    subEl.className = 'nc-sub';
-    /* "418 strokes" is a number about the file, not about the note. How
-       many pages there are is something a person can picture. */
-    var maxY = 0, maxX = 0, sq;
-    for (sq = 0; sq < n.strokes.length; sq++) {
-      var sp = n.strokes[sq].pts, spq;
-      for (spq = 0; spq < sp.length; spq++) {
-        if (sp[spq][1] > maxY) maxY = sp[spq][1];
-        if (sp[spq][0] > maxX) maxX = sp[spq][0];
-      }
-    }
-    /* how far the note runs decides the count: down the page, or across */
-    var pSpan = n.horiz ? ((n.pw || PAGE_W_MIN) + GAP_X) : (PAGE_H + GAP_H);
-    var pages = n.strokes.length ? Math.max(1, Math.ceil((n.horiz ? maxX : maxY) / pSpan)) : 0;
-    subEl.textContent = !n.strokes.length ? 'Empty'
-      : (pages === 1 ? '1 page' : pages + ' pages');
-    body.appendChild(subEl);
-
-    var dateEl = document.createElement('div');
-    dateEl.className = 'nc-date';
-    dateEl.textContent = (n.mod ? fmtDate(n.mod) : fmtDate(n.cr));
-    body.appendChild(dateEl);
-    card.appendChild(body);
-
-    var star = document.createElement('button');
-    star.className = 'star-btn' + (n.fav ? ' on' : '');
-    star.innerHTML =
-      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">' +
-      '<path d="M12 3.6 l2.6 5.4 5.9 0.8 -4.3 4.1 1 5.8 -5.2 -2.8 -5.2 2.8 1 -5.8 -4.3 -4.1 5.9 -0.8 z"/></svg>';
-    (function (note, starEl) {
-      starEl.addEventListener('click', function (ev) {
-        if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
-        note.fav = !note.fav;
-        saveSoon();
-        renderHome();
-      });
-    })(n, star);
-    card.appendChild(star);
-
-    /* rename without opening the note - the title is right there */
-    var rename = document.createElement('button');
-    rename.className = 'nc-rename';
-    rename.innerHTML =
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
-      '<path d="M4 16.5 L15 5.5 a2.3 2.3 0 0 1 3.6 3.6 L7.5 20 H4 v-3.5 z"/><path d="M13.5 7 l3.5 3.5"/></svg>';
-    (function (note, el) {
-      el.addEventListener('click', function (ev) {
-        if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
-        var name = window.prompt('Note name', note.title || 'Untitled');
-        if (name !== null && name !== '') {
-          note.title = name;
-          note.mod = Date.now();
-          saveSoon();
-          renderHome();
-        }
-      });
-    })(n, rename);
-    card.appendChild(rename);
-
-    (function (id) {
-      card.addEventListener('click', function () { openNote(id); });
-    })(shown[i]);
-    notesGrid.appendChild(card);
-    j++;
-  }
-  emptyHint.style.display = j ? 'none' : 'block';
-}
-
-function openNote(id) {
+function openNote(id, anim) {
   var n = notes[id];
-  if (!n) return;
+  if (!n || n.trash) return;          /* a note in the trash is restored before it opens */
+  hpClose();
+  homeSel = null;
+  railOpen = false;
   curNoteId = id;
   undoStack = [];
   redoStack = [];
@@ -10256,6 +11325,7 @@ function openNote(id) {
   recomputeDoc();
   clampScroll();
   showView('draw');
+  if (anim) viewAnim(drawView, 'enter');
   resizeView();
   applyPalmUI();
   stripDirty = true;      /* another note's thumbnails are up there */
@@ -10272,15 +11342,26 @@ function goHome() {
   closeTextEditor();
   clearSelection();
   showView('home');
+  viewAnim(homeView, 'back');
   renderHome();
 }
+/* the one-off entrance of a view; the class goes again once it has played */
+function viewAnim(v, kind) {
+  v.className = 'view on ' + kind;
+  setTimeout(function () { if (v.className === 'view on ' + kind) v.className = 'view on'; }, 420);
+}
 
+/* A new note goes into the folder being looked at, or the first folder
+   when the home is showing all notes, the favourites or the trash. */
 function newNote() {
-  var id = genId();
+  var id = genId(), kind = homeKind(), nbi = kind === 'nb' ? curNotebook : 0;
+  if (!notebooks[nbi]) nbi = 0;
   notes[id] = { id: id, title: 'Untitled', cr: Date.now(), mod: Date.now(), scroll: 0, strokes: [],
                 endless: settings.endless };
-  if (notebooks[curNotebook]) notebooks[curNotebook].notes.unshift(id);
-  openNote(id);
+  if (notebooks[nbi]) notebooks[nbi].notes.unshift(id);
+  if (kind === 'trash') settings.homeKind = 'all';   /* coming back, it is somewhere to be seen */
+  if (searchInputEl.value) { searchInputEl.value = ''; byId('searchClear').className = ''; }
+  openNote(id, homeOn());
   toast('New note created');
 }
 
@@ -10288,29 +11369,17 @@ function renameCurrentNote() {
   var n = activeNote();
   if (!n) return;
   if (settings.reading) return;   /* the note is not the reader's to rename */
-  var name = window.prompt('Note name', n.title || 'Untitled');
-  if (name !== null && name !== '') {
-    n.title = name;
-    n.mod = Date.now();
-    noteTitleBtn.textContent = n.title;
-    saveSoon();
-  }
+  renameNote(n.id);
 }
 
+/* to the trash, with the toast's Undo, rather than gone for good */
 function deleteCurrentNote() {
   var n = activeNote();
   if (!n) return;
   closePanels();
-  if (!window.confirm('Delete this note permanently?')) return;
-  var nb = notebooks[curNotebook];
-  var idx = nb ? nb.notes.indexOf(n.id) : -1;
-  if (idx >= 0) nb.notes.splice(idx, 1);
-  delete notes[n.id];
-  dropNoteKey(n.id);
-  doSaveNow();
-  showView('home');
-  renderHome();
-  toast('Note deleted');
+  var id = n.id;
+  goHome();
+  trashNotes([id]);
 }
 
 function clearNote() {
@@ -10352,180 +11421,6 @@ function isDescendantOf(childIdx, ancestorId) {
   return false;
 }
 
-function drawerRow(i, depth) {
-  var nb = notebooks[i];
-  var item = document.createElement('div');
-  item.className = 'nb-item';
-  var row = document.createElement('button');
-  row.className = 'nb-row' + (i === curNotebook ? ' on' : '');
-  row.style.paddingLeft = (18 + depth * 20) + 'px';
-  row.innerHTML =
-    '<span class="dot" style="background:' + nb.color + '"></span>' +
-    '<span class="nm">' + escapeHtml(nb.title) + '</span>' +
-    '<span class="ct">' + nb.notes.length + '</span>';
-  (function (idx) {
-    row.addEventListener('click', function () {
-      curNotebook = idx;
-      closeDrawer();
-      renderHome();
-      /* opening a folder scales the notes up into place, the way Samsung's
-         folder opens - the grid grows from a smaller, faded-in state */
-      notesGrid.className = (settings.homeList ? 'list ' : '') + 'scale-up';
-      notesGrid.addEventListener('animationend', function h() {
-        notesGrid.removeEventListener('animationend', h);
-        notesGrid.className = settings.homeList ? 'list' : '';
-      });
-      saveSoon();
-    });
-  })(i);
-  var more = document.createElement('button');
-  more.className = 'nb-more';
-  more.innerHTML = '&#8942;';
-  more.setAttribute('aria-label', 'Actions for ' + nb.title);
-  (function (idx, anchor) {
-    more.addEventListener('click', function (ev) {
-      if (ev && ev.stopPropagation) ev.stopPropagation();
-      openNbActions(idx, anchor);
-    });
-  })(i, more);
-  item.appendChild(row);
-  item.appendChild(more);
-  nbList.appendChild(item);
-}
-
-function closeNbActions() {
-  byId('nbActions').className = '';
-  byId('panelScrim').className = '';
-}
-
-function openNbActions(i, anchor) {
-  var nb = notebooks[i];
-  if (!nb) return;
-  var box = byId('nbActions');
-  box.innerHTML = '';
-  var who = document.createElement('div');
-  who.className = 'who';
-  who.innerHTML = escapeHtml(nb.title.toUpperCase());
-  box.appendChild(who);
-  var defs = [
-    { lbl: 'Rename', act: function () { renameNotebook(i); } },
-    { lbl: 'Move to folder', act: function () { moveNotebook(i); } },
-    { lbl: 'Delete', warn: true, act: function () { deleteNotebook(i); } }
-  ];
-  var k;
-  for (k = 0; k < defs.length; k++) {
-    (function (d) {
-      var b = document.createElement('button');
-      if (d.warn) b.className = 'warn';
-      b.innerHTML = d.lbl;
-      b.addEventListener('click', function () { closeNbActions(); d.act(); });
-      box.appendChild(b);
-    })(defs[k]);
-  }
-  var r = anchor.getBoundingClientRect();
-  box.className = 'on';
-  var h = box.offsetHeight || 170;
-  var top = r.bottom + 4;
-  if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 4);
-  box.style.top = Math.round(top) + 'px';
-  box.style.left = Math.round(Math.max(8, r.left - 150)) + 'px';
-  byId('panelScrim').className = 'on hi';
-}
-
-function renameNotebook(i) {
-  var nb = notebooks[i];
-  if (!nb) return;
-  var name = window.prompt('Notebook name', nb.title);
-  if (name === null || name === '') return;
-  nb.title = name;
-  renderDrawer();
-  renderHome();
-  saveSoon();
-}
-
-/* Deleting a notebook must not delete anything inside it. Its notes move
-   to the folder above it and its sub-folders take its place there, so the
-   only thing that disappears is the notebook itself. */
-function deleteNotebook(i) {
-  var nb = notebooks[i];
-  if (!nb) return;
-  if (notebooks.length < 2) { toast('This is the only notebook'); return; }
-  var pIdx = nb.parent ? notebookIndexById(nb.parent) : -1;
-  if (pIdx < 0) pIdx = (i === 0 ? 1 : 0);
-  var into = notebooks[pIdx];
-  var msg = 'Delete "' + nb.title + '"?';
-  if (nb.notes.length) {
-    msg += String.fromCharCode(10) + String.fromCharCode(10) +
-           (nb.notes.length === 1 ? 'Its 1 note moves' : 'Its ' + nb.notes.length +
-            ' notes move') + ' to "' + into.title + '". Nothing is lost.';
-  }
-  if (!window.confirm(msg)) return;
-  var q;
-  for (q = 0; q < nb.notes.length; q++) into.notes.push(nb.notes[q]);
-  for (q = 0; q < notebooks.length; q++) {
-    if (notebooks[q].parent === nb.id) notebooks[q].parent = nb.parent || null;
-  }
-  notebooks.splice(i, 1);
-  if (curNotebook >= notebooks.length) curNotebook = notebooks.length - 1;
-  else if (curNotebook === i) curNotebook = Math.max(0, notebookIndexById(into.id));
-  renderDrawer();
-  renderHome();
-  saveSoon();
-  toast('Deleted "' + nb.title + '"');
-}
-
-function renderDrawerLevel(parentId, depth) {
-  if (depth > 4) return;               /* stop a cycle dead */
-  for (var i = 0; i < notebooks.length; i++) {
-    var pid = notebooks[i].parent || null;
-    if (pid !== parentId) continue;
-    drawerRow(i, depth);
-    renderDrawerLevel(notebooks[i].id, depth + 1);
-  }
-}
-
-function renderDrawer() {
-  nbList.innerHTML = '';
-  renderDrawerLevel(null, 0);
-  /* anything whose parent has been deleted still has to be reachable */
-  for (var i = 0; i < notebooks.length; i++) {
-    var pid = notebooks[i].parent || null;
-    if (pid && notebookIndexById(pid) < 0) drawerRow(i, 0);
-  }
-}
-
-/* move the current notebook under another one, or back to the top */
-function moveNotebook(which) {
-  var cur = typeof which === 'number' ? which : curNotebook;
-  var nb = notebooks[cur];
-  if (!nb) return;
-  var list = [], i;
-  for (i = 0; i < notebooks.length; i++) {
-    if (i === cur) continue;
-    if (isDescendantOf(i, nb.id)) continue;     /* no loops */
-    list.push((i + 1) + ' = ' + notebooks[i].title);
-  }
-  var NL = String.fromCharCode(10);
-  var ans = window.prompt(
-    'Put "' + nb.title + '" inside which folder?' + NL + NL +
-    list.join(NL) + NL + NL + '0 = top level',
-    '0');
-  if (ans === null) return;
-  var v = parseInt(ans, 10);
-  if (isNaN(v)) return;
-  if (v === 0) { nb.parent = null; }
-  else {
-    var t = v - 1;
-    if (t < 0 || t >= notebooks.length || t === cur) return;
-    if (isDescendantOf(t, nb.id)) { toast('That would make a loop'); return; }
-    nb.parent = notebooks[t].id;
-  }
-  renderDrawer();
-  saveSoon();
-  toast(v === 0 ? 'Moved to top level' : 'Moved into ' + notebooks[v - 1].title);
-}
-function openDrawer() { renderDrawer(); drawer.className = 'open'; drawerBackdrop.style.display = 'block'; }
-function closeDrawer() { drawer.className = ''; drawerBackdrop.style.display = 'none'; }
 
 /* ---------- pen palette ---------- */
 function drawSquiggle(canvasEl, pen, w, color) {
@@ -11789,7 +12684,7 @@ var SET_SECTIONS = [
   ] },
   { name: 'Note', rows: [
     { lbl: 'Export PNG', hint: 'Save the note as an image', leave: true, act: exportPNG },
-    { lbl: 'Backup and restore', hint: 'Copy every note, or put one back', leave: true,
+    { lbl: 'Backup and restore', hint: 'Copy every note, or put one back', leave: true, global: true,
       v: function () { return countNotes() + ' notes'; }, act: openBackup },
     { lbl: 'Paste', hint: 'Put back what was copied', edit: true, leave: true,
       v: function () { return clip ? (clip.items.length === 1 ? '1 item' : clip.items.length + ' items') : ''; },
@@ -11798,7 +12693,7 @@ var SET_SECTIONS = [
         pasteClip(scrollX + viewW / zoom / 2, scrollY + viewH / zoom / 2);
       } },
     { lbl: 'Clear note', hint: 'Erase the writing on this note', edit: true, warn: true, leave: true, act: clearNote },
-    { lbl: 'Delete note', hint: 'Remove this note for good', edit: true, warn: true, leave: true, act: deleteCurrentNote }
+    { lbl: 'Delete note', hint: 'Move this note to the trash', edit: true, warn: true, leave: true, act: deleteCurrentNote }
   ] },
   { name: 'Display', rows: [
     { lbl: 'Theme', hint: 'Light or dark interface',
@@ -11853,6 +12748,15 @@ function buildSettings() {
     sections = sections.map(function (sc) {
       return { name: sc.name, rows: sc.rows.filter(function (r) { return !r.edit; }) };
     });
+  }
+  /* from the home there is no note open: what is about a page or a note
+     stays behind, the rest - how the pen and the hand behave, the theme,
+     backups - is the same from anywhere */
+  if (settingsHome) {
+    sections = sections.filter(function (sc) { return sc.name !== 'Page' && sc.name !== 'Advanced'; })
+      .map(function (sc) {
+        return { name: sc.name, rows: sc.name !== 'Note' ? sc.rows : sc.rows.filter(function (r) { return r.global; }) };
+      });
   }
   for (s = 0; s < sections.length; s++) {
     var sec = sections[s];
@@ -12057,19 +12961,78 @@ function syncScrim() {
 }
 
 /* ---------- button wiring ---------- */
-byId('menuBtn').addEventListener('click', openDrawer);
-byId('drawerCloseBtn').addEventListener('click', closeDrawer);
-drawerBackdrop.addEventListener('click', closeDrawer);
-byId('newNbBtn').addEventListener('click', function () {
-  var name = window.prompt('Notebook name', 'New notebook');
-  if (name !== null && name !== '') {
-    notebooks.push({ id: genId(), title: name, color: NB_COLORS[notebooks.length % NB_COLORS.length], notes: [] });
-    curNotebook = notebooks.length - 1;
-    closeDrawer();
-    renderHome();
-    saveSoon();
-  }
+/* the home */
+byId('newNbBtn').addEventListener('click', function () { createFolder(null); });
+byId('newNbRow').addEventListener('click', function () { createFolder(null); });
+byId('railBtn').addEventListener('click', toggleRail);
+byId('hmRailScrim').addEventListener('click', function () { railOpen = false; layoutHome(); });
+byId('homeSortBtn').addEventListener('click', function () { sortMenu(byId('homeSortBtn')); });
+/* a grid of miniatures, or one note to a row */
+byId('homeViewBtn').addEventListener('click', function () {
+  settings.homeList = !settings.homeList;
+  saveSoon();
+  renderHome();
 });
+byId('homeMoreBtn').addEventListener('click', function () { homeMenu(byId('homeMoreBtn')); });
+(function () {
+  var sc = byId('hmScrim');
+  function eat(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
+    hpClose();
+  }
+  sc.addEventListener('touchstart', eat);
+  sc.addEventListener('click', eat);
+})();
+byId('hsClose').addEventListener('click', selDone);
+byId('hsAll').addEventListener('click', function () {
+  if (!homeSel) return;
+  var all = selIds().length === homeShown.length, i;
+  homeSel.ids = {};
+  if (!all) for (i = 0; i < homeShown.length; i++) homeSel.ids[homeShown[i]] = 1;
+  paintSel();
+});
+byId('hsFav').addEventListener('click', function () {
+  if (!this._on) return;
+  var ids = selIds(), allFav = true, i;
+  for (i = 0; i < ids.length; i++) if (!notes[ids[i]].fav) allFav = false;
+  setFav(ids, !allFav);
+});
+byId('hsMove').addEventListener('click', function () {
+  if (!this._on) return;
+  var ids = selIds();
+  pickFolder(ids.length === 1 ? 'Move to folder' : 'Move ' + ids.length + ' notes to', function (to) { moveNotes(ids, to); },
+             homeKind() === 'nb' ? curNotebook : -1);
+});
+byId('hsRename').addEventListener('click', function () { if (this._on) renameNote(selIds()[0]); });
+byId('hsRestore').addEventListener('click', function () { if (this._on) restoreNotes(selIds()); });
+byId('hsDel').addEventListener('click', function () {
+  if (!this._on) return;
+  var ids = selIds();
+  if (homeKind() === 'trash' && !homeQuery()) confirmDeleteForever(ids);
+  else trashNotes(ids);
+});
+searchInputEl.addEventListener('input', function () {
+  byId('searchClear').className = searchInputEl.value ? 'on' : '';
+  homeSel = null;
+  renderHome();
+});
+searchInputEl.addEventListener('keydown', function (e) {
+  if (e && e.keyCode === 13) { try { searchInputEl.blur(); } catch (er) {} }
+});
+byId('searchClear').addEventListener('click', function () {
+  searchInputEl.value = '';
+  byId('searchClear').className = '';
+  renderHome();
+});
+/* the dialog */
+byId('dlgOk').addEventListener('click', dlgAccept);
+byId('dlgCancel').addEventListener('click', dlgClose);
+byId('dlgInput').addEventListener('keydown', function (e) {
+  if (e && e.keyCode === 13) { if (e.preventDefault) e.preventDefault(); dlgAccept(); }
+});
+byId('dlgInput').addEventListener('input', function () { byId('dlgInput').className = 'on'; });
+byId('dlg').addEventListener('click', function (e) { if (e && e.target === byId('dlg')) dlgClose(); });
 
 /* The dismissing tap is consumed here and goes no further, which is the
    whole point: on the page it used to land as a dot, so the only way out
@@ -12080,7 +13043,6 @@ byId('newNbBtn').addEventListener('click', function () {
     if (e && e.preventDefault) e.preventDefault();
     if (e && e.stopPropagation) e.stopPropagation();
     closePanels();
-    closeNbActions();
   }
   sc.addEventListener('touchstart', eat);
   sc.addEventListener('click', eat);
@@ -12089,12 +13051,7 @@ byId('fabNew').addEventListener('click', newNote);
 byId('backBtn').addEventListener('click', goHome);
 noteTitleBtn.addEventListener('click', renameCurrentNote);
 palmBtn.addEventListener('click', cyclePalm);
-byId('moreBtn').addEventListener('click', function () {
-  closePanels();
-  buildSettings();
-  byId('settingsOverlay').className = 'overlay on';
-  syncScrim();
-});
+byId('moreBtn').addEventListener('click', function () { openSettings(false); });
 byId('settingsCloseBtn').addEventListener('click', function () {
   byId('settingsOverlay').className = 'overlay';
   syncScrim();
@@ -12179,37 +13136,6 @@ scrollPill.addEventListener('click', function () {
   openPageMenu();
 });
 
-/* search */
-searchBtn.addEventListener('click', function () {
-  if (searchBarEl.style.display === 'block') { hideSearch(); return; }
-  searchBarEl.style.display = 'block';
-  setTimeout(function () {
-    if (searchBarEl.style.display === 'block' && typeof searchInputEl.focus === 'function') searchInputEl.focus();
-  }, 60);
-});
-/* the order the notes are listed in: favourites, then title, then date */
-byId('homeSortBtn').addEventListener('click', function () {
-  settings.homeSort = settings.homeSort === 'fav' ? 'title'
-                   : settings.homeSort === 'title' ? 'date' : 'fav';
-  saveSoon();
-  renderHome();
-  toast('Sorted by ' + (settings.homeSort === 'fav' ? 'favourites'
-                     : settings.homeSort === 'title' ? 'title' : 'date'));
-});
-/* a grid of previews, or one note to a row */
-byId('homeViewBtn').addEventListener('click', function () {
-  settings.homeList = !settings.homeList;
-  saveSoon();
-  renderHome();
-  toast(settings.homeList ? 'One note to a row' : 'A grid of previews');
-});
-function hideSearch() {
-  searchBarEl.style.display = 'none';
-  searchInputEl.value = '';
-  renderHome('');
-}
-searchCancelBtn.addEventListener('click', hideSearch);
-searchInputEl.addEventListener('input', function () { renderHome(); });
 undoBtn.addEventListener('click', doUndo);
 redoBtn.addEventListener('click', doRedo);
 byId('readChip').addEventListener('click', function () { setReading(false); });
@@ -12270,6 +13196,8 @@ byId('backupImportBtn').addEventListener('click', doImport);
 /* ---------- boot ---------- */
 function init() {
   loadAll();
+  purgeTrash();
+  if (curNoteId && notes[curNoteId] && notes[curNoteId].trash) curNoteId = null;
   buildPalette();
   buildPageView();
   initPop();

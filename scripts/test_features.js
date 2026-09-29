@@ -376,24 +376,27 @@ check('one undo brings the page back', pd.strokes().length === 1,
 /* ---------- folders ---------- */
 var fd = fresh();
 var nbBtn = fd.els.newNbBtn;
-fd.answer('Physics'); nbBtn._fire('click', {});
-fd.answer('Term 1');  nbBtn._fire('click', {});
+nbBtn._fire('click', {}); fd.dlg('Physics');
+nbBtn._fire('click', {}); fd.dlg('Term 1');
 var nbs0 = fd.state().notebooks;
 check('new notebooks are created', nbs0.length >= 3, nbs0.length + ' notebooks');
 
-fd.answer('1');
-fd.nb().move();
+fd.nb().move();                           /* the open one, Term 1 ... */
+fd.dlgPick(nbs0[0].title);                /* ...into the first */
 var nbs = fd.state().notebooks;
 var nested = 0, q;
 for (q = 0; q < nbs.length; q++) { if (nbs[q].parent) nested++; }
 check('a notebook can be nested inside another', nested === 1, nested + ' nested');
 
-/* a folder must never become its own ancestor */
-var childIdx = -1;
+/* a folder must never become its own ancestor: moving the parent, its
+   own child is not even offered */
+var childIdx = -1, parentIdx = -1;
 for (q = 0; q < nbs.length; q++) { if (nbs[q].parent) childIdx = q; }
-fd.answer(String(childIdx + 1));
-fd.nb().move();
-var after = fd.state().notebooks, loops = 0;
+for (q = 0; q < nbs.length; q++) { if (childIdx >= 0 && nbs[q].id === nbs[childIdx].parent) parentIdx = q; }
+fd.nb().move(parentIdx);
+var offered = fd.dlgPick(nbs[childIdx].title);
+if (!offered) fd.els.dlgCancel._fire('click', {});
+var after = fd.state().notebooks, loops = offered ? 1 : 0;
 for (q = 0; q < after.length; q++) {
   var seen = 0, cur2 = after[q], r;
   while (cur2 && cur2.parent && seen++ < 10) {
@@ -1159,7 +1162,7 @@ var nd = fresh();
 nd.confirmAll(true);
 (function () {
   var mk = nd.els.newNbBtn;
-  nd.answer('Physics'); mk._fire('click', {});
+  mk._fire('click', {}); nd.dlg('Physics');
   /* two notes in it */
   nd.els.fabNew._fire('click', {});
   nd.flushFrames();
@@ -1183,7 +1186,7 @@ check('a notebook can hold notes', ndNotesInside >= 2,
 var ndTotalBefore = 0;
 for (ndq = 0; ndq < ndBefore.length; ndq++) ndTotalBefore += ndBefore[ndq].notes.length;
 nd.nb().del(ndIdx);
-nd.flushFrames();
+nd.dlg();                                 /* "Delete Physics?" - yes */
 var ndAfter = nd.state().notebooks, ndTotalAfter = 0;
 for (ndq = 0; ndq < ndAfter.length; ndq++) ndTotalAfter += ndAfter[ndq].notes.length;
 
@@ -1199,8 +1202,8 @@ var nl = fresh();
 nl.confirmAll(true);
 (function () {
   var st = nl.state().notebooks, i;
-  for (i = st.length - 1; i > 0; i--) nl.nb().del(i);
-  nl.nb().del(0);
+  for (i = st.length - 1; i > 0; i--) { nl.nb().del(i); nl.dlg(); }
+  nl.nb().del(0); nl.dlg();
 })();
 check('the last notebook cannot be deleted',
       nl.state().notebooks.length >= 1,
@@ -1209,15 +1212,15 @@ check('the last notebook cannot be deleted',
 /* renaming acts on the notebook you picked, not the one you are in */
 var nr = fresh();
 (function () {
-  nr.answer('Physics'); nr.els.newNbBtn._fire('click', {});
-  nr.answer('Chemistry'); nr.els.newNbBtn._fire('click', {});
+  nr.els.newNbBtn._fire('click', {}); nr.dlg('Physics');
+  nr.els.newNbBtn._fire('click', {}); nr.dlg('Chemistry');
 })();
 (function () {
   var st = nr.state().notebooks, i, target = -1;
   for (i = 0; i < st.length; i++) if (st[i].title === 'Physics') target = i;
   var cur = nr.state().cur ? nr.state().cur.nb : -1;
-  nr.answer('Maths');
   nr.nb().rename(target);
+  nr.dlg('Maths');
   var st2 = nr.state().notebooks;
   check('rename acts on the row you tapped, not the notebook you are in',
         st2[target].title === "Maths" && target !== cur,
@@ -2219,36 +2222,45 @@ check('the Paper colour row opens the picker',
       tn3.pageView().open === true && tn3.tint().paper === 0,
       'open ' + tn3.pageView().open + ', paper ' + tn3.tint().paper);
 
-/* ---------- the home screen ---------- */
+/* ---------- the home screen ----------
+ * Samsung's tablet home: a rail with All notes, Favorites, Trash and the
+ * folders; each note a miniature with a menu of its own; long-press to
+ * select several; deleting goes to the trash and can come back. */
+function saved(app, id) { app.state(); return app.note(id); }
 var hm = fresh();
-hm.confirmAll(true);
 (function () {
-  var mk = hm.els.newNbBtn;
-  hm.answer('Physics'); mk._fire('click', {});
-  hm.els.fabNew._fire('click', {}); hm.flushFrames();
-  hm.els.backBtn._fire('click', {}); hm.flushFrames();
-  hm.els.fabNew._fire('click', {}); hm.flushFrames();
-  hm.els.backBtn._fire('click', {}); hm.flushFrames();
-  hm.els.fabNew._fire('click', {}); hm.flushFrames();
-  hm.els.backBtn._fire('click', {}); hm.flushFrames();
+  hm.els.newNbBtn._fire('click', {}); hm.dlg('Physics');
+  for (var i = 0; i < 3; i++) {
+    hm.els.fabNew._fire('click', {}); hm.flushFrames();
+    hm.els.backBtn._fire('click', {}); hm.flushFrames();
+  }
 })();
-check('the home grid shows a card for each note', hm.home().cards === 3, hm.home().cards + ' cards');
-check('...each with a preview of the note', hm.home().previews === 3, hm.home().previews + ' previews');
-check('...and a way to rename it there', hm.home().renames === 3, hm.home().renames + ' rename buttons');
+check('a new folder opens, and new notes go into it',
+      hm.home().kind === 'nb' && hm.home().title === 'Physics' && hm.home().cards === 3,
+      hm.home().kind + ' "' + hm.home().title + '", ' + hm.home().cards + ' cards');
+check('...each a miniature of its page', hm.home().previews === 3, hm.home().previews + ' previews');
+check('...with a menu of its own', hm.home().mores === 3, hm.home().mores + ' menus');
 
-/* rename without opening the note */
-hm.answer('Mechanics');
-var hmCards = hm.els.notesGrid.children;
-hmCards[0].children[3]._fire('click', {});   /* prev, body, star, rename */
-hm.flushFrames();
+/* rename from the card's menu, without opening the note */
+var hmRen = hm.home().ids[0];
+hm.home().els[0]._more._fire('click', {});
+hm.popPick('Rename');
+hm.dlg('Mechanics');
 check('a note can be renamed from the home screen',
-      hm.home().titles[0] === 'Mechanics', hm.home().titles[0]);
+      hm.home().titles.indexOf('Mechanics') >= 0, hm.home().titles.join(', '));
+check('...and the name is saved, though the note is not the open one',
+      saved(hm, hmRen).title === 'Mechanics', saved(hm, hmRen).title);
 
-/* sort by title */
-hm.els.homeSortBtn._fire('click', {});   /* favourites -> title */
-check('the sort control orders by title', hm.home().sort === 'title', hm.home().sort);
-var hmTitles = hm.home().titles;
-check('...alphabetically', hmTitles[0] === 'Mechanics', hmTitles.join(', '));
+/* sort: a menu of keys, the same key again turns the order round */
+hm.els.homeSortBtn._fire('click', {});
+hm.popPick('Title');
+check('the sort menu orders by title, A to Z',
+      hm.home().sort === 'title' && hm.home().desc === false && hm.home().titles[0] === 'Mechanics',
+      hm.home().sort + (hm.home().desc ? ' desc' : ' asc') + ': ' + hm.home().titles.join(', '));
+hm.els.homeSortBtn._fire('click', {});
+hm.popPick('Title');
+check('...and choosing it again turns it round',
+      hm.home().desc === true && hm.home().titles[2] === 'Mechanics', hm.home().titles.join(', '));
 
 /* list mode */
 hm.els.homeViewBtn._fire('click', {});
@@ -2256,17 +2268,72 @@ check('the view control switches to one note to a row', hm.home().list === true,
 hm.els.homeViewBtn._fire('click', {});
 check('...and back to a grid', hm.home().list === false, 'list ' + hm.home().list);
 
+/* All notes is every folder at once */
+hm.els.hmNav.children[0]._fire('click', {});
+check('All notes shows the notes of every folder',
+      hm.home().kind === 'all' && hm.home().cards === 4, hm.home().kind + ', ' + hm.home().cards + ' cards');
+
+/* favourites */
+var hmFav = hm.home().ids[1];
+hm.home().els[1]._more._fire('click', {});
+hm.popPick('Add to favorites');
+hm.els.hmNav.children[1]._fire('click', {});
+check('a favorite shows under Favorites',
+      hm.home().kind === 'fav' && hm.home().cards === 1 && hm.home().ids[0] === hmFav,
+      hm.home().kind + ', ' + hm.home().cards + ' cards');
+check('...and is saved as one', saved(hm, hmFav).fav === 1, 'fav ' + saved(hm, hmFav).fav);
+
+/* the trash */
+hm.els.hmNav.children[0]._fire('click', {});
+var hmDel = hm.home().ids[0];
+hm.home().els[0]._more._fire('click', {});
+hm.popPick('Delete');
+check('deleting moves a note to the trash rather than away',
+      hm.home().cards === 3 && saved(hm, hmDel) && saved(hm, hmDel).trash > 0,
+      hm.home().cards + ' cards, trash ' + (saved(hm, hmDel) && saved(hm, hmDel).trash));
+hm.els.hmNav.children[2]._fire('click', {});
+check('...where it waits', hm.home().kind === 'trash' && hm.home().ids[0] === hmDel,
+      hm.home().kind + ', ' + hm.home().ids.join(','));
+hm.home().els[0]._more._fire('click', {});
+hm.popPick('Restore');
+check('...and from where it comes back', !saved(hm, hmDel).trash && hm.home().cards === 0 && hm.home().empty,
+      'trash ' + saved(hm, hmDel).trash + ', ' + hm.home().cards + ' left in the trash');
+
+/* select several and move them */
+hm.els.hmNav.children[0]._fire('click', {});
+var hmMv = hm.home().ids.slice(0, 2);
+hm.home().els[0]._fire('contextmenu', { preventDefault: function () {} });   /* the long press */
+hm.home().els[1]._fire('click', {});
+check('a long press starts selecting, a tap adds to it', hm.home().sel === 2, 'selected ' + hm.home().sel);
+hm.els.hsMove._fire('click', {});
+hm.dlgPick('My Notes');
+(function () {
+  var nbs = hm.state().notebooks, mine = null, i;
+  for (i = 0; i < nbs.length; i++) if (nbs[i].title === 'My Notes') mine = nbs[i];
+  check('...and the selected notes move to the folder picked',
+        mine && mine.notes.indexOf(hmMv[0]) >= 0 && mine.notes.indexOf(hmMv[1]) >= 0 && hm.home().sel === -1,
+        mine ? mine.notes.join(',') + ' / sel ' + hm.home().sel : 'no My Notes');
+})();
+
+/* from the trash, deleting is for good */
+var hmGone = hm.home().ids[0];
+hm.home().els[0]._more._fire('click', {});
+hm.popPick('Delete');
+hm.els.hmNav.children[2]._fire('click', {});
+hm.home().els[0]._more._fire('click', {});
+hm.popPick('Delete for good');
+hm.dlg();
+check('deleting from the trash is for good', !saved(hm, hmGone) && hm.home().cards === 0,
+      saved(hm, hmGone) ? 'still stored' : hm.home().cards + ' cards');
+
 /* opening a folder scales the notes up into place */
 var hm3 = fresh();
-hm3.confirmAll(true);
 (function () {
-  var mk = hm3.els.newNbBtn;
-  hm3.answer('Physics'); mk._fire('click', {});
+  hm3.els.newNbBtn._fire('click', {}); hm3.dlg('Physics');
   hm3.els.fabNew._fire('click', {}); hm3.flushFrames();
   hm3.els.backBtn._fire('click', {}); hm3.flushFrames();
+  hm3.els.hmNav.children[0]._fire('click', {});
 })();
-hm3.els.menuBtn._fire('click', {});          /* open the notebooks drawer */
-hm3.flushFrames();
 var nbItems = hm3.els.nbList.children, nbTarget = null;
 for (var k = 0; k < nbItems.length; k++) {
   var rowEl = nbItems[k].children[0];
@@ -2277,8 +2344,8 @@ for (var k = 0; k < nbItems.length; k++) {
 }
 if (nbTarget) nbTarget._fire('click', {});
 check('opening a folder scales the notes up',
-      hm3.els.notesGrid.className.indexOf('scale-up') >= 0,
-      'class "' + hm3.els.notesGrid.className + '"');
+      hm3.els.notesGrid.className.indexOf('scale-up') >= 0 && hm3.home().title === 'Physics',
+      'class "' + hm3.els.notesGrid.className + '", ' + hm3.home().title);
 
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
