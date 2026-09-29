@@ -236,7 +236,9 @@ check('released, the lift settles back onto the desk',
       q4.pages().pull === 0 && q4.pages().total === 1,
       'pull ' + q4.pages().pull + ', ' + q4.pages().total + ' pages');
 
-/* the arrival is a glide down the new sheet, not a jump */
+/* the page is made where the pull left the view, and the view stays there:
+   gliding on down to the new page took the user somewhere they had not
+   asked to go */
 var q5 = fresh();
 write(q5, 52);
 q5.els.handBtn._fire('click', {});
@@ -249,9 +251,8 @@ check('letting go past the mark makes the page at once',
       q5.pages().total === q5tot + 1, q5.pages().total + ' pages');
 var q5y = q5.pages().y;
 q5.tick(300); q5.flushFrames();
-check('...and the view glides down to it',
-      q5.pages().y > q5y && q5.pages().y >= (q5.pages().total - 1) * 1020 - 1,
-      'y ' + q5y + ' -> ' + q5.pages().y);
+check('...and the view stays where the pull left it',
+      Math.abs(q5.pages().y - q5y) < 1, 'y ' + q5y + ' -> ' + q5.pages().y);
 
 /* the pull-back fix: pull past the mark, then pull back down and let go.
    The lift falls back and NO page is made - releasing on the way down is
