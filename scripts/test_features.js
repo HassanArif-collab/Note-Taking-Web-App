@@ -1767,6 +1767,29 @@ check('the colour dots turn to another page of colours',
       pl.els.colorRow.children[16].style.display === '' && pl.els.colorRow.children[0].style.display === 'none',
       pl.els.colorRow.children[16].style.display + '/' + pl.els.colorRow.children[0].style.display);
 
+/* ---------- shapes: draw, then hold still at the end (Samsung) ---------- */
+var sh = scApp({ shapeAssist: 2 }), shI;
+sh.down(1, 200, 400);
+for (shI = 1; shI <= 20; shI++) { sh.tick(16); sh.moveTo(1, 200 + shI * 12, 400 + (shI % 3)); }
+sh.tick(600); sh.win.__mnShape(); sh.flushFrames();
+sh.up(1); sh.tick(50); sh.flushFrames();
+check('a line drawn and then held becomes a straight line',
+      sh.strokes().length === 1 && sh.strokes()[0].pts.length === 2,
+      sh.strokes().length + ' strokes, ' + (sh.strokes()[0] ? sh.strokes()[0].pts.length : 0) + ' points');
+sh.down(2, 200, 520);
+for (shI = 1; shI <= 20; shI++) { sh.tick(16); sh.moveTo(2, 200 + shI * 12, 520 + (shI % 3)); }
+sh.tick(16); sh.up(2); sh.tick(50); sh.flushFrames();
+check('...the same line lifted straight away stays as drawn',
+      sh.strokes().length === 2 && sh.strokes()[1].pts.length > 5, (sh.strokes()[1] ? sh.strokes()[1].pts.length : 0) + ' points');
+sh.down(3, 560, 400);
+for (shI = 1; shI <= 40; shI++) {
+  sh.tick(16);
+  sh.moveTo(3, 500 + 60 * Math.cos(shI / 40 * Math.PI * 2), 400 + 60 * Math.sin(shI / 40 * Math.PI * 2));
+}
+sh.tick(600); sh.win.__mnShape(); sh.up(3); sh.tick(50); sh.flushFrames();
+check('a circle drawn and then held becomes a clean circle',
+      sh.strokes().length === 3 && sh.strokes()[2].pts.length === 28, (sh.strokes()[2] ? sh.strokes()[2].pts.length : 0) + ' points');
+
 /* ---------- copy, cut and paste ---------- */
 function lassoAround(a, x0, y0, x1, y1) {
   a.els.selectBtn._fire('click', {});

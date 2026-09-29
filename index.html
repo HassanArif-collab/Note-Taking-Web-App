@@ -2386,7 +2386,11 @@ var SC = {
   PAN_DEG:         35,     /* coherence cone for two-finger pan */
   PAN_RATIO:       3,
   PAN_SPEED:       0.05,
-  MOM_DECAY:       0.94,
+  MOM_DECAY:       0.85,   /* 0.94 carried a flick on for half a page after the fingers
+                              lifted - "it just glides to the next page". At 0.85 the
+                              page stops about 100px on from a firm flick. */
+  MOM_MIN:         0.35,   /* ...and only a flick coasts at all; a scroll stops where
+                              the fingers leave it */
   /* Two-finger scroll in Glove mode - see tryGlovePan. Recorded attempts
      landed 20-34ms apart and travelled 118-211px together. */
   GPAN_LAND:       150,    /* both fingers down within this of each other */
@@ -6389,7 +6393,9 @@ function moveTouch(touch, now) {
       if (inkNow[st.id]) inkNow[st.id].held = false;
       requestRender();
     }
+    if (st.shaped) return;          /* snapped to a shape: the rest of the hold is not ink */
     appendInk(st, pt, now, touch);
+    shapeWatch(st, touch.clientX, touch.clientY, now);
     return;
   }
 
@@ -6668,11 +6674,8 @@ function commitInk(st, s, now) {
   var n = activeNote();
   if (!n) return;
   if (tryScratch(n, s, st, now)) return;
-  /* shape assist mutates the points before the stroke lands in
-     the document, so undo is a plain remove (v4 semantics) */
-  if (settings.shapeAssist !== SHAPE_OFF && s.pen !== PEN_TEXT && s.pts.length > 4) {
-    tryReshape(s);
-  }
+  /* shapes are made by holding the pen at the end of the stroke (shapeCheck),
+     not at the lift - a stroke lifted straight away stays as it was drawn */
   n.strokes.push(s);
   if (settings.palmLevel === PALM_AUTO) {
     handZone = { y: strokeMaxY(s), t: now };
@@ -7426,7 +7429,7 @@ function gestureMemberEnd(now) {
     /* sideways across pages settles on the next one along, so a flick is
        a turn of the page rather than a slide that stops where it stops */
     turnPage(vx);
-  } else if (Math.abs(vy) > 0.06 || Math.abs(vx) > 0.06) startMomentum(vx, vy);
+  } else if (Math.abs(vy) > SC.MOM_MIN || Math.abs(vx) > SC.MOM_MIN) startMomentum(vx, vy);
   /* last, because making the page cancels the momentum that could
      otherwise carry the view straight off the page just made */
   if (pullY > 0) pullRelease();
@@ -8086,9 +8089,40 @@ function drawSelectionOverlays(c) {
 
 /* ============================================================
  * SHAPE ASSIST (Samsung shape recognition)
- * Runs on stroke finish when enabled; mutates the stroke points
- * before it is committed, so plain undo still works.
+ * Draw, then keep the pen still at the end: the stroke snaps to a line
+ * or a shape while the pen is still down, so you see it before letting
+ * go. Lift without holding and it stays exactly as drawn. It used to
+ * reshape every stroke at the lift, which is the reverse of Samsung and
+ * turned lines meant to be wobbly into rulers. Mutates the live stroke's
+ * points before it is committed, so plain undo still works.
  * ============================================================ */
+var SHAPE_HOLD_MS = 500;   /* this still, at the end of a stroke, asks for a shape */
+var SHAPE_STILL = 8;       /* a disc tip held still still wanders this much */
+var shapeT = null, shapeId = null;
+function shapeWatch(st, x, y, now) {
+  if (settings.shapeAssist === SHAPE_OFF || st.shaped) return;
+  if (st.holdX === undefined || dist(st.holdX, st.holdY, x, y) > SHAPE_STILL) {
+    st.holdX = x; st.holdY = y; st.holdT = now;
+    if (shapeT) clearTimeout(shapeT);
+    shapeId = st.id;
+    shapeT = setTimeout(function () { shapeCheck(st.id); }, SHAPE_HOLD_MS + 20);
+  }
+}
+function shapeCheck(id) {
+  var st = touchStates[id], ink = inkNow[id], now = Date.now();
+  shapeT = null;
+  if (!st || !ink || st.shaped || st.state !== 'ink' || ink.held || st.holdT === undefined) return;
+  if (now - st.holdT < SHAPE_HOLD_MS) {
+    shapeT = setTimeout(function () { shapeCheck(id); }, SHAPE_HOLD_MS - (now - st.holdT) + 20);
+    return;
+  }
+  if (st.pathLen < 30 || ink.stroke.pen === PEN_TEXT) return;
+  if (tryReshape(ink.stroke)) {
+    st.shaped = true;
+    traceVerdict('shape', id, now);
+    requestRender();
+  }
+}
 function tryReshape(s) {
   var p = s.pts, n = p.length;
   if (n < 5) return false;
@@ -9643,6 +9677,7 @@ window.__mnHome = function () {
            sort: settings.homeSort, titles: titles };
 };
 window.__mnHold = function () { holdCheck(); };
+window.__mnShape = function () { if (shapeId !== null) shapeCheck(shapeId); };
 window.__mnTidy = function () { return tidyRun(); };
 window.__mnZW = function () { var g = zwGeom(); return { on: zw.on, x: zw.x, y: zw.y, bw: g.bw, bh: g.bh, top: g.top }; };
 
