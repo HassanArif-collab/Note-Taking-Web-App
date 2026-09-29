@@ -6042,7 +6042,8 @@ var HAND_ZONE_M = 110;     /* further below the last stroke than this is where t
                               strokes start that far down (they show a moment late, not lost) */
 var HAND_ZONE_T = 60000;   /* ...for this long after the stroke */
 var HAND_REVEAL = 3000;    /* a hidden stroke still going this long with no pen above it is the pen */
-var HAND_BUSY = 1000;      /* this soon after a stroke you are mid-writing */
+var HAND_BUSY = 500;       /* this soon after a stroke you are mid-writing (recorded: a two-finger
+                              scroll began 760ms after the last stroke) */
 var HAND_TOGETHER = 40;    /* touches landing this close together are one event: 86% of recorded
                               finger pairs land within it, and the pen lands 300-500ms after the
                               hand - though a palm sprouts new points every 50-200ms, so any
@@ -6079,7 +6080,8 @@ function handBegin(st, now) {
        now coming down above it. Landing together is not that - it is two
        fingers (one in five recorded pinches had them 120px+ apart up and
        down) or two points of the hand, and is dealt with as level. */
-    if (st.cy <= o.cy - HAND_GAP && (o.hpalm || now - o.t0 > HAND_TOGETHER)) { lower.push(o); continue; }
+    if (st.cy <= o.cy - HAND_GAP &&
+        (o.hpalm || o.wait || now - o.t0 > HAND_TOGETHER || handBusy(now))) { lower.push(o); continue; }
     /* below a touch, or level with the hand, or level with anything while
        mid-writing below the line: the hand */
     if (st.cy >= o.cy + HAND_GAP || o.hpalm || handMidLine(st, o, now)) {
@@ -6130,7 +6132,8 @@ function handPendCheck(st, now) {
   var keep = [], i, p;
   for (i = 0; i < handPend.length; i++) {
     p = handPend[i];
-    if (now - p.t >= HAND_PEND_MAX) commitInk(p.st, p.s, p.t);
+    /* nothing came either way: a real stroke is shown, a little brush was the hand */
+    if (now - p.t >= HAND_PEND_MAX) { if (p.st.pathLen >= 20) commitInk(p.st, p.s, p.t); else traceVerdict('palm-low', p.st.id, now); }
     else if (st && st.cy <= docToScreen(0, p.y).y - HAND_GAP) traceVerdict('palm-low', p.st.id, now);
     else keep.push(p);
   }
@@ -6146,8 +6149,10 @@ function handWaitDrop(st, now) {
    are the hand - its heel and its side. Recorded finger pairs and palm pairs
    land just as close together in time and space, so only the moment tells
    them apart: a scroll comes after a pause, the hand comes with the pen. */
+/* mid-writing: a stroke finished only a moment ago */
+function handBusy(now) { return !!handZone && now - handZone.t <= HAND_BUSY; }
 function handMidLine(a, b, now) {
-  if (!handZone || now - handZone.t > HAND_BUSY) return false;
+  if (!handBusy(now)) return false;
   var line = handLineY(now);
   return a.cy > line + HAND_ZONE_M || b.cy > line + HAND_ZONE_M;
 }
@@ -6835,7 +6840,9 @@ function endTouch(touch, now, cancelled) {
        That is the digitizer telling us this was not a deliberate
        stroke, and the old code committed it anyway. Cancel is the one
        piece of palm evidence the hardware hands us for free. */
-    if (cancelled) {
+    /* ...except in Auto, for a stroke already proven to be the pen: it reaches
+       here only because it was well above the hand when the iPad cut it off */
+    if (cancelled && !(settings.palmLevel === PALM_AUTO && st.penProof)) {
       delete inkNow[st.id];
       traceVerdict('cancelled', st.id, now);
       palmMemAdd(st.sx, st.sy, now);
