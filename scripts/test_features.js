@@ -2547,5 +2547,125 @@ check('opening a folder scales the notes up',
       hm3.els.notesGrid.className.indexOf('scale-up') >= 0 && hm3.home().title === 'Physics',
       'class "' + hm3.els.notesGrid.className + '", ' + hm3.home().title);
 
+/* ---------- storage: the room there is, and using less of it ----------
+ * Safari keeps 2.6 million characters for a site, not the five million the
+ * app assumed, so the store filled while the app thought it half empty -
+ * and one refused write then switched saving off for the rest of the
+ * session. Ink is now stored compact, the older versions' leftover copies
+ * are cleared, and a full store is retried rather than given up on. */
+(function () {
+  var pk = fresh().win.__mnPack, bad = 0, maxErr = 0, i, j, pts, back, t;
+  /* points of every awkward kind: negative, large, fractional, uneven gaps */
+  for (i = 0; i < 200; i++) {
+    pts = []; t = 1700000000000 + i * 777;
+    for (j = 0; j < 1 + (i % 37); j++) {
+      t += (j * 13 + i) % 40;
+      pts.push([Math.sin(i * 7 + j) * 3000 + (i % 3 ? 20000 : -150), Math.cos(i + j * 3) * 900 + j * 0.37, t]);
+    }
+    back = pk.unpack(pk.pack(pts));
+    if (!back || back.length !== pts.length) { bad++; continue; }
+    for (j = 0; j < pts.length; j++) {
+      maxErr = Math.max(maxErr, Math.abs(back[j][0] - Math.round(pts[j][0] * 10) / 10),
+                                Math.abs(back[j][1] - Math.round(pts[j][1] * 10) / 10));
+      if (back[j][2] !== (j ? Math.round(pts[j][2] - pts[j - 1][2]) : 0)) bad++;
+    }
+  }
+  check('compact ink reads back exactly what was stored, to a tenth of a pixel',
+        bad === 0 && maxErr < 1e-9, bad + ' wrong, largest error ' + maxErr);
+  check('...and a damaged string is refused rather than misread', pk.unpack('AB!C') === null, JSON.stringify(pk.unpack('AB!C')));
+})();
+
+(function () {
+  var cs = fresh();
+  write(cs, 1); write(cs, 2);
+  cs.state();
+  var raw = cs.storage.getItem('mathnotes_v5_n_' + cs.state().cur.note), rec = JSON.parse(raw);
+  var old = 0, i, j, p;
+  for (i = 0; i < rec.strokes.length; i++) {
+    p = cs.win.__mnPack.unpack(rec.strokes[i].z);
+    for (j = 0; j < p.length; j++) old += JSON.stringify([p[j][0], p[j][1], p[j][2]]).length + 1;
+  }
+  var nowLen = 0;
+  for (i = 0; i < rec.strokes.length; i++) nowLen += rec.strokes[i].z.length;
+  check('a saved note keeps its ink compact, under a third of the old room',
+        raw.indexOf('"pts"') < 0 && nowLen * 3 < old, nowLen + ' characters of points, against ' + old + ' before');
+})();
+
+/* a note saved the old way by an earlier version, with that version's own
+   leftover copy of everything beside it */
+function oldStore(missing) {
+  var ids = missing ? ['o1', 'o2'] : ['o1'];
+  var seed = {
+    mathnotes_v5: JSON.stringify({ v: 5, noteIds: ids,
+      notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ids }], cur: { nb: 0, note: 'o1' }, set: {} }),
+    mathnotes_v5_n_o1: JSON.stringify({ id: 'o1', title: 'Old', cr: 1, mod: 1, scroll: 0,
+      strokes: [{ id: 's1', pen: 0, w: 3, color: '#000000', a: 1, ord: 1, pts: [[10, 10, 0], [20.5, 20, 16], [30, 25.2, 17]] }] }),
+    mathnotes_v4: JSON.stringify({ v: 4, notebooks: [], notes: { o1: { id: 'o1', strokes: [] } } })
+  };
+  return H.load({ quiet: true, dpr: 2, viewW: 768, viewH: 872, seed: seed });
+}
+var os1 = oldStore(false);
+os1.flushFrames();
+check('an older version\'s leftover copy is cleared once every note has loaded',
+      os1.storage.getItem('mathnotes_v4') === null, 'v4 ' + (os1.storage.getItem('mathnotes_v4') ? 'still there' : 'gone'));
+os1.save();
+(function () {
+  var raw = os1.storage.getItem('mathnotes_v5_n_o1'), rec = os1.note('o1');
+  check('...a note stored the old way reads in, and is rewritten compact',
+        raw.indexOf('"z"') > 0 && raw.indexOf('"pts"') < 0 && rec.strokes[0].pts.length === 3 &&
+        rec.strokes[0].pts[1][0] === 20.5 && rec.strokes[0].pts[2][1] === 25.2 && rec.strokes[0].pts[2][2] === 17,
+        JSON.stringify(rec.strokes[0].pts));
+})();
+var os2 = oldStore(true);
+check('...but with a note missing, the old copy may be the last of it, and stays',
+      os2.storage.getItem('mathnotes_v4') !== null, 'v4 ' + (os2.storage.getItem('mathnotes_v4') ? 'kept' : 'removed'));
+
+/* a full iPad is not a private window: it still has the notes */
+var pv = H.load({ quiet: true, storageFull: true });
+check('a store that refuses writes and holds nothing is a private window', pv.win.__mnPack.ok() === false,
+      'storage ok ' + pv.win.__mnPack.ok());
+var fl = H.load({ quiet: true, storageFull: true,
+  seed: { mathnotes_v5: JSON.stringify({ v: 5, noteIds: [], notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: [] }], set: {} }) } });
+check('...one that refuses writes but holds notes is just full, and keeps trying', fl.win.__mnPack.ok() === true,
+      'storage ok ' + fl.win.__mnPack.ok());
+
+var sf = fresh();
+write(sf, 1);
+sf.storage._full = true;
+sf.save();
+check('when the iPad refuses a save, you are told the writing is not saved yet',
+      sf.win.__mnPack.full() === true && sf.els.warning.style.display === 'block' &&
+      String(sf.els.warning.textContent).indexOf('NOT saved') >= 0, String(sf.els.warning.textContent));
+sf.storage._full = false;                        /* room is made */
+write(sf, 2);
+sf.tick(6000);                                   /* the next save comes round */
+sf.save();
+check('...and once there is room it saves again, with nothing lost',
+      sf.win.__mnPack.full() === false && sf.strokes().length === 2, sf.strokes().length + ' strokes saved');
+
+/* ---------- offline ---------- */
+(function () {
+  var h = {}, ac = {
+    status: 0, UPDATEREADY: 4,
+    addEventListener: function (t, fn) { h[t] = fn; },
+    update: function () {}, swapCache: function () {}
+  };
+  var of = H.load({ quiet: true, win: { applicationCache: ac } });
+  of.flushFrames();
+  if (h.cached) h.cached();
+  check('once the app is kept on the iPad it says it works without the internet',
+        String(of.els.toast.textContent).indexOf('without the internet') >= 0, String(of.els.toast.textContent));
+  if (h.updateready) h.updateready();
+  check('...and when a newer version has come down it offers to restart into it',
+        of.els.updBar.className === 'on', of.els.updBar.className);
+})();
+(function () {
+  var cp = require('child_process'), path = require('path'), out = '';
+  try { out = cp.execSync('node "' + path.join(__dirname, 'stamp_offline.js') + '" --check').toString(); }
+  catch (e) { out = String(e.stdout || e.message); }
+  check('the offline copy\'s manifest matches the files it lists (run stamp_offline.js after a change)',
+        out.indexOf('OK') === 0, out.trim());
+})();
+
 console.log(String.fromCharCode(10) + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

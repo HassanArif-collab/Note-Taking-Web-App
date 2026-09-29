@@ -1,5 +1,7 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- manifest: the iPad keeps the app for use with no connection (see
+     scripts/stamp_offline.js, which must be run after every change) -->
+<html lang="en" manifest="mathnotes.appcache">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -429,7 +431,7 @@ body.reading #readChip { display: block; }
   transition: opacity 0.2s, transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
 }
 #dlgTitle { font-size: 19px; font-weight: 700; color: #16181A; letter-spacing: -0.2px; }
-#dlgMsg { font-size: 14.5px; color: #4A5158; margin-top: 8px; line-height: 1.45; display: none; }
+#dlgMsg { font-size: 14.5px; color: #4A5158; margin-top: 8px; line-height: 1.45; display: none; white-space: pre-line; }
 #dlgMsg.on { display: block; }
 #dlgInput {
   display: none; width: 100%; height: 48px; margin-top: 16px; padding: 0 14px;
@@ -473,6 +475,23 @@ body.reading #readChip { display: block; }
 @-webkit-keyframes dlgShake { 0%, 100% { -webkit-transform: none; } 25% { -webkit-transform: translateX(-6px); } 75% { -webkit-transform: translateX(6px); } }
 @keyframes dlgShake { 0%, 100% { transform: none; } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 #dlgBox.shake { -webkit-animation: dlgShake 0.24s; animation: dlgShake 0.24s; }
+
+/* a newer version has arrived while you were working: say so, never force it */
+#updBar {
+  position: absolute; left: 50%; top: 12px; z-index: 80;
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  padding: 7px 7px 7px 18px; border-radius: 26px; white-space: nowrap;
+  background: rgba(22,24,26,0.95); color: #FFFFFF; font-size: 14.5px; font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  -webkit-transform: translate(-50%, -90px); transform: translate(-50%, -90px);
+  -webkit-transition: -webkit-transform 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#updBar.on { -webkit-transform: translate(-50%, 0); transform: translate(-50%, 0); }
+#updBar button { height: 34px; padding: 0 16px; border-radius: 17px; font-size: 14px; font-weight: 700; }
+#updGo { background: #0381FE; color: #FFFFFF; margin-left: 14px; }
+#updGo:active { background: #0270DB; }
+#updLater { color: #B4B8BE; margin-left: 2px; }
 
 /* moving between the home and a note: the note slides in from the side it
    is going to, the home comes back from the other */
@@ -1847,6 +1866,9 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
 <div id="hmScrim"></div>
 <div id="hmPop"></div>
 
+<!-- ============ A NEWER VERSION IS READY ============ -->
+<div id="updBar"><span>A new version is ready</span><button id="updGo">Restart</button><button id="updLater">Later</button></div>
+
 <!-- ============ PDF: choose the pages to bring in ============ -->
 <input id="pdfInput" type="file" accept="application/pdf,.pdf" style="position:absolute;left:-9999px;width:1px;height:1px;">
 <input id="sideImgInput" type="file" accept="image/*" style="position:absolute;left:-9999px;width:1px;height:1px;">
@@ -2360,9 +2382,17 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
 'use strict';
 
 /* ---------- feature detection (iOS 9 safe) ---------- */
+/* A private window refuses every write - and so does a FULL store, even
+   this one-character probe. They were taken for the same thing, so a full
+   iPad announced Private Browsing and stopped saving for good. A full store
+   still holds the notes; a private window holds nothing. */
 var storageOk = true;
 try { localStorage.setItem('mn_probe', '1'); localStorage.removeItem('mn_probe'); }
-catch (e) { storageOk = false; }
+catch (e) {
+  var hasNotes = false;
+  try { hasNotes = !!(localStorage.getItem('mathnotes_v5') || localStorage.getItem('mathnotes_v4')); } catch (e2) {}
+  storageOk = hasNotes;
+}
 
 /* ---------- constants ---------- */
 /* v5 splits the collection: one small index, plus one key per note.
@@ -2371,7 +2401,11 @@ catch (e) { storageOk = false; }
    than it needed to. */
 var STORAGE_KEY_V5 = 'mathnotes_v5';
 var NOTE_KEY = 'mathnotes_v5_n_';
-var QUOTA_BYTES = 5000000;     /* iOS 9 gives about 5MB per origin */
+/* THE ROOM THERE IS, IN CHARACTERS. Safari gives a site 5MB of storage
+   and counts every character as two bytes, so it holds 2,621,440
+   characters - not the five million this was set to. The app believed
+   itself half full at the moment the iPad refused to save any more. */
+var QUOTA_CHARS = 2600000;
 var STORAGE_KEY_V4 = 'mathnotes_v4';
 var STORAGE_KEY_V2 = 'mathnotes_v2';
 var STORAGE_KEY_V1 = 'mathnotes_v1';
@@ -3103,17 +3137,22 @@ function loadV5() {
   } catch (e) { idx = null; }
   if (!idx || !idx.noteIds) return null;
 
-  var out = { notebooks: idx.notebooks || [], notes: {}, cur: idx.cur, set: idx.set };
+  var out = { notebooks: idx.notebooks || [], notes: {}, cur: idx.cur, set: idx.set, lost: 0, loose: [] };
   for (i = 0; i < idx.noteIds.length; i++) {
-    var id = idx.noteIds[i], rec = null;
+    var id = idx.noteIds[i], rec = null, r = null;
     try {
-      var r = localStorage.getItem(NOTE_KEY + id);
+      r = localStorage.getItem(NOTE_KEY + id);
       if (r) rec = JSON.parse(r);
     } catch (e) { rec = null; }
-    if (rec && rec.id) out.notes[id] = deserializeNote(rec);
-    else lost++;
+    if (rec && rec.id) {
+      out.notes[id] = deserializeNote(rec);
+      /* still in the old, three-times-larger form: rewrite it compact */
+      if (r.indexOf('"pts":') >= 0) out.loose.push(id);
+    } else lost++;
   }
+  out.lost = lost;
   if (lost) showWarning(lost + ' note(s) could not be read and were skipped.');
+  if (unreadStrokes) showWarning(unreadStrokes + ' stroke(s) were damaged and could not be read.');
   return out;
 }
 
@@ -3151,6 +3190,34 @@ function loadAll() {
     curNoteId = notebooks[curNotebook] && notebooks[curNotebook].notes[0] || null;
   }
   applyStoredSettings(data.set);
+  if (data.loose) {
+    /* The older app versions' own copies of everything - the single v4
+       blob, and v2/v1 before it - were never removed after moving to
+       one key per note, so a migrated iPad carried its whole collection
+       twice. With every note of the current copy read back whole, they
+       are only taking room; with any note missing they may be the last
+       copy of it, so they stay. */
+    if (!data.lost) {
+      try {
+        localStorage.removeItem(STORAGE_KEY_V4);
+        localStorage.removeItem(STORAGE_KEY_V2);
+        localStorage.removeItem(STORAGE_KEY_V1);
+      } catch (e) {}
+    }
+    for (var li = 0; li < data.loose.length; li++) markDirty(data.loose[li]);
+    looseNotes = data.loose.length;
+  }
+}
+var looseNotes = 0;
+/* the notes still stored the old way are rewritten a few seconds after
+   starting - at once, rather than whenever each is next written in, because
+   a full iPad needs the room back now */
+function compactSoon() {
+  if (!looseNotes || !storageOk) return;
+  setTimeout(function () {
+    lastSaveAt = 0;
+    saveTick();
+  }, 4000);
 }
 
 function applyStoredSettings(set) {
@@ -3242,24 +3309,64 @@ function applyStoredSettings(set) {
   }
 }
 
+/* COMPACT INK. A point was stored as JSON - "[123.4,567.8,16]," is sixteen
+ * characters - and the iPad holds about 2.6 million characters in all, so
+ * a few notes of maths filled it. Now each point is stored as the change
+ * from the one before, in tenths of a pixel and milliseconds (exactly the
+ * precision kept before), each number in as few characters as it needs:
+ * five bits to a character, the sixth saying "more follows". A pen moving a
+ * few pixels a sample takes five characters a point, a third of the room.
+ * The characters are letters, digits, - and _ only, so a backup still
+ * survives any email or notes app it is pasted into. */
+var PK = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+var PK_I = [];
+(function () { for (var i = 0; i < 64; i++) PK_I[PK.charCodeAt(i)] = i; })();
+function pkNum(out, v) {
+  v = v < 0 ? -2 * v - 1 : 2 * v;              /* small negatives stay small */
+  while (v >= 32) { out.push(PK.charAt(32 + v % 32)); v = Math.floor(v / 32); }
+  out.push(PK.charAt(v));
+}
+/* in-memory points (absolute times) -> the stored string */
+function packPts(p) {
+  var out = [], px = 0, py = 0, i, x, y;
+  for (i = 0; i < p.length; i++) {
+    x = Math.round(p[i][0] * 10);
+    y = Math.round(p[i][1] * 10);
+    pkNum(out, x - px);
+    pkNum(out, y - py);
+    /* only the gaps between points are ever read (speed, taper) */
+    pkNum(out, i ? Math.round(p[i][2] - p[i - 1][2]) : 0);
+    px = x; py = y;
+  }
+  return out.join('');
+}
+/* the stored string -> points with the time as the gap before each, as the
+   old format kept them; null when it is not a string this wrote */
+function unpackPts(z) {
+  var out = [], i = 0, n = z.length, x = 0, y = 0, k, v, mul, c, vals = [0, 0, 0];
+  while (i < n) {
+    for (k = 0; k < 3; k++) {
+      v = 0; mul = 1;
+      do {
+        if (i >= n) return null;
+        c = PK_I[z.charCodeAt(i++)];
+        if (c === undefined) return null;
+        v += (c % 32) * mul;
+        mul *= 32;
+      } while (c >= 32);
+      vals[k] = v % 2 ? -(v + 1) / 2 : v / 2;
+    }
+    x += vals[0]; y += vals[1];
+    out.push([x / 10, y / 10, vals[2]]);
+  }
+  return out;
+}
 function serializeNote(n) {
   var out = [];
   var st = n.strokes;
   for (var i = 0; i < st.length; i++) {
     var s = st[i];
-    var pts = [];
-    var p = s.pts;
-    /* Timestamps are stored as a delta from the previous point. Only
-       the gaps are ever read (speed, taper), and an absolute epoch
-       stamp costs 13 characters per point against 1-3 for a delta -
-       close to half the stored size of a note, for no loss at all. */
-    var t0 = p.length ? p[0][2] : 0, prevT = t0;
-    for (var j = 0; j < p.length; j++) {
-      var dt = j === 0 ? 0 : Math.round(p[j][2] - prevT);
-      prevT = p[j][2];
-      pts.push([Math.round(p[j][0] * 10) / 10, Math.round(p[j][1] * 10) / 10, dt]);
-    }
-    var rec = { id: s.id, pen: s.pen, w: s.w, color: s.color, a: s.a, ord: s.ord, pts: pts };
+    var rec = { id: s.id, pen: s.pen, w: s.w, color: s.color, a: s.a, ord: s.ord, z: packPts(s.pts) };
     if (s.pen === PEN_TEXT) {
       rec.txt = s.txt || '';
       rec.sz = s.sz || 24;
@@ -3271,9 +3378,29 @@ function serializeNote(n) {
   }
   return out;
 }
+/* a stored record's compact points back into arrays (gap form) - the
+   stored shape the rest of the loader, and the tests, read */
+function unpackRec(rec) {
+  var st = rec && rec.strokes, keep = [], i, s, p;
+  if (!st) return rec;
+  for (i = 0; i < st.length; i++) {
+    s = st[i];
+    if (typeof s.z === 'string') {
+      p = unpackPts(s.z);
+      if (!p) { unreadStrokes++; continue; }     /* a damaged stroke is dropped, not the note */
+      s.pts = p;
+      delete s.z;
+    }
+    keep.push(s);
+  }
+  rec.strokes = keep;
+  return rec;
+}
+var unreadStrokes = 0;
 
 /* rebuild cumulative timestamps from the stored deltas */
 function deserializeNote(rec) {
+  unpackRec(rec);
   var st = rec.strokes || [], i, j;
   for (i = 0; i < st.length; i++) {
     var p = st[i].pts || [], t = 0;
@@ -3300,31 +3427,72 @@ function noteRecord(n) {
 var dirtyNotes = {};
 function markDirty(id) { if (id) dirtyNotes[id] = 1; }
 
-var quotaWarned = 0;
-function storageBytes() {
-  var total = 0, k;
+/* every key in the store, whoever wrote it: all of it counts against the room */
+function storeKeys() {
+  var out = [], i, k;
   try {
-    for (k in localStorage) {
-      if (!localStorage.hasOwnProperty(k)) continue;
-      if (k.indexOf('mathnotes') !== 0) continue;
-      total += (localStorage.getItem(k) || '').length + k.length;
+    if (typeof localStorage.key === 'function' && typeof localStorage.length === 'number') {
+      for (i = 0; i < localStorage.length; i++) out.push(localStorage.key(i));
+    } else {
+      for (k in localStorage) if (localStorage.hasOwnProperty(k) && typeof localStorage[k] !== 'function') out.push(k);
     }
+  } catch (e) {}
+  return out;
+}
+function storageBytes() {
+  var total = 0, ks = storeKeys(), i;
+  try {
+    for (i = 0; i < ks.length; i++) total += (localStorage.getItem(ks[i]) || '').length + ks[i].length;
   } catch (e) { return 0; }
   return total;
 }
+/* sizes as the iPad reports them: two bytes a character */
+function mb(chars) { return (Math.round(chars * 2 / 100000) / 10).toFixed(1) + ' MB'; }
+/* where the room has gone: handwriting, pictures and PDF pages, the trash,
+   copies left behind by older versions of the app, and anything else */
+function storageReport() {
+  var r = { ink: 0, pics: 0, trash: 0, trashN: 0, old: 0, other: 0, total: 0 }, ks = storeKeys(), i, k, c, n, pic, j;
+  for (i = 0; i < ks.length; i++) {
+    k = ks[i];
+    try { c = (localStorage.getItem(k) || '').length + k.length; } catch (e) { c = 0; }
+    r.total += c;
+    if (k.indexOf(NOTE_KEY) === 0) {
+      n = notes[k.slice(NOTE_KEY.length)];
+      if (n && n.trash) { r.trash += c; r.trashN++; continue; }
+      pic = 0;
+      if (n) for (j = 0; j < n.strokes.length; j++) if (n.strokes[j].pen === PEN_IMG && n.strokes[j].src) pic += n.strokes[j].src.length;
+      pic = Math.min(pic, c);
+      r.pics += pic;
+      r.ink += c - pic;
+    } else if (k === STORAGE_KEY_V4 || k === STORAGE_KEY_V2 || k === STORAGE_KEY_V1) r.old += c;
+    else r.other += c;
+  }
+  r.free = Math.max(0, QUOTA_CHARS - r.total);
+  return r;
+}
 
+var quotaWarned = 0, quotaAt = 0;
 function checkQuota() {
-  var used = storageBytes();
-  var pct = used / QUOTA_BYTES;
-  if (pct > 0.8 && quotaWarned < 2) {
+  /* reading the whole store costs something on an iPad 3: not every save */
+  if (Date.now() - quotaAt < 20000) return;
+  quotaAt = Date.now();
+  var pct = storageBytes() / QUOTA_CHARS;
+  if (pct > 0.9 && quotaWarned < 2) {
     quotaWarned = 2;
-    showWarning('Storage is ' + Math.round(pct * 100) + '% full. Back up now: menu -> Backup and restore.');
-  } else if (pct > 0.6 && quotaWarned < 1) {
+    showWarning('MathNotes has used ' + Math.round(pct * 100) + '% of its space on this iPad. ' +
+                'Settings > Storage shows what is using it.');
+  } else if (pct > 0.75 && quotaWarned < 1) {
     quotaWarned = 1;
-    showWarning('Storage is over 60% full. Worth making a backup soon.');
+    showWarning('MathNotes has used three quarters of its space on this iPad - Settings > Storage shows what uses it.');
   }
 }
 
+/* THE STORE BEING FULL IS NOT THE END OF SAVING. One refused write used to
+ * switch saving off until the app was restarted, so everything written
+ * after it was lost even once room had been made. Now whatever could not be
+ * written stays marked, every later save tries again, and the first one
+ * that gets through says so. */
+var saveFull = false, fullToldAt = 0;
 function doSaveNow() {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   if (!storageOk) return;
@@ -3335,21 +3503,31 @@ function doSaveNow() {
   }
   try {
     /* each dirty note first, so a failure part-way leaves the index
-       pointing at notes that are still whole */
+       pointing at notes that are still whole - and each is unmarked only
+       once it is written, so a failure keeps the rest for the next try */
     for (k in dirtyNotes) {
       if (!dirtyNotes.hasOwnProperty(k)) continue;
       var n = notes[k];
       if (n) localStorage.setItem(NOTE_KEY + k, JSON.stringify(noteRecord(n)));
+      delete dirtyNotes[k];
     }
-    dirtyNotes = {};
     localStorage.setItem(STORAGE_KEY_V5, JSON.stringify({
       v: 5, notebooks: notebooks, noteIds: ids,
       cur: { nb: curNotebook, note: curNoteId }, set: settings
     }));
   } catch (e) {
-    storageOk = false;
-    showWarning('Cannot save - storage is full. Open menu -> Backup and restore and copy your notes out NOW.');
+    saveFull = true;
+    if (Date.now() - fullToldAt > 60000) {
+      fullToldAt = Date.now();
+      showWarning('The iPad has no more room for MathNotes, so your latest writing is NOT saved yet. ' +
+                  'Empty the trash or delete a note you no longer need (Settings > Storage) - it saves again by itself.');
+    }
     return;
+  }
+  if (saveFull) {
+    saveFull = false;
+    warningEl.style.display = 'none';
+    toast('Saved - there is room again');
   }
   checkQuota();
 }
@@ -10642,6 +10820,9 @@ window.__mnPen = function () {
 };
 window.__mnSave = function () { saveTick(); };
 window.__mnRec = function () { return noteRecord(activeNote()); };
+window.__mnUnpackRec = unpackRec;
+window.__mnPack = { pack: packPts, unpack: unpackPts, report: storageReport, quota: QUOTA_CHARS,
+                    ok: function () { return storageOk; }, full: function () { return saveFull; } };
 window.__mnPages = function () {
   return { strip: stripOn, total: pageCount(), cur: currentPage(),
            cells: byId('stripList').children.length,
@@ -11816,6 +11997,33 @@ function dlgAccept() {
   o.done(v, dlgColor);
 }
 
+/* ---- where the room has gone ---- */
+function openStorage() {
+  var r = storageReport(), lines = [];
+  lines.push('Handwriting: ' + mb(r.ink));
+  if (r.pics) lines.push('Pictures and PDF pages: ' + mb(r.pics));
+  if (r.trash) lines.push('In the trash: ' + mb(r.trash) + (r.trashN === 1 ? ' (1 note)' : ' (' + r.trashN + ' notes)'));
+  if (r.old) lines.push('Left over from older versions: ' + mb(r.old));
+  if (r.other > 20000) lines.push('Other: ' + mb(r.other));
+  lines.push('');
+  lines.push('Free: ' + mb(r.free) + ' of ' + mb(QUOTA_CHARS) +
+             (saveFull ? ' - FULL: your latest writing is waiting to be saved.' : ''));
+  if (r.pics > r.ink) lines.push('Pictures and PDF pages take the most room - a note of them you no longer need frees the most.');
+  var trashIds = [];
+  if (r.trash) {
+    var all = allNoteIds(), i;
+    for (i = 0; i < all.length; i++) if (notes[all[i]] && notes[all[i]].trash) trashIds.push(all[i]);
+  }
+  dlgOpen({ title: 'Storage on this iPad', msg: lines.join('\n'),
+    ok: trashIds.length ? 'Empty trash' : 'OK', warn: !!trashIds.length, cancel: 'Close',
+    done: function () {
+      if (!trashIds.length) return;
+      deleteForever(trashIds);
+      if (homeOn()) renderHome();
+      toast('Trash emptied - ' + mb(r.trash) + ' freed');
+    } });
+}
+
 /* ---- settings opened from the home: only what is not about one note ---- */
 var settingsHome = false;
 function openSettings(fromHome) {
@@ -11985,11 +12193,11 @@ function pdfPicked() {
   for (i = 1; i <= N; i++) if (pdfS.pick[i]) out.push(i);
   return out;
 }
-function mb(bytes) { return (Math.round(bytes / 100000) / 10).toFixed(1) + ' MB'; }
 function pdfPaint() {
   if (!pdfS) return;
   var n = pdfPicked().length, N = pdfS.doc.numPages;
-  var free = Math.max(0, QUOTA_BYTES - storageBytes()), need = n * 190000;
+  /* a page as a JPEG in text is about 190,000 characters */
+  var free = Math.max(0, QUOTA_CHARS - storageBytes()), need = n * 190000;
   byId('pdfSub').textContent = (N === 1 ? '1 page' : N + ' pages') + '  ·  tap the pages to bring in';
   byId('pdfAll').textContent = n === N ? 'Select none' : 'Select all';
   var sz = byId('pdfSize');
@@ -12076,7 +12284,7 @@ function pdfGo() {
     for (k = 0; k < out.length; k++) need += out[k].url.length;
     pdfSheetClose();
     if (!out.length) { toast('Those pages could not be read'); return; }
-    var free = QUOTA_BYTES - storageBytes();
+    var free = QUOTA_CHARS - storageBytes();
     if (need > free) {
       dlgOpen({ title: 'Not enough room', ok: 'OK', cancel: 'Close',
         msg: 'Those pages need ' + mb(need) + ' but only ' + mb(Math.max(0, free)) + ' is free on this iPad. ' +
@@ -13748,6 +13956,8 @@ var SET_SECTIONS = [
   ] },
   { name: 'Note', rows: [
     { lbl: 'Export PNG', hint: 'Save the note as an image', leave: true, act: exportPNG },
+    { lbl: 'Storage', hint: 'How much room your notes take on this iPad', leave: true, global: true,
+      v: function () { return mb(storageBytes()) + ' of ' + mb(QUOTA_CHARS); }, act: openStorage },
     { lbl: 'Backup and restore', hint: 'Copy every note, or put one back', leave: true, global: true,
       v: function () { return countNotes() + ' notes'; }, act: openBackup },
     { lbl: 'Paste', hint: 'Put back what was copied', edit: true, leave: true,
@@ -14288,12 +14498,45 @@ byId('backupImportBtn').addEventListener('click', doImport);
 /* drawing on the canvas closes floating panels (closePanels is
    called from onTouchStart in the input engine) */
 
+/* ---------- offline ----------
+ * The iPad keeps the whole app in its application cache (the offline
+ * mechanism iOS 9 has; service workers came with iOS 11.3), so it opens and
+ * works with no connection at all - the notes were always on the iPad, it
+ * was only the app itself that had to come over the network. With a
+ * connection, each start quietly checks for a newer version and fetches it
+ * in the background; a bar then offers to restart into it. Waiting loses
+ * nothing - the next start uses it anyway. */
+function initOffline() {
+  var ac = window.applicationCache;
+  if (!ac || !ac.addEventListener) return;
+  ac.addEventListener('cached', function () {
+    toast('Saved on this iPad - MathNotes now works without the internet');
+  }, false);
+  ac.addEventListener('updateready', offerUpdate, false);
+  if (ac.status === ac.UPDATEREADY) offerUpdate();
+  window.addEventListener('online', function () {
+    try { ac.update(); } catch (e) {}
+  }, false);
+  window.addEventListener('offline', function () {
+    toast('No internet - everything still works, your notes are on this iPad');
+  }, false);
+}
+function offerUpdate() { byId('updBar').className = 'on'; }
+byId('updGo').addEventListener('click', function () {
+  doSaveNow();
+  try { if (window.applicationCache) window.applicationCache.swapCache(); } catch (e) {}
+  if (window.location && window.location.reload) window.location.reload();
+});
+byId('updLater').addEventListener('click', function () { byId('updBar').className = ''; });
+
 /* ---------- boot ---------- */
 function init() {
   loadAll();
   purgeTrash();
   if (curNoteId && notes[curNoteId] && notes[curNoteId].trash) curNoteId = null;
+  compactSoon();
   spGripInit();
+  initOffline();
   buildPalette();
   buildPageView();
   initPop();

@@ -1,0 +1,13 @@
+CACHE MANIFEST
+# MathNotes, kept on the iPad for use with no connection.
+# version eaa5b399f063daea
+# Written by scripts/stamp_offline.js - run it after changing any file below.
+
+CACHE:
+./
+index.html
+lib/pdf.min.js
+lib/pdf.worker.min.js
+
+NETWORK:
+*

@@ -370,7 +370,11 @@ App.prototype.state = function () {
 
 App.prototype.note = function (id) {
   var raw = this.storage.getItem('mathnotes_v5_n_' + id);
-  return raw ? JSON.parse(raw) : null;
+  if (!raw) return null;
+  var rec = JSON.parse(raw);
+  /* points are stored compact now; tests read them as [x, y, gap] arrays */
+  if (this.win.__mnUnpackRec) this.win.__mnUnpackRec(rec);
+  return rec;
 };
 
 App.prototype.strokes = function () {
@@ -414,14 +418,24 @@ function load(opts) {
     addEventListener: function (t, fn) { (this._h[t] = this._h[t] || []).push(fn); },
     alert: function () {}, confirm: function () { return true; }, prompt: function () { return null; }
   };
+  /* anything else the page expects of the browser, e.g. applicationCache */
+  if (opts.win) { for (var wk in opts.win) win[wk] = opts.win[wk]; }
 
+  /* _full: the store refuses every write, as a full iPad does */
   var storage = {
+    _full: false,
     getItem: function (k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
-    setItem: function (k, v) { store[k] = String(v); },
+    setItem: function (k, v) {
+      if (this._full) { var e = new Error('QuotaExceededError'); e.name = 'QuotaExceededError'; throw e; }
+      store[k] = String(v);
+    },
     removeItem: function (k) { delete store[k]; },
-    clear: function () { store = {}; }
+    clear: function () { store = {}; },
+    key: function (i) { return Object.keys(store)[i] || null; },
+    get length() { return Object.keys(store).length; }
   };
   if (opts.seed) { for (var sk in opts.seed) storage.setItem(sk, opts.seed[sk]); }
+  storage._full = !!opts.storageFull;
 
   /* the editor canvas sits under a 56px header */
   var wrap = doc.getElementById('canvasWrap');

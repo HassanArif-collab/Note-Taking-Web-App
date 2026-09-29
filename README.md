@@ -198,6 +198,32 @@ for a textbook problem you want to work on. It behaves like ink: lasso it to
 move or resize, erase it, undo it. It is shrunk before saving, because a full
 camera photo would fill the whole storage allowance on its own.
 
+### Working without the internet
+
+MathNotes keeps itself on the iPad. After this version, open it **once while
+online** — a message says *"Saved on this iPad — MathNotes now works without
+the internet"* — and from then on it opens and works with no connection at
+all, from the home-screen icon or from Safari. Your notes were always stored
+on the iPad; now the app is too. PDF import works offline as well.
+
+When you are online it checks for a newer version by itself and downloads it
+in the background; a bar at the top then says **A new version is ready —
+Restart**. Tap Later and the next start uses it anyway.
+
+### Storage — the room on the iPad
+
+Safari gives a web app **about 5 MB** (2.6 million characters) and that is the
+whole allowance for every note. **Settings → Storage** shows how much is used
+and by what: handwriting, pictures and PDF pages, the trash, and copies left
+behind by older versions of the app (those are cleared automatically). A page
+of handwriting takes a few kilobytes; a PDF page or photo about 0.4 MB, so
+pictures are what fill it.
+
+If the iPad refuses to save, a message says your latest writing is **not saved
+yet**. Nothing is thrown away: empty the trash (the Storage screen has the
+button) or delete a note you no longer need, and it saves again by itself.
+Handwriting is stored compactly — about a third of the room it used to take.
+
 ### Backing up — do this
 
 **Menu → Backup and restore → Copy my notes**, then paste the block into an email
@@ -415,6 +441,18 @@ are not evidence.
 the engine is tested exactly as it runs. `scripts/replay.js` replays a trace and
 prints what the device decided against what the current code decides; add
 `--html <other.html>` to compare two builds on the same input.
+
+### The offline copy — stamp it after every change
+
+The iPad keeps the app in its **application cache** (`mathnotes.appcache`;
+iOS 9 has no service workers) and fetches new files only when that manifest
+changes. So after changing `index.html` or anything in `lib/`:
+
+    node scripts/stamp_offline.js
+
+and commit the manifest with the change. `test_features.js` fails if you
+forget. Never delete the manifest: a missing one tells every iPad to throw its
+offline copy away.
 
 ### Safari 9 rules
 

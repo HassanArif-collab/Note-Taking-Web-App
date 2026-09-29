@@ -31,7 +31,8 @@ var TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.md': 'text/plain; charset=utf-8',
   '.png': 'image/png',
-  '.svg': 'image/svg+xml'
+  '.svg': 'image/svg+xml',
+  '.appcache': 'text/cache-manifest'
 };
 
 /* A VPN or virtual adapter has an address the iPad can never reach, and
