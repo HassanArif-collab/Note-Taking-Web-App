@@ -2086,6 +2086,53 @@ check('what was copied is still there to paste after the app restarts',
       !!kcRaw && kcPasted && kc2.strokes().length === 1 && kc2.strokes()[0].pts.length === kc.strokes()[0].pts.length,
       (kcRaw ? kcRaw.length + ' chars kept' : 'nothing kept') + ', ' + kc2.strokes().length + ' pasted');
 
+/* ---------- sticky notes ---------- */
+function penTap(a, id, x, y) { a.down(id, x, y); a.tick(90); a.up(id); a.tick(200); a.flushFrames(); }
+var sn = scApp();
+sn.els.insertBtn._fire('click', {});
+sn.popPick('Sticky note');
+sn.popPick('#FFD9C2');
+var snS = sn.strokes();
+check('+ > Sticky note puts a card of the chosen colour on the page',
+      snS.length === 1 && snS[0].pen === 7 && snS[0].color === '#FFD9C2' && !snS[0].fold,
+      JSON.stringify(snS.map(function (s) { return [s.pen, s.color]; })));
+var snX = snS[0].pts[0][0], snY = snS[0].pts[0][1];
+scPath(sn, 1, scWord(snX + 20, snY + 100 + 56));
+snS = sn.strokes();
+check('writing on it goes onto the sticky, not the page',
+      snS.length === 1 && snS[0].kids.length === 1 && snS[0].kids[0].pts[0][0] < 60,
+      snS.length + ' on the page, ' + (snS[0].kids || []).length + ' on the sticky');
+scPath(sn, 2, scWord(snX + 20, snY + 400 + 56));
+check('...while writing off the card stays on the page', sn.strokes().length === 2, sn.strokes().length + ' on the page');
+sn.undo();
+sn.undo();
+check('Undo takes the writing off the sticky again', sn.strokes()[0].kids.length === 0);
+sn.els.redoBtn._fire('click', {});
+sn.flushFrames();
+check('...and Redo puts it back', sn.strokes()[0].kids.length === 1);
+var TB = 56;   /* the toolbar: a touch at screen y is page y + 56 */
+penTap(sn, 3, snX + 240 - 15, snY + 13 + TB);
+check('a pen tap on its corner button folds it, hiding the writing', sn.strokes()[0].fold === 1 && sn.strokes().length === 1,
+      'fold ' + sn.strokes()[0].fold + ', ' + sn.strokes().length + ' marks');
+penTap(sn, 4, snX + 20, snY + 20 + TB);
+check('...and a tap on the folded square opens it, the writing still there',
+      !sn.strokes()[0].fold && sn.strokes()[0].kids.length === 1 && sn.strokes().length === 1,
+      'fold ' + sn.strokes()[0].fold + ', ' + sn.strokes().length + ' marks');
+sn.els.eraserBtn._fire('click', {});
+scPath(sn, 5, [[snX + 10, snY + 100 + TB], [snX + 60, snY + 100 + TB], [snX + 120, snY + 100 + TB], [snX + 180, snY + 100 + TB]]);
+check('the eraser takes the writing off a sticky but leaves the card',
+      sn.strokes().length === 1 && sn.strokes()[0].kids.length === 0, sn.strokes().length + ' marks, ' + sn.strokes()[0].kids.length + ' on it');
+sn.undo();
+sn.els.penBtn._fire('click', {});
+lassoAround(sn, snX - 20, snY - 20 + TB, snX + 260, snY + 250 + TB);
+sn.els.selColBtn._fire('click', {});
+sn.popPick('#CFEFD8');
+check('with only a sticky chosen, Colour changes its paper', sn.strokes()[0].color === '#CFEFD8', sn.strokes()[0].color);
+sn.els.selCopyBtn._fire('click', {});
+var snD = sn.strokes();
+check('Duplicate copies the sticky with its writing', snD.length === 2 && snD[1].kids.length === 1 && snD[1].id !== snD[0].id,
+      snD.length + ' cards');
+
 /* ---------- pages side by side, and two to a screen ---------- */
 /* a page is 1024 across with a 44px gutter between neighbours (the view
    is 768 wide, so the page takes the 1024 floor rather than the screen) */
@@ -2445,8 +2492,8 @@ var im = fresh();
 im.els.insertBtn._fire('click', {});
 var imRows = im.els.hmPop.children, imL = [], q2;
 for (q2 = 0; q2 < imRows.length; q2++) if (imRows[q2]._lbl) imL.push(imRows[q2]._lbl);
-check('the toolbar has Insert: a photo, PDF pages, or a PDF or picture beside',
-      imL.join('|') === 'Photo|PDF pages|Open a PDF beside|Open a picture beside', imL.join('|'));
+check('the toolbar has Insert: a photo, PDF pages, a sticky note, or a PDF or picture beside',
+      imL.join('|') === 'Photo|PDF pages|Sticky note|Open a PDF beside|Open a picture beside', imL.join('|'));
 
 var sv = fresh();
 sv.win.__mnPdf.side(fakePdf(3), 'Ref.pdf');
