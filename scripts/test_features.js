@@ -2898,6 +2898,72 @@ check('...then asks for times and brackets', mt.win.__mnMath.teach().step === 1 
 mt.els.mathTeachCancel._fire('click', {});
 check('Cancel ends the teaching', mt.els.mathTeach.className === '' && !mt.win.__mnMath.teach());
 
+/* ---------- Neaten: on the user's own recorded lines ----------
+ * How far each full-size stroke's foot sits from the line's baseline,
+ * added up. Tidy made this worse on real lines (it lifted whole words to
+ * where exponents go); Neaten may only ever make it smaller. */
+/* where a stroke sits: the band most of its letters' bottoms share (the
+   place the pen turned back up), not its lowest point - a q or an f hangs
+   below the line it is written on */
+function neFoot(p, h) {
+  var bots = [], j, k, low;
+  for (j = 0; j < p.length; j++) {
+    low = true;
+    for (k = Math.max(0, j - 3); k <= Math.min(p.length - 1, j + 3) && low; k++) if (p[k][1] > p[j][1]) low = false;
+    if (low) bots.push(p[j][1]);
+  }
+  var best = bots[0], bn = 0;
+  bots.forEach(function (v) {
+    var near = bots.filter(function (w) { return Math.abs(w - v) <= h * 0.12; });
+    var m = near.reduce(function (t, w) { return t + w; }, 0) / near.length;
+    if (near.length > bn || (near.length === bn && m < best)) { bn = near.length; best = m; }
+  });
+  return best;
+}
+function neScore(strokes) {
+  var rows = strokes.filter(function (s) { return s.pts.length > 1; }).map(function (s) {
+    var y0 = 1e9, y1 = -1e9;
+    s.pts.forEach(function (p) { y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); });
+    return { foot: neFoot(s.pts, y1 - y0), h: y1 - y0 };
+  });
+  var hs = rows.map(function (r) { return r.h; }).sort(function (a, b) { return a - b; }), hm = hs[hs.length >> 1] || 1;
+  var core = rows.filter(function (r) { return r.h >= hm * 0.6; }).map(function (r) { return r.foot; }).sort(function (a, b) { return a - b; });
+  var base = core[core.length >> 1];
+  return core.reduce(function (t, f) { return t + Math.abs(f - base); }, 0);
+}
+var neWorse = [], neB = 0, neA = 0;
+fsM.readdirSync(pathM.join(__dirname, '..', 'traces')).filter(function (f) { return /^ref-(E|M)/.test(f); }).forEach(function (f) {
+  var d = JSON.parse(fsM.readFileSync(pathM.join(__dirname, '..', 'traces', f)));
+  if (!d.ink || !d.ink.length) return;
+  var na = fresh();
+  na.loadInk(d.ink.map(function (s) { return { pen: s.pen, w: s.w, pts: s.pts.map(function (p) { return [p[0], p[1], p[2]]; }) }; }));
+  var b = neScore(na.strokes());
+  na.win.__mnNeaten();
+  na.flushFrames();
+  var a2 = neScore(na.strokes());
+  neB += b; neA += a2;
+  if (a2 > b * 1.15 + 3) neWorse.push(f.slice(0, 16) + ' ' + Math.round(b) + '->' + Math.round(a2));
+});
+check('Neaten leaves none of the user\'s recorded lines worse aligned than they were', neWorse.length === 0, neWorse.join(', '));
+check('...and sets them straighter overall', neA < neB * 0.9, Math.round(neB) + ' -> ' + Math.round(neA) + ' px off the line in all');
+var nx = fresh();
+nx.loadInk(JSON.parse(fsM.readFileSync(pathM.join(__dirname, '..', 'traces', mFile('ref-M1-neat-1')))).ink.map(function (s) {
+  return { pen: s.pen, w: s.w, pts: s.pts.map(function (p) { return [p[0], p[1], p[2]]; }) }; }));
+var nxB = nx.strokes();
+nx.win.__mnNeaten();
+nx.flushFrames();
+var nxA = nx.strokes(), nxMax = 0;
+/* How each stroke moved up or down. Turning the line level moves its two
+   ends opposite ways, so the moves are fitted with a straight line across
+   the page first; what is left over is a stroke moved on its own. */
+function nxMid(s) { var x = 0, y = 0; s.pts.forEach(function (p) { x += p[0]; y += p[1]; }); return [x / s.pts.length, y / s.pts.length]; }
+var nxP = nxA.map(function (s, i) { return [nxMid(nxB[i])[0], nxMid(s)[1] - nxMid(nxB[i])[1]]; });
+var nxn = nxP.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
+nxP.forEach(function (q) { sx += q[0]; sy += q[1]; sxx += q[0] * q[0]; sxy += q[0] * q[1]; });
+var nxm = (nxn * sxy - sx * sy) / (nxn * sxx - sx * sx), nxc = (sy - nxm * sx) / nxn;
+nxP.forEach(function (q) { nxMax = Math.max(nxMax, Math.abs(q[1] - (nxm * q[0] + nxc))); });
+check('"x2 + y2 = z2" moves as one piece: no 2 is lifted away from its letter', nxMax < 4, 'strokes shifted apart by up to ' + nxMax.toFixed(1) + 'px');
+
 /* ---------- storage: the room there is, and using less of it ----------
  * Safari keeps 2.6 million characters for a site, not the five million the
  * app assumed, so the store filled while the app thought it half empty -

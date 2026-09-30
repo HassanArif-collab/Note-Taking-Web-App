@@ -2452,7 +2452,7 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
     <button id="selSmallBtn" class="selz">-</button>
     <button id="selBigBtn" class="selz">+</button>
     <button id="selColBtn">Colour</button>
-    <button id="selStrBtn">Straighten</button>
+    <button id="selStrBtn">Neaten</button>
     <button id="selCutBtn">Cut</button>
     <button id="selClipBtn">Copy</button>
     <button id="selCopyBtn">Duplicate</button>
@@ -6556,6 +6556,9 @@ function tidyLines(list) {
  * down. Samsung and OneNote both put this behind a button, and they are
  * right: it moves ink that is already written, so it should be asked for.
  */
+/* ponytail: nothing in the app calls this any more - Neaten (below) replaced it
+   after it moved whole words about. It stays only for the tests and the
+   reference scorer that still measure it; delete it with them. */
 function tidyRun() {
   var n = activeNote();
   if (!n || !n.strokes.length) { toast('Nothing to tidy'); return; }
@@ -6596,6 +6599,214 @@ function tidyRun() {
   toast(moved ? (moved === 1 ? '1 line tidied' : moved + ' lines tidied')
               : 'Already tidy');
   return { lines: lines.length, moved: moved, sizes: report, first: first };
+}
+
+/* ---------- Neaten: correction and alignment ----------
+ * Tidy (above) was the first go at this, and the user's verdict on it was
+ * blunt. Run over their own recorded lines it shows why: it took whole
+ * words for exponents and lifted them half a line ("brown", "over"), and
+ * it slid words along to even the gaps - so the page came back with its
+ * writing rearranged. Neaten only does what a reader expects to see done:
+ *
+ *   correction - a shaky stroke is smoothed: the wobble the disc adds is
+ *                taken out, a point at most NEAT_MAXD px, corners kept;
+ *   alignment  - a sloping line is turned level AS ONE PIECE and dropped
+ *                onto its rule.
+ *
+ * Nothing inside a word ever moves relative to the rest of it - exponents,
+ * fractions and the gaps between words stay exactly as written - so a line
+ * of maths comes through as safely as a line of words. Lines are found by
+ * the middles of the symbols rather than their feet, which is what split
+ * "x2 + y2 = z2" into two lines before: the y hangs below and the + floats
+ * above, but their middles sit together. One undo takes it all back. */
+var NEAT_MAXD = 1.6;       /* px: the most smoothing may move a point - the disc's wobble, not the letter */
+var NEAT_CORNER = 0.8;     /* cosine: a turn sharper than this is a corner and stays sharp */
+var NEAT_TILT = 12;        /* degrees: steeper is meant (an arrow, a diagonal), not drift */
+var NEAT_LEVEL = 1;        /* degrees: flatter than this already is level - the fit's own
+                              error on a recorded line is about this much, so turning it
+                              would be correcting the measurement, not the writing */
+
+function neatSmooth(p) {
+  var n = p.length, q = [], i, pass, src, ax, ay, bx, by, la, lb, x, y, dx, dy, d;
+  for (i = 0; i < n; i++) q.push([p[i][0], p[i][1], p[i][2]]);
+  if (n < 6) return q;
+  for (pass = 0; pass < 2; pass++) {
+    src = [];
+    for (i = 0; i < n; i++) src.push([q[i][0], q[i][1]]);
+    for (i = 2; i < n - 2; i++) {
+      ax = src[i][0] - src[i - 2][0]; ay = src[i][1] - src[i - 2][1];
+      bx = src[i + 2][0] - src[i][0]; by = src[i + 2][1] - src[i][1];
+      la = Math.sqrt(ax * ax + ay * ay); lb = Math.sqrt(bx * bx + by * by);
+      if (la > 0.01 && lb > 0.01 && (ax * bx + ay * by) / (la * lb) < NEAT_CORNER) continue;
+      x = (src[i - 2][0] + 2 * src[i - 1][0] + 3 * src[i][0] + 2 * src[i + 1][0] + src[i + 2][0]) / 9;
+      y = (src[i - 2][1] + 2 * src[i - 1][1] + 3 * src[i][1] + 2 * src[i + 1][1] + src[i + 2][1]) / 9;
+      dx = x - p[i][0]; dy = y - p[i][1]; d = Math.sqrt(dx * dx + dy * dy);
+      if (d > NEAT_MAXD) { x = p[i][0] + dx * NEAT_MAXD / d; y = p[i][1] + dy * NEAT_MAXD / d; }
+      q[i][0] = x; q[i][1] = y;
+    }
+  }
+  return q;
+}
+/* The symbols, one list per line of writing, each list left to right.
+   Read across, each symbol joins the line whose last symbol it sits
+   beside - compared with its neighbour, not with the line as a whole,
+   because a line that drifts is the very thing being fixed, and its far
+   end is a whole line lower than its start. */
+function neatLines(list) {
+  var syms = mathSymbols(list), lines = [], i, k, m, best, bd, d, gap = settings.spacing * 0.55, hs = [], Hm;
+  for (i = 0; i < syms.length; i++) hs.push(syms[i].y1 - syms[i].y0);
+  Hm = tidyMedian(hs);
+  for (i = 0; i < syms.length; i++) {
+    m = (syms[i].y0 + syms[i].y1) / 2;
+    best = null; bd = gap;
+    for (k = 0; k < lines.length; k++) {
+      /* beside its neighbour, or beside the line as it has run lately:
+         the first follows a line that drifts, the second steps over a tail */
+      d = Math.min(Math.abs(lines[k].last - m), Math.abs(lines[k].mid - m));
+      if (d < bd) { bd = d; best = lines[k]; }
+    }
+    if (!best) { best = { last: m, mid: m, syms: [], recent: [] }; lines.push(best); }
+    best.syms.push(syms[i]);
+    /* Where the line has got to: the middle of its last three full-size
+       symbols. An exponent or a dot says nothing about that, and one
+       letter's tail says too much - the y of "y2" hangs so low that the 2
+       after it looked like the start of another line. */
+    if (syms[i].y1 - syms[i].y0 >= Hm * 0.7) {
+      best.recent.push(m);
+      if (best.recent.length > 3) best.recent.shift();
+      best.last = m;
+      best.mid = tidyMedian(best.recent);
+    }
+  }
+  return lines;
+}
+/* move every point of a symbol: rotate about (cx, cy) by th, then shift */
+function neatMove(sym, cx, cy, th, dx, dy, pts) {
+  var c = Math.cos(th), sn = Math.sin(th), i, j, s, p, x, y;
+  for (i = 0; i < sym.list.length; i++) {
+    s = sym.list[i];
+    p = pts[s.id];
+    for (j = 0; j < p.length; j++) {
+      x = p[j][0] - cx; y = p[j][1] - cy;
+      p[j][0] = cx + x * c - y * sn + dx;
+      p[j][1] = cy + x * sn + y * c + dy;
+    }
+  }
+}
+function neatBox(sym, pts) {
+  var b = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 }, i, j, p;
+  for (i = 0; i < sym.list.length; i++) {
+    p = pts[sym.list[i].id];
+    for (j = 0; j < p.length; j++) {
+      if (p[j][0] < b.x0) b.x0 = p[j][0]; if (p[j][0] > b.x1) b.x1 = p[j][0];
+      if (p[j][1] < b.y0) b.y0 = p[j][1]; if (p[j][1] > b.y1) b.y1 = p[j][1];
+    }
+  }
+  return b;
+}
+/* Where a symbol sits. Not its lowest point: joined-up writing makes a
+   whole word one stroke, and the lowest point of "quick" or "fox" is the
+   tail of the q or the f. The bottoms of its letters are what sit on the
+   line - every place the pen turned back up - so the answer is the band
+   most of those bottoms share, the higher band when it is a tie, which is
+   the line rather than the tails hanging off it. */
+function neatFoot(sym, pts, H) {
+  var bots = [], i, j, k, p, low;
+  for (i = 0; i < sym.list.length; i++) {
+    p = pts[sym.list[i].id];
+    for (j = 0; j < p.length; j++) {
+      low = true;
+      for (k = Math.max(0, j - 3); k <= Math.min(p.length - 1, j + 3) && low; k++) if (p[k][1] > p[j][1]) low = false;
+      if (low && (!bots.length || Math.abs(bots[bots.length - 1] - p[j][1]) > 0.5 || j > 3)) bots.push(p[j][1]);
+    }
+  }
+  return bots.length ? tidyDensest(bots, H * 0.12) : neatBox(sym, pts).y1;
+}
+/* the baseline of some symbols: where most of their feet are */
+function neatBase(core, pts, H) {
+  var feet = [], i;
+  for (i = 0; i < core.length; i++) feet.push(neatFoot(core[i], pts, H));
+  return tidyDensest(feet, H * 0.15);
+}
+/* one line: level it, and drop it on its rule */
+function neatLine(syms, pts) {
+  if (syms.length < 2) return false;
+  var hs = [], i, H, core = [], moved = false;
+  for (i = 0; i < syms.length; i++) hs.push(syms[i].y1 - syms[i].y0);
+  H = Math.max(tidyMedian(hs), 6);
+  for (i = 0; i < syms.length; i++) if (syms[i].y1 - syms[i].y0 >= H * 0.6) core.push(syms[i]);
+  if (core.length < 2) return false;
+  /* 1. level: the slope of the feet, fitted robustly, turned out of the whole line */
+  var feet = [];
+  for (i = 0; i < core.length; i++) feet.push([(core[i].x0 + core[i].x1) / 2, neatFoot(core[i], pts, H)]);
+  var x0 = syms[0].x0, x1 = syms[syms.length - 1].x1, cx = (x0 + x1) / 2;
+  var fit = feet.length >= 3 && x1 - x0 > H * 2.2 ? tidyTheilSen(feet) : null;
+  if (fit && tidyInliers(fit, H * 0.3) >= 0.6) {
+    var deg = Math.atan(fit.m) * 180 / Math.PI;
+    if (Math.abs(deg) > NEAT_LEVEL && Math.abs(deg) <= NEAT_TILT) {
+      var cy = fit.m * cx + fit.b;
+      for (i = 0; i < syms.length; i++) neatMove(syms[i], cx, cy, -Math.atan(fit.m), 0, 0, pts);
+      moved = true;
+    }
+  }
+  /* Words are not set down one by one. It was tried: in printed writing the
+     gap between letters is as wide as the gap between words, so "kicked"
+     came apart - its K and its ending moved and its i stayed behind. A line
+     moved as one piece cannot break a word. */
+  var base = neatBase(core, pts, H);
+  /* 2. onto the rule, when the page is ruled and the line is near one */
+  var n = activeNote();
+  var top = (isEndless() || horiz()) ? 0 : Math.floor(base / (PAGE_H + GAP_H)) * (PAGE_H + GAP_H);
+  var page = (isEndless() || horiz()) ? 0 : Math.round(top / (PAGE_H + GAP_H));
+  if (tplFor(n, page) === TPL_RULED) {
+    var rule = top + FIRST_BASE + Math.round((base - top - FIRST_BASE) / settings.spacing) * settings.spacing;
+    var dy = rule - base;
+    if (Math.abs(dy) > 0.5 && Math.abs(dy) < settings.spacing * 0.35) {
+      for (i = 0; i < syms.length; i++) neatMove(syms[i], 0, 0, 0, 0, dy, pts);
+      moved = true;
+    }
+  }
+  return moved;
+}
+/* Neaten some ink: returns the edit as an undo step, already applied, or
+   null when there was nothing to do */
+function neatStrokes(list) {
+  var ink = [], pts = {}, i, s, lines, moved = 0, q, changed = [];
+  for (i = 0; i < list.length; i++) {
+    s = list[i];
+    if (s.pen >= PEN_TEXT || s.bg || s.pts.length < 2) continue;
+    ink.push(s);
+    q = neatSmooth(s.pts);
+    pts[s.id] = q;
+  }
+  if (!ink.length) return null;
+  lines = neatLines(ink);
+  for (i = 0; i < lines.length; i++) if (neatLine(lines[i].syms, pts)) moved++;
+  for (i = 0; i < ink.length; i++) {
+    s = ink[i];
+    q = pts[s.id];
+    var dmax = 0, j;
+    for (j = 0; j < q.length; j++) dmax = Math.max(dmax, Math.abs(q[j][0] - s.pts[j][0]), Math.abs(q[j][1] - s.pts[j][1]));
+    if (dmax > 0.05) changed.push({ s: s, from: s.pts, to: q });
+  }
+  if (!changed.length) return null;
+  var op = { t: 'pts', list: changed };
+  applyOp(op, false);
+  op.lines = moved;
+  return op;
+}
+/* the whole note, from Settings */
+function neatenNote() {
+  var n = activeNote();
+  if (!n || !n.strokes.length) { toast('Nothing to neaten'); return; }
+  if (liveTouchCount() || gesture) return;
+  clearSelection();
+  var op = neatStrokes(n.strokes);
+  if (!op) { toast('Already neat'); return; }
+  pushUndo(op);
+  recomputeDoc();
+  saveSoon();
+  toast(op.lines ? 'Neatened - ' + (op.lines === 1 ? '1 line' : op.lines + ' lines') + ' set straight on the page' : 'Neatened - shaky strokes smoothed');
 }
 
 /* ---------- history ---------- */
@@ -9622,7 +9833,7 @@ function straightenSelection() {
     ink.push(s);
   }
   if (!ink.length) { toast('Straighten works on lines, shapes and handwriting'); return; }
-  var shaped = [], words = [], f, tidied = [], ops = [];
+  var shaped = [], words = [], f, ops = [];
   for (i = 0; i < ink.length; i++) {
     s = ink[i];
     bb = inkBox([s]);
@@ -9634,10 +9845,9 @@ function straightenSelection() {
     ops.push({ t: 'pts', list: shaped });
     applyOp(ops[0], false);
   }
-  var lines = words.length ? tidyLines(words) : [], moved = 0;
-  for (i = 0; i < lines.length; i++) if (tidyGroup(lines[i], tidied)) moved++;
-  if (tidied.length) ops.push({ t: 'tidy', items: tidied });
-  if (!ops.length) { toast('Already straight'); return; }
+  var neat = words.length ? neatStrokes(words) : null, moved = neat ? neat.lines : 0;
+  if (neat) ops.push(neat);
+  if (!ops.length) { toast('Already neat'); return; }
   pushUndo(ops.length === 1 ? ops[0] : { t: 'multi', ops: ops });
   recomputeDoc();
   selBBox = selUnionBBox();
@@ -9645,9 +9855,9 @@ function straightenSelection() {
   saveSoon();
   requestRender();
   var say = [];
-  if (shaped.length) say.push(shaped.length === 1 ? '1 shape' : shaped.length + ' shapes');
-  if (moved) say.push(moved === 1 ? '1 line of writing' : moved + ' lines of writing');
-  toast('Straightened ' + say.join(' and '));
+  if (shaped.length) say.push(shaped.length === 1 ? '1 shape straightened' : shaped.length + ' shapes straightened');
+  if (neat) say.push(moved ? (moved === 1 ? '1 line set straight' : moved + ' lines set straight') : 'shaky strokes smoothed');
+  toast(say.join(', '));
 }
 
 /* ---------- copy, cut and paste ----------
@@ -12371,6 +12581,7 @@ window.__mnHold = function () { holdCheck(); };
 window.__mnShape = function () { if (shapeId !== null) shapeCheck(shapeId); };
 window.__mnShapeFit = function (pts, mode) { return shapeFit(pts, mode === undefined ? SHAPE_SHAPE : mode); };
 window.__mnTidy = function () { return tidyRun(); };
+window.__mnNeaten = function () { neatenNote(); };
 window.__mnZW = function () { var g = zwGeom(); return { on: zw.on, x: zw.x, y: zw.y, bw: g.bw, bh: g.bh, top: g.top, mag: g.mag }; };
 
 /* ---------- event wiring ---------- */
@@ -15601,8 +15812,8 @@ var SET_SECTIONS = [
     { lbl: 'Margin line', hint: 'The red rule down the left margin',
       v: function () { return settings.margin ? 'On' : 'Off'; },
       act: function () { settings.margin = !settings.margin; invalidateAll(); afterSettingChange(); } },
-    { lbl: 'Tidy handwriting', hint: 'Straighten a line after writing it', edit: true, leave: true,
-      act: function () { closePanels(); tidyRun(); } },
+    { lbl: 'Neaten handwriting', hint: 'Smooth shaky strokes and set each line straight on its rule', edit: true, leave: true,
+      act: function () { closePanels(); neatenNote(); } },
     { lbl: 'Zoom', hint: 'How much of the page fills the screen',
       v: function () { return Math.round(zoom * 100) + '%'; }, act: function () { resetZoom(); } },
     { lbl: 'Reading mode', hint: 'Look and turn pages, but write nothing',
