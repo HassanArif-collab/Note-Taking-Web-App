@@ -2733,6 +2733,52 @@ check('opening a folder scales the notes up',
       hm3.els.notesGrid.className.indexOf('scale-up') >= 0 && hm3.home().title === 'Physics',
       'class "' + hm3.els.notesGrid.className + '", ' + hm3.home().title);
 
+/* ---------- covers ---------- */
+function covPick(a, box, lbl) {
+  var k = a.els[box].children, i;
+  for (i = 0; i < k.length; i++) if (k[i]._lbl === lbl) { k[i]._fire('click', {}); return true; }
+  return false;
+}
+var cva = fresh();
+cva.els.backBtn._fire('click', {});
+cva.flushFrames();
+var cvId = cva.home().ids[0];
+cva.home().els[0]._more._fire('click', {});
+cva.popPick('Cover');
+check("a note's menu has Cover, which opens the cover picker", cva.els.covSheet.className === 'on', cva.els.covSheet.className);
+covPick(cva, 'covGrid', 'Sunset');
+var cvEmo = cva.els.covEmo.children[4]._lbl;
+cva.els.covEmo.children[4]._fire('click', {});
+cva.els.covDone._fire('click', {});
+cva.flushFrames();
+cva.state();                     /* flush the save */
+var cvRec = cva.note(cvId);
+check('Done gives the note that design and emoji', cvRec.cover && cvRec.cover.d === 11 && cvRec.cover.e === cvEmo && cvEmo.length === 2,
+      JSON.stringify(cvRec.cover));
+var cvPrev = cva.home().els[0].children[0];
+check('...and its card wears the cover instead of a picture of the page',
+      cvPrev.style.backgroundColor === '#F08A5D' && cvPrev.children[0] && cvPrev.children[0].className === 'cv-face',
+      cvPrev.style.backgroundColor + ' / ' + (cvPrev.children[0] && cvPrev.children[0].className));
+cva.home().els[0]._more._fire('click', {});
+cva.popPick('Cover');
+covPick(cva, 'covGrid', 'None');
+cva.els.covDone._fire('click', {});
+cva.flushFrames();
+cva.state();
+check('None takes the cover off, and the page shows again', !cva.note(cvId).cover &&
+      cva.home().els[0].children[0].style.backgroundColor !== '#F08A5D', JSON.stringify(cva.note(cvId).cover));
+cva.els.nbList.children[0].children[1]._fire('click', {});
+cva.popPick('Cover');
+covPick(cva, 'covGrid', 'Ocean');
+cva.els.covDone._fire('click', {});
+cva.flushFrames();
+check("a folder's menu gives the folder a cover too", cva.state().notebooks[0].cover && cva.state().notebooks[0].cover.d === 12,
+      JSON.stringify(cva.state().notebooks[0].cover));
+cva.els.nbList.children[0].children[0]._fire('click', {});
+cva.flushFrames();
+check('...shown across the top of the folder when it is opened', cva.els.notesGrid.children[0].className.indexOf('hm-cover') === 0,
+      cva.els.notesGrid.children[0].className);
+
 /* ---------- storage: the room there is, and using less of it ----------
  * Safari keeps 2.6 million characters for a site, not the five million the
  * app assumed, so the store filled while the app thought it half empty -
