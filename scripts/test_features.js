@@ -2779,6 +2779,125 @@ cva.flushFrames();
 check('...shown across the top of the folder when it is opened', cva.els.notesGrid.children[0].className.indexOf('hm-cover') === 0,
       cva.els.notesGrid.children[0].className);
 
+/* ---------- maths answers ---------- */
+/* the user's own symbols, from the reference lines they wrote on the iPad */
+var fsM = require('fs'), pathM = require('path');
+function mBox(list) {
+  var b = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9, list: list };
+  list.forEach(function (s) { s.pts.forEach(function (p) {
+    b.x0 = Math.min(b.x0, p[0]); b.y0 = Math.min(b.y0, p[1]); b.x1 = Math.max(b.x1, p[0]); b.y1 = Math.max(b.y1, p[1]); }); });
+  return b;
+}
+function mSyms(file) {
+  var d = JSON.parse(fsM.readFileSync(pathM.join(__dirname, '..', 'traces', file)));
+  var syms = d.ink.map(function (s) { return mBox([s]); }), merged = true, i, q;
+  while (merged) {
+    merged = false;
+    for (i = 0; i < syms.length && !merged; i++) for (q = i + 1; q < syms.length; q++) {
+      var a = syms[i], b = syms[q], ov = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+      var inside = (a.x0 >= b.x0 - 3 && a.x1 <= b.x1 + 3) || (b.x0 >= a.x0 - 3 && b.x1 <= a.x1 + 3);
+      if (ov > Math.max(Math.min(a.x1 - a.x0, b.x1 - b.x0), 6) * 0.5 || (inside && ov > -3)) {
+        syms[i] = mBox(a.list.concat(b.list)); syms.splice(q, 1); merged = true; break;
+      }
+    }
+  }
+  return syms.sort(function (a, b) { return a.x0 - b.x0; });
+}
+function mFile(prefix) {
+  return fsM.readdirSync(pathM.join(__dirname, '..', 'traces')).filter(function (f) { return f.indexOf(prefix) === 0; })[0];
+}
+/* lay symbols out left to right on one line, each at scale k, raised by up */
+function mLine(parts, x) {
+  var out = [];
+  x = x || 200;
+  parts.forEach(function (pt) {
+    var s = pt.s, k = pt.k || 1, cy = (s.y0 + s.y1) / 2, gap = pt.gap === undefined ? 10 : pt.gap;
+    s.list.forEach(function (st) {
+      out.push({ pen: 0, w: 3, pts: st.pts.map(function (p) {
+        return [x + (p[0] - s.x0) * k, 400 - (pt.up || 0) + (p[1] - cy) * k, p[2]]; }) });
+    });
+    x += (s.x1 - s.x0) * k + gap;
+  });
+  return out;
+}
+/* "a1+a2=10" and "x2+y2=z2" from the second takes - the templates were made from the first */
+var mA = mSyms(mFile('ref-M2-neat-2')), mB = mSyms(mFile('ref-M1-neat-2'));
+var ma = fresh(), MM = ma.win.__mnMath;
+function calc(str) {
+  var t = [], i, up = false;
+  for (i = 0; i < str.length; i++) { if (str[i] === '^') { up = true; continue; } t.push({ c: str[i], sup: up }); }
+  return MM.calc(t);
+}
+check('a sum is worked out in the usual order: 2+3x4 is 14, (2+3)x4 is 20, 2(3+4) is 14',
+      calc('2+3x4') === 14 && calc('(2+3)x4') === 20 && calc('2(3+4)') === 14,
+      calc('2+3x4') + ' ' + calc('(2+3)x4') + ' ' + calc('2(3+4)'));
+check('...divides, subtracts left to right, raises to powers and takes minus signs',
+      calc('7÷2') === 3.5 && calc('10-4-3') === 3 && calc('2^10') === 1024 && calc('-3+5') === 2 && calc('1.5x4') === 6,
+      [calc('7÷2'), calc('10-4-3'), calc('2^10'), calc('-3+5'), calc('1.5x4')].join(' '));
+check('...and gives up on nonsense instead of guessing', calc('1/0') === null && calc('2++') === null && calc('1..2+1') === null);
+check('answers read the way a person writes them: 0.1+0.2 is 0.3, a third is 0.333333',
+      MM.fmt(0.1 + 0.2) === '0.3' && MM.fmt(1 / 3) === '0.333333' && MM.fmt(12) === '12', MM.fmt(0.1 + 0.2) + ' ' + MM.fmt(1 / 3));
+/* 10 + 2 = in the user's own hand: the 1 0 of "10", and the + 2 = of "a1 + a2 =" */
+ma.loadInk(mLine([{ s: mA[6], gap: 6 }, { s: mA[7], gap: 18 }, { s: mA[2], gap: 18 }, { s: mA[4], gap: 18 }, { s: mA[5] }]));
+var maAns = MM.now();
+check('"10 + 2 =" in the user\'s own handwriting is answered 12', maAns && maAns.txt === '12', maAns ? maAns.txt : 'no answer');
+ma.loadInk(mLine([{ s: mA[0], gap: 4 }, { s: mA[1], gap: 16 }, { s: mA[2], gap: 16 }, { s: mA[3], gap: 4 }, { s: mA[4], gap: 16 }, { s: mA[5] }]));
+check('...while "a1 + a2 =" is algebra, and gets no answer at all', !MM.now(), JSON.stringify(MM.ans() && MM.ans().txt));
+ma.loadInk(mLine([{ s: mB[1], gap: 3 }, { s: mB[1], k: 0.55, up: 22, gap: 18 }, { s: mA[5] }]));
+check('a small 2 raised after a 2 is a power: 2 squared = 4', MM.now() && MM.ans().txt === '4', JSON.stringify(MM.ans() && MM.ans().txt));
+/* a half plus a half, each written as a 1 over a bar over a 2 */
+function mFrac(x) {
+  var one = mA[6], two = mA[4], k = 0.6, out = [];
+  function put(s, dx, dy) {
+    s.list.forEach(function (st) { out.push({ pen: 0, w: 3, pts: st.pts.map(function (p) {
+      return [x + dx + (p[0] - s.x0) * k, 400 + dy + (p[1] - (s.y0 + s.y1) / 2) * k, 0]; }) }); });
+  }
+  put(one, 12, -16);
+  out.push({ pen: 0, w: 3, pts: [[x, 400, 0], [x + 15, 400.5, 30], [x + 30, 400, 60], [x + 44, 400, 90]] });
+  put(two, 8, 17);
+  return out;
+}
+ma.loadInk(mFrac(200).concat(mLine([{ s: mA[2] }], 262)).concat(mFrac(300)).concat(mLine([{ s: mA[5] }], 362)));
+check('fractions written one over the other: a half plus a half = 1', MM.now() && MM.ans().txt === '1',
+      JSON.stringify(MM.ans() && MM.ans().txt));
+
+/* written with the pen, through the ink engine: 1 + 1 = */
+function onePlusOne(a) {
+  scPath(a, 1, [[300, 380], [300, 400], [301, 420]]);
+  scPath(a, 2, [[330, 400], [345, 400], [360, 400]]);
+  scPath(a, 3, [[345, 386], [345, 400], [345, 414]]);
+  scPath(a, 4, [[390, 380], [390, 400], [391, 420]]);
+  scPath(a, 5, [[420, 395], [435, 395], [450, 395]]);
+  scPath(a, 6, [[420, 407], [435, 407], [450, 407]]);
+}
+var mw = scApp();
+onePlusOne(mw);
+var mwA = mw.win.__mnMath.now();
+check('written with the pen, "1 + 1 =" shows 2 just after the equals sign',
+      mwA && mwA.txt === '2' && mwA.x > 450, mwA ? mwA.txt + ' at ' + Math.round(mwA.x) : 'no answer');
+var mwOff = scApp({ mathOn: false });
+onePlusOne(mwOff);
+check('with Maths answers off, nothing is answered', !mwOff.win.__mnMath.now());
+
+/* Teach my handwriting: ten marks on the page become the user's own 0-9 */
+var mt = scApp();
+mt.win.__mnMath.teachStart();
+check('Teach asks for the digits in a row', mt.els.mathTeach.className === 'on' &&
+      String(mt.els.mathTeachMsg.textContent).indexOf('0 1 2 3') >= 0, mt.els.mathTeachMsg.textContent);
+for (var mti = 0; mti < 10; mti++) {
+  scPath(mt, 10 + mti, [[120 + mti * 70, 380], [140 + mti * 70, 400], [120 + mti * 70, 420], [140 + mti * 70, 440]]);
+}
+mt.els.mathTeachDone._fire('click', {});
+mt.flushFrames();
+var mtG = JSON.parse(mt.storage.getItem('mathnotes_glyphs') || '[]');
+check('Done keeps them as the user\'s own digits and takes the teaching ink off the page',
+      mtG.length === 10 && mtG[0][0] === '9' && mt.strokes().length === 0,
+      mtG.length + ' kept, ' + mt.strokes().length + ' left on the page');
+check('...then asks for times and brackets', mt.win.__mnMath.teach().step === 1 &&
+      String(mt.els.mathTeachMsg.textContent).indexOf('brackets') >= 0, mt.els.mathTeachMsg.textContent);
+mt.els.mathTeachCancel._fire('click', {});
+check('Cancel ends the teaching', mt.els.mathTeach.className === '' && !mt.win.__mnMath.teach());
+
 /* ---------- storage: the room there is, and using less of it ----------
  * Safari keeps 2.6 million characters for a site, not the five million the
  * app assumed, so the store filled while the app thought it half empty -
