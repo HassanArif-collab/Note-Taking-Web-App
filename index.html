@@ -391,6 +391,14 @@ body.reading #readChip { display: block; }
 .hp-row .dir { color: #0381FE; margin: 0 0 0 10px; }
 .hp-row.warn, .hp-row.warn svg { color: #D64545; }
 .hp-sep { height: 1px; background: #EEF0F2; margin: 5px 0; }
+/* a row of colour chips inside a popover: the lasso's Colour, a sticky's paper */
+.hp-chips { width: 232px; padding: 4px 14px 10px 14px; -webkit-box-sizing: border-box; box-sizing: border-box; }
+.hp-chips:after { content: ''; display: block; clear: both; }
+.hp-chips button {
+  float: left; width: 26px; height: 26px; margin: 4px; border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.14);
+}
+.hp-chips button.on { box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4px #0381FE; }
 .hp-sw {
   position: relative; width: 36px; height: 21px; border-radius: 11px; background: #C9CFD5;
   -webkit-transition: background-color 0.18s; transition: background-color 0.18s;
@@ -526,6 +534,7 @@ body.dark .hp-row, body.dark .hp-row svg { color: #E6E6E8; }
 body.dark .hp-row:active, body.dark #dlgBtns button:active { background: #2C2C30; }
 body.dark .hp-row.on, body.dark .hp-row.on svg, body.dark .hp-row .dir, body.dark #dlgOk { color: #4DA3FF; }
 body.dark .hp-sep { background: #2F2F33; }
+body.dark .hp-chips button.on { box-shadow: 0 0 0 2px #232326, 0 0 0 4px #4DA3FF; }
 body.dark #dlgMsg, body.dark #dlgBtns button { color: #B4B8BE; }
 body.dark #dlgInput { background: #1B1B1D; color: #FFFFFF; }
 body.dark #dlgInput:focus { background: #111113; }
@@ -1710,7 +1719,7 @@ body.dark #tokenInput { background: #26282D; color: #E8E8E8; border-color: #3A43
   padding: 0 4px;
 }
 #selBar button, #pasteBar button {
-  height: 36px; padding: 0 15px; border-radius: 18px;
+  height: 36px; padding: 0 12px; border-radius: 18px;
   font-size: 13px; font-weight: 600; color: #474747;
 }
 #selBar button:active, #pasteBar button:active { background: #EFF0F2; }
@@ -2215,6 +2224,8 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
   <div id="selBar">
     <button id="selSmallBtn" class="selz">-</button>
     <button id="selBigBtn" class="selz">+</button>
+    <button id="selColBtn">Colour</button>
+    <button id="selStrBtn">Straighten</button>
     <button id="selCutBtn">Cut</button>
     <button id="selClipBtn">Copy</button>
     <button id="selCopyBtn">Duplicate</button>
@@ -6049,6 +6060,29 @@ function applyOp(op, reverse) {
     requestRender();
   } else if (op.t === 'tidy') {
     tidyApply(op.items, reverse);
+  } else if (op.t === 'recolor') {
+    for (i = 0; i < op.list.length; i++) {
+      var rb = strokeBBox(op.list[i]);
+      invalidateRange(rb.y0, rb.y1);
+      op.list[i].color = reverse ? op.from[i] : op.to;
+    }
+    requestRender();
+  } else if (op.t === 'pts') {
+    /* strokes given new points (Straighten): each keeps both sets */
+    for (i = 0; i < op.list.length; i++) {
+      var pb = strokeBBox(op.list[i].s);
+      invalidateRange(pb.y0, pb.y1);
+      op.list[i].s.pts = reverse ? op.list[i].from : op.list[i].to;
+      op.list[i].s.bb = null;
+      pb = strokeBBox(op.list[i].s);
+      invalidateRange(pb.y0, pb.y1);
+    }
+    recomputeDoc();
+    requestRender();
+  } else if (op.t === 'multi') {
+    /* several edits made by one tap come off with one undo, last first */
+    if (reverse) { for (i = op.ops.length - 1; i >= 0; i--) applyOp(op.ops[i], true); }
+    else { for (i = 0; i < op.ops.length; i++) applyOp(op.ops[i], false); }
   } else if (op.t === 'layout') {
     /* the note turned side to side: undo turns it back, mark for mark */
     applyLayout(n, reverse ? !op.horiz : op.horiz);
@@ -8844,6 +8878,76 @@ function duplicateSelection() {
   toast('Duplicated');
 }
 
+/* ---------- Colour: re-ink what is selected ----------
+ * Ink and typed text take the colour; a highlighter keeps its see-through
+ * alpha, so it stays a highlighter in the new colour. Pictures keep their
+ * own colours. One undo puts every stroke's old colour back. */
+function selInkable(s) { return s.pen !== PEN_IMG; }
+function openSelColour(anchor) {
+  if (!selection.length) return;
+  var cur = null, i;
+  for (i = 0; i < selection.length; i++) if (selInkable(selection[i])) { cur = selection[i].color; break; }
+  hpOpen(anchor, [{ chips: COLORS, cur: cur, pick: recolorSelection }], 'Colour');
+}
+function recolorSelection(color) {
+  var list = [], from = [], i;
+  for (i = 0; i < selection.length; i++) {
+    if (!selInkable(selection[i])) continue;
+    list.push(selection[i]);
+    from.push(selection[i].color);
+  }
+  if (!list.length) { toast('Pictures keep their own colours'); return; }
+  var op = { t: 'recolor', list: list, from: from, to: color };
+  applyOp(op, false);
+  pushUndo(op);
+  saveSoon();
+  requestRender();
+}
+
+/* ---------- Straighten ----------
+ * Samsung's selection Straighten snaps lines and shapes to geometry. A
+ * lasso over a page of working also catches handwriting, and the shape
+ * fit would square a 7 and round an o - so only a stroke bigger than a
+ * line of writing is offered to it (or the one stroke, when one is all
+ * that was chosen). Everything else is handwriting, and handwriting gets
+ * what Tidy does: each line turned level onto its rule. One undo. */
+function straightenSelection() {
+  if (!selection.length) return;
+  var ink = [], i, s, bb, big = settings.spacing * 1.6;
+  for (i = 0; i < selection.length; i++) {
+    s = selection[i];
+    if (s.pen === PEN_TEXT || s.pen === PEN_IMG || s.pts.length < 2) continue;
+    ink.push(s);
+  }
+  if (!ink.length) { toast('Straighten works on lines, shapes and handwriting'); return; }
+  var shaped = [], words = [], f, tidied = [], ops = [];
+  for (i = 0; i < ink.length; i++) {
+    s = ink[i];
+    bb = inkBox([s]);
+    f = (ink.length === 1 || Math.max(bb.x1 - bb.x0, bb.y1 - bb.y0) >= big) ? shapeFit(s.pts, SHAPE_SHAPE) : null;
+    if (f) shaped.push({ s: s, from: s.pts, to: shapePts(s, f) });
+    else words.push(s);
+  }
+  if (shaped.length) {
+    ops.push({ t: 'pts', list: shaped });
+    applyOp(ops[0], false);
+  }
+  var lines = words.length ? tidyLines(words) : [], moved = 0;
+  for (i = 0; i < lines.length; i++) if (tidyGroup(lines[i], tidied)) moved++;
+  if (tidied.length) ops.push({ t: 'tidy', items: tidied });
+  if (!ops.length) { toast('Already straight'); return; }
+  pushUndo(ops.length === 1 ? ops[0] : { t: 'multi', ops: ops });
+  recomputeDoc();
+  selBBox = selUnionBBox();
+  positionSelBar();
+  saveSoon();
+  requestRender();
+  var say = [];
+  if (shaped.length) say.push(shaped.length === 1 ? '1 shape' : shaped.length + ' shapes');
+  if (moved) say.push(moved === 1 ? '1 line of writing' : moved + ' lines of writing');
+  toast('Straightened ' + say.join(' and '));
+}
+
 /* ---------- copy, cut and paste ----------
  * The clipboard lives for the session, so it carries between notes: copy
  * a diagram here, open another note, tap with the lasso, Paste. What is
@@ -8856,10 +8960,30 @@ function copySelection(cut) {
   var bx = selBBox.x0, by = selBBox.y0, items = [], i;
   for (i = 0; i < selection.length; i++) items.push(cloneStroke(selection[i], -bx, -by));
   clip = { items: items, w: selBBox.x1 - bx, h: selBBox.y1 - by };
+  clipKeep();
   if (cut) deleteSelection();
   else clearSelection();
   requestRender();
-  toast((cut ? 'Cut' : 'Copied') + ' - tap with the lasso where it should go');
+  toast((cut ? 'Cut' : 'Copied') + ' - paste it here or in another note: + > Paste');
+}
+
+/* The copy is kept on the iPad as well, so it outlives the app: iOS starts
+   a home-screen app afresh after a visit to another app, and whatever was
+   waiting to be pasted went with it. A big copy - a photo - stays in memory
+   only; it is not worth that much of the room. */
+var CLIP_KEY = 'mathnotes_clip';
+function clipKeep() {
+  try {
+    var raw = clip ? JSON.stringify({ w: clip.w, h: clip.h, items: serializeNote({ strokes: clip.items }) }) : '';
+    if (raw && raw.length < 200000) localStorage.setItem(CLIP_KEY, raw);
+    else localStorage.removeItem(CLIP_KEY);
+  } catch (e) {}
+}
+function clipLoad() {
+  try {
+    var raw = localStorage.getItem(CLIP_KEY), r = raw ? JSON.parse(raw) : null;
+    if (r && r.items) clip = { w: r.w, h: r.h, items: deserializeNote({ strokes: r.items }).strokes };
+  } catch (e) { clip = null; }
 }
 
 /* centred on (x, y), in page coordinates */
@@ -9387,18 +9511,21 @@ function shapeFit(p, mode) {
 function tryReshape(s) {
   var f = shapeFit(s.pts, settings.shapeAssist);
   if (!f) return false;
-  /* the made shape is laid down at an even pace, so every pen draws it
-     at one width - the hand's own speeds belong to the hand's own line */
+  s.pts = shapePts(s, f);
+  s.shape = f.kind;
+  s.bb = null;
+  return true;
+}
+/* the made shape is laid down at an even pace, so every pen draws it
+   at one width - the hand's own speeds belong to the hand's own line */
+function shapePts(s, f) {
   var t = s.pts[0][2], out = [], i, pr = null;
   for (i = 0; i < f.pts.length; i++) {
     if (pr) t += Math.max(1, dist(pr[0], pr[1], f.pts[i][0], f.pts[i][1]) / SH_SPEED);
     out.push([f.pts[i][0], f.pts[i][1], t]);
     pr = f.pts[i];
   }
-  s.pts = out;
-  s.shape = f.kind;
-  s.bb = null;
-  return true;
+  return out;
 }
 
 /* ============================================================
@@ -11152,7 +11279,12 @@ var IC = {
   photo: svgIc('<rect x="3.5" y="5" width="17" height="14" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M4 17l4.8-4.6 3.6 3.2 2.8-2.4 4.8 4.3"/>'),
   side: svgIc('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M13 4.5v15"/><path d="M15.5 8.5h3M15.5 11h3M15.5 13.5h2"/>'),
   sideImg: svgIc('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M13 4.5v15"/><path d="M13.5 15l2.4-2.3 1.8 1.6 2.3-2"/>'),
-  x: svgIc('<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>')
+  x: svgIc('<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>'),
+  paste: svgIc('<rect x="5.5" y="5" width="13" height="16" rx="2.5"/><path d="M9 5V4c0-.6.4-1 1-1h4c.6 0 1 .4 1 1v1M9 11h6M9 14.5h4"/>'),
+  sticky: svgIc('<path d="M5 4.5h14v9.5l-5 5.5H5z"/><path d="M19 14h-5v5.5"/>'),
+  cover: svgIc('<path d="M6 3.5h11.5c.6 0 1 .4 1 1v15c0 .6-.4 1-1 1H6c-.8 0-1.5-.7-1.5-1.5v-14c0-.8.7-1.5 1.5-1.5z"/><path d="M8 3.5v17M11 8h5"/>'),
+  sort: svgIc('<rect x="4" y="3.5" width="6.5" height="7.5" rx="1.4"/><rect x="13.5" y="3.5" width="6.5" height="7.5" rx="1.4"/><rect x="4" y="13" width="6.5" height="7.5" rx="1.4"/><rect x="13.5" y="13" width="6.5" height="7.5" rx="1.4"/>'),
+  math: svgIc('<path d="M5 7.5h5M7.5 5v5M14 7.5h5M5.5 14.5l4 4M9.5 14.5l-4 4M14 15h5M14 18h5"/>')
 };
 
 function homeOn() { return homeView.className.indexOf('on') >= 0; }
@@ -11872,6 +12004,22 @@ function hpOpen(anchor, rows, head) {
         hmPop.appendChild(s);
         return;
       }
+      if (r.chips) {
+        var box = document.createElement('div');
+        box.className = 'hp-chips';
+        for (var k = 0; k < r.chips.length; k++) {
+          (function (col) {
+            var cb = document.createElement('button');
+            cb.style.backgroundColor = col;
+            if (col === r.cur) cb.className = 'on';
+            cb._lbl = col;
+            cb.addEventListener('click', function () { hpClose(); r.pick(col); });
+            box.appendChild(cb);
+          })(r.chips[k]);
+        }
+        hmPop.appendChild(box);
+        return;
+      }
       var b = document.createElement('button');
       b.className = 'hp-row' + (r.on ? ' on' : '') + (r.warn ? ' warn' : '');
       b.innerHTML = (r.ic || '') + '<span class="lbl">' + r.lbl + '</span>' +
@@ -12568,6 +12716,8 @@ function insertMenu(anchor) {
   if (!ro) {
     rows.push({ lbl: 'Photo', ic: IC.photo, act: function () { try { photoInput.value = ''; photoInput.click(); } catch (e) {} } });
     rows.push({ lbl: 'PDF pages', ic: IC.pdf, act: function () { pdfPick('note'); } });
+    if (clip) rows.push({ lbl: 'Paste', ic: IC.paste, dir: clip.items.length === 1 ? '1 item' : clip.items.length + ' items',
+      act: function () { pasteClip(scrollX + viewW / zoom / 2, scrollY + viewH / zoom / 2); } });
     rows.push({ sep: true });
   }
   rows.push({ lbl: 'Open a PDF beside', ic: IC.side, act: function () { pdfPick('side'); } });
@@ -14427,6 +14577,8 @@ selCopyBtn.addEventListener('click', duplicateSelection);
 byId('selClipBtn').addEventListener('click', function () { copySelection(false); });
 byId('selCutBtn').addEventListener('click', function () { copySelection(true); });
 byId('pasteBtn').addEventListener('click', function () { if (pasteAt) pasteClip(pasteAt.x, pasteAt.y); });
+byId('selColBtn').addEventListener('click', function () { openSelColour(byId('selColBtn')); });
+byId('selStrBtn').addEventListener('click', straightenSelection);
 selSmallBtn.addEventListener('click', function () { scaleSelectionBy(0.85); });
 selBigBtn.addEventListener('click', function () { scaleSelectionBy(1.18); });
 selDoneBtn.addEventListener('click', function () { clearSelection(); requestRender(); });
@@ -14535,6 +14687,7 @@ function init() {
   purgeTrash();
   if (curNoteId && notes[curNoteId] && notes[curNoteId].trash) curNoteId = null;
   compactSoon();
+  clipLoad();
   spGripInit();
   initOffline();
   buildPalette();

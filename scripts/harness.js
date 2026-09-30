@@ -236,9 +236,14 @@ App.prototype.dlgPick = function (label) {
 };
 /* a row of the home's popover menu, by its exact label */
 App.prototype.popPick = function (label) {
-  var rows = this.els.hmPop.children, i;
+  var rows = this.els.hmPop.children, i, j, kids;
   for (i = 0; i < rows.length; i++) {
     if (rows[i]._lbl === label) { rows[i]._fire('click', {}); this.flushFrames(); return true; }
+    /* a row of colour chips holds its buttons one level down */
+    kids = rows[i].children || [];
+    for (j = 0; j < kids.length; j++) {
+      if (kids[j]._lbl === label) { kids[j]._fire('click', {}); this.flushFrames(); return true; }
+    }
   }
   return false;
 };

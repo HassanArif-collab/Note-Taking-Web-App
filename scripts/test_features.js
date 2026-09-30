@@ -2023,6 +2023,69 @@ var phs = ph.strokes();
 check('a duplicated photo keeps its picture', phs.length === 2 && phs[1].src === phs[0].src,
       phs.length + ' items, copy src ' + (phs[1] && String(phs[1].src).slice(0, 20)));
 
+/* ---------- the lasso's Colour and Straighten ---------- */
+var rc = scApp();
+scPath(rc, 1, scWord(300, 400));
+scPath(rc, 2, scWord(300, 460));
+var rc0 = rc.strokes()[0].color;
+lassoAround(rc, 280, 370, 470, 490);
+rc.els.selColBtn._fire('click', {});
+check('Colour opens a row of colours', rc.els.hmPop.className === 'on', rc.els.hmPop.className);
+rc.popPick('#E2231A');
+check('...and picking one re-inks everything selected',
+      rc.strokes().every(function (s) { return s.color === '#E2231A'; }),
+      rc.strokes().map(function (s) { return s.color; }).join(' '));
+rc.undo();
+check('one Undo gives the ink its old colour back',
+      rc.strokes().every(function (s) { return s.color === rc0; }), rc.strokes()[0].color);
+
+var sl = scApp(), slp = [], sli;
+for (sli = 0; sli <= 60; sli++) slp.push([200 + sli * 7, 300 + sli * 0.4 + 3 * Math.sin(sli / 2)]);
+scPath(sl, 1, slp);
+var sl0 = sl.strokes()[0].pts.length;
+lassoAround(sl, 180, 250, 660, 370);
+sl.els.selStrBtn._fire('click', {});
+var slA = sl.strokes()[0].pts;
+check('Straighten turns a wobbly ruled line into a straight, level one',
+      Math.abs(slA[slA.length - 1][1] - slA[0][1]) < 0.5 && slA.length < sl0,
+      slA.length + ' points, ends ' + Math.round(slA[0][1]) + ' / ' + Math.round(slA[slA.length - 1][1]));
+sl.undo();
+check('...and Undo brings the hand-drawn line back', sl.strokes()[0].pts.length === sl0,
+      sl.strokes()[0].pts.length + ' points');
+
+var sw = scApp(), swi;
+for (swi = 0; swi < 4; swi++) scPath(sw, 1 + swi, scWord(120 + swi * 190, 400 + swi * 13));
+function swFeet(a) {
+  return a.strokes().map(function (s) { var m = -1e9; s.pts.forEach(function (p) { if (p[1] > m) m = p[1]; }); return m; });
+}
+var swB = swFeet(sw);
+lassoAround(sw, 100, 340, 900, 480);
+sw.els.selStrBtn._fire('click', {});
+var swA = swFeet(sw);
+check('Straighten levels a sloping line of handwriting instead of squaring its letters',
+      Math.max.apply(null, swA) - Math.min.apply(null, swA) < (Math.max.apply(null, swB) - Math.min.apply(null, swB)) / 3 &&
+      sw.strokes()[0].pts.length > 20,
+      'feet spread ' + Math.round(Math.max.apply(null, swB) - Math.min.apply(null, swB)) + ' -> ' +
+      Math.round(Math.max.apply(null, swA) - Math.min.apply(null, swA)));
+
+/* the copy outlives the app: iOS restarts a home-screen app after a trip elsewhere */
+var kc = scApp();
+scPath(kc, 1, scWord(300, 400));
+lassoAround(kc, 280, 370, 470, 430);
+kc.els.selClipBtn._fire('click', {});
+var kcRaw = kc.storage.getItem('mathnotes_clip');
+var kc2 = H.load({ quiet: true, dpr: 2, viewW: 1024, viewH: 712,
+  seed: { mathnotes_clip: kcRaw, mathnotes_v4: JSON.stringify({ v: 4,
+    notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
+    notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, strokes: [] } },
+    cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
+kc2.flushFrames();
+kc2.els.insertBtn._fire('click', {});
+var kcPasted = kc2.popPick('Paste');
+check('what was copied is still there to paste after the app restarts',
+      !!kcRaw && kcPasted && kc2.strokes().length === 1 && kc2.strokes()[0].pts.length === kc.strokes()[0].pts.length,
+      (kcRaw ? kcRaw.length + ' chars kept' : 'nothing kept') + ', ' + kc2.strokes().length + ' pasted');
+
 /* ---------- pages side by side, and two to a screen ---------- */
 /* a page is 1024 across with a 44px gutter between neighbours (the view
    is 768 wide, so the page takes the 1024 floor rather than the screen) */
