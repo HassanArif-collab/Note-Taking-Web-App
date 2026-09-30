@@ -88,17 +88,24 @@ Build one at a time, copying how Samsung Notes does it.
 
 ## Still in that brief — the user chooses what is next
 1. **Lock notes** with a password (padlock on the card, hidden miniature).
-2. **Sort pages** — reorder / duplicate / delete pages from a thumbnail grid.
-3. **Selection bubble extras** — change colour, straighten, copy between notes.
+~~**Sort pages** — reorder / duplicate / delete pages from a thumbnail grid.~~ **Done 2026-09-30.**
+~~**Selection bubble extras** — change colour, straighten, copy between notes.~~ **Done 2026-09-30.**
 4. **Typed text formatting** — bold/italic/underline, bullet and checkbox lists.
 5. **Voice recording** in a note, with a player chip.
-6. **Sticky notes** — small coloured memo cards on the page.
+~~**Sticky notes** — small coloured memo cards on the page.~~ **Done 2026-09-30.**
 7. **Search inside notes** — typed text now; handwriting needs recognition.
 8. **Export** — save a note as PDF or images, share sheet.
 9. **Camera** — photograph a page straight into the note.
 10. **Page templates gallery upgrade** + **landscape pages**.
-11. **Note covers** for notes and folders.
+~~**Note covers** for notes and folders.~~ **Done 2026-09-30.**
 12. **Handwriting to text** (hard offline on an iPad 3).
+
+## Built 2026-09-30
+- **Maths answers** (Samsung's Turn on math): end a sum with = and the answer
+  shows in blue, then fades. Teach my handwriting learns the user's own digits.
+- **Neaten** replaced Tidy: smooth shaky strokes, each line levelled and put on
+  its rule as one piece. Still to try, only with a trace to measure against:
+  setting single words down on the line (it broke printed words when tried).
 
 ## Pen pop-up extras (seen in the videos)
 - ~~Favourite pens inside the pop-up, each with its own colour.~~ **Done** —

@@ -68,7 +68,7 @@ thickness, with 24 colours to choose from.
 |------|--------------|
 | **Pen** | Write. Tap again to open the pen tray. |
 | **Eraser** | Rub out strokes. Stroke mode removes a whole line, Area mode rubs out what you touch. |
-| **Lasso** | Draw a loop around ink to select it, then drag to move, pinch the corner handle to resize, or cut/copy/duplicate/delete. With something copied, tap with the lasso — in any note — and **Paste** appears right there. |
+| **Lasso** | Draw a loop around ink to select it, then drag to move, pinch the corner handle to resize, or use the bar: **Colour** re-inks it, **Neaten** straightens shapes and sets handwriting straight, Cut / Copy / Duplicate / Delete. What you copy can be pasted into any note — tap with the lasso, or **+ → Paste** — even after the app has been closed. |
 | **T (text)** | Tap the page and type. Text behaves like ink — movable, erasable, selectable. |
 | **Hand** | One finger drags the paper instead of drawing. Double-tap resets zoom. |
 | **Undo / Redo** | Up to 60 steps. |
@@ -94,6 +94,12 @@ The **tab on the left edge** opens the same pages as a strip of thumbnails
 down the side of the sheet, so you can see where you are and jump without
 leaving the page. It slides the paper aside rather than over it.
 
+**Sort pages** (the **Sort** button on the page strip, the Pages panel, or
+⋮ → Page) shows every page in a grid. Hold a page and drag it where it
+belongs; tap pages to select them, then **Duplicate**, **Move to start** or
+**Delete**. Nothing changes until **Done**, and Done is one undo — a page's
+writing, PDF page and template go with it.
+
 **Drag past the end of the last page** — with the hand tool, or any tool
 when scrolling — and the end stretches like paper, with a disc that says
 *Add page*. Keep pulling past the mark and letting go makes the page, which
@@ -112,6 +118,36 @@ screen of blank paper beyond your writing. The ruled lines and the margin
 rule carry on across it (Template and Margin line in the menu change them).
 Scroll sideways with two fingers side by side. New notes follow the last
 choice.
+
+### Sticky notes
+
+**+ → Sticky note**, pick a colour, and a sticky lands on the page. Write on
+it — the writing belongs to the sticky, so it moves, copies and deletes with
+it. **Tap its corner button** to fold it down to a small square and hide
+what is written (quiz yourself: the question on the page, the answer under
+the fold); tap the square to open it. The eraser takes writing off a sticky
+but never the sticky itself; the lasso moves, resizes and recolours it.
+
+### Maths answers
+
+Write a sum, finish it with **=**, and pause: the answer appears in **blue**
+just after the equals sign and fades after a few seconds, so you can write
+it in yourself (Samsung's "Turn on math"). It reads digits, + − × ÷ /,
+brackets, decimal points, small raised powers and fractions written one
+over the other, and works the sum out in the usual order. Letters mean
+algebra, and algebra gets no answer rather than a wrong one.
+**⋮ → Maths answers** turns it off. **⋮ → Teach my handwriting** asks you to
+write 0–9 (and × and brackets) once on the page; it learns them from that
+and removes the writing again.
+
+### Neaten — correction and alignment
+
+**⋮ → Neaten handwriting** (the whole note), or **Neaten** on the lasso bar
+(just what you selected): shaky strokes are smoothed — gently, corners kept
+— and each line is turned level and dropped onto its rule **as one piece**,
+so words, exponents and fractions never move against each other. It
+replaced Tidy, which lifted whole words and slid them about. One undo takes
+it back.
 
 ### Reading mode
 
@@ -141,6 +177,14 @@ at the top right, and the sidebar button folds the rail away.
   message that says so. From the trash a note can be restored or deleted for
   good; **⋮ → Empty trash** clears it.
 - **⋮ (top right):** select notes, create a folder, import a PDF, settings.
+
+### Covers
+
+A note's **⋯ → Cover** (or **⋮ → Cover** inside the note) dresses it as a
+notebook: fourteen designs — colours, stripes, dots, graph, gradients — with
+its name on a label and an emoji. A folder's **⋯ → Cover** does the same for
+the folder: its emoji shows in the rail and its cover across the top when it
+is opened. **None** brings the page preview back.
 
 ### PDFs
 
@@ -377,7 +421,6 @@ hand's own variation), and Bézier re-encoding — see the comment above
 
 ### Features
 
-- Reorder pages, and a page thumbnail view.
 - Better export: multi-page PDF instead of the 4-page PNG cap, which may fail
   outright on this iPad because it builds one enormous canvas.
 - A ruler / straight-edge.
