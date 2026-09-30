@@ -491,7 +491,8 @@ body.reading #readChip { display: block; }
   padding: 7px 7px 7px 18px; border-radius: 26px; white-space: nowrap;
   background: rgba(22,24,26,0.95); color: #FFFFFF; font-size: 14.5px; font-weight: 600;
   box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-  -webkit-transform: translate(-50%, -90px); transform: translate(-50%, -90px);
+  /* far enough up that its shadow does not show at the top of the screen */
+  -webkit-transform: translate(-50%, -140px); transform: translate(-50%, -140px);
   -webkit-transition: -webkit-transform 0.42s cubic-bezier(0.16, 1, 0.3, 1);
   transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1119,7 +1120,9 @@ body.dark #fgTip { background: rgba(232,234,237,0.96); color: #202124; }
   -webkit-flex: 1; flex: 1; font-size: 12px; font-weight: 600; color: #5A6473;
   padding-left: 10px; white-space: nowrap;
 }
-#stripClose { width: 34px; height: 33px; border: 0; background: none; color: #5A6473; font-size: 15px; }
+#stripClose { width: 28px; height: 33px; border: 0; background: none; color: #5A6473; font-size: 15px; }
+#stripSort { height: 33px; padding: 0 6px; border: 0; background: none; color: #0381FE; font-size: 12px; font-weight: 700; }
+#stripSort:active { background: rgba(3,129,254,0.14); }
 #stripClose:active { background: rgba(3,129,254,0.14); }
 #stripList {
   -webkit-flex: 1 1 auto; flex: 1 1 auto;
@@ -1414,6 +1417,73 @@ body.dark #pvDirName { color: #A8ADB5; }
   border: 0; border-radius: 10px; padding: 10px 14px; margin-right: 8px;
 }
 #pagesActions button.warn { color: #B3261E; background: #FDECEC; }
+/* ---------- sort pages: a grid of the note's pages to reorder ---------- */
+#sortOverlay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 46; display: none;
+  background: #F1F3F6;
+  -webkit-flex-direction: column; flex-direction: column;
+}
+#sortOverlay.on {
+  display: -webkit-flex; display: flex;
+  -webkit-animation: srtIn 0.26s cubic-bezier(0.16, 1, 0.3, 1); animation: srtIn 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@-webkit-keyframes srtIn { from { opacity: 0; -webkit-transform: translateY(24px); } to { opacity: 1; -webkit-transform: none; } }
+@keyframes srtIn { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+#sortHead {
+  -webkit-flex: 0 0 auto; flex: 0 0 auto; height: 60px; background: #FFFFFF;
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  border-bottom: 1px solid #E3E7EC; padding: 0 8px;
+}
+#sortHead button { height: 40px; padding: 0 16px; border-radius: 20px; font-size: 16px; color: #4A5158; }
+#sortHead button:active { background: #EEF1F4; }
+#sortDone { color: #0381FE !important; font-weight: 700; }
+#sortTitleBox { -webkit-flex: 1; flex: 1; text-align: center; }
+#sortTitle { font-size: 17px; font-weight: 700; color: #16181A; }
+#sortSub { font-size: 12.5px; color: #7A828C; margin-top: 2px; }
+#sortGrid {
+  -webkit-flex: 1 1 auto; flex: 1 1 auto; position: relative;
+  overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
+.srt-cell {
+  position: absolute; left: 0; top: 0; padding: 6px; text-align: center;
+  -webkit-transition: -webkit-transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.srt-cell canvas {
+  display: block; border-radius: 6px; background: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.13), 0 0 0 1px rgba(0,0,0,0.05);
+}
+.srt-cell.sel canvas { box-shadow: 0 0 0 3px #0381FE, 0 2px 8px rgba(3,129,254,0.25); }
+.srt-cell.lift {
+  z-index: 5; -webkit-transition: none; transition: none; opacity: 0.96;
+}
+.srt-cell.lift canvas { box-shadow: 0 14px 34px rgba(0,0,0,0.30), 0 0 0 1px rgba(0,0,0,0.05); }
+.srt-num { display: block; font-size: 12.5px; font-weight: 600; color: #6A7178; margin-top: 6px; }
+.srt-cell.sel .srt-num { color: #0381FE; }
+.srt-chk {
+  position: absolute; top: 12px; right: 12px; width: 24px; height: 24px; border-radius: 50%;
+  background: rgba(255,255,255,0.92); box-shadow: inset 0 0 0 1.5px #AEB6BF; color: #FFFFFF;
+}
+.srt-chk svg { position: absolute; left: 5px; top: 5px; }
+.srt-cell.sel .srt-chk { background: #0381FE; box-shadow: none; }
+#sortBar {
+  -webkit-flex: 0 0 auto; flex: 0 0 auto; height: 62px; background: #FFFFFF;
+  border-top: 1px solid #E3E7EC; padding: 0 12px;
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+}
+#sortCount { -webkit-flex: 1; flex: 1; font-size: 14px; color: #6A7178; padding-left: 6px; }
+#sortBar button {
+  height: 42px; padding: 0 16px; margin-left: 8px; border-radius: 21px;
+  font-size: 15px; font-weight: 600; color: #0381FE; background: #EEF4FC;
+}
+#sortBar button.warn { color: #C62828; background: #FCEDED; }
+#sortBar.none button { opacity: 0.4; }
+body.dark #sortOverlay { background: #141518; }
+body.dark #sortHead, body.dark #sortBar { background: #1D1E22; border-color: #2C2D32; }
+body.dark #sortTitle { color: #EDEDEF; }
+body.dark #sortHead button { color: #C8C8CC; }
+body.dark #sortBar button { background: #25303D; color: #6FB1FF; }
+body.dark #sortBar button.warn { background: #3A2224; color: #FF7B72; }
 #pagesCloseBtn {
   margin-top: 14px; color: #FFFFFF; font-size: 15px; font-weight: 600;
   background: rgba(255,255,255,0.16); border-radius: 18px; padding: 10px 26px; border: 0;
@@ -1923,6 +1993,7 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
   <div id="pageStrip">
     <div id="stripBar">
       <span id="stripTitle">Pages</span>
+      <button id="stripSort" aria-label="Sort pages">Sort</button>
       <button id="stripClose" aria-label="Close page thumbnails">&#10005;</button>
     </div>
     <div id="stripList"></div>
@@ -2268,10 +2339,30 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
       <div id="pagesGrid"></div>
       <div id="pagesActions">
         <button id="pagesInsertBtn">Insert page here</button>
+        <button id="pagesSortBtn">Sort pages</button>
         <button id="pagesDeleteBtn" class="warn">Delete this page</button>
       </div>
     </div>
     <button id="pagesCloseBtn">Close</button>
+  </div>
+
+  <!-- sort pages: drag them into order, duplicate or delete them -->
+  <div id="sortOverlay">
+    <div id="sortHead">
+      <button id="sortCancel">Cancel</button>
+      <div id="sortTitleBox">
+        <div id="sortTitle">Sort pages</div>
+        <div id="sortSub">Hold a page and drag it &middot; tap pages to select them</div>
+      </div>
+      <button id="sortDone">Done</button>
+    </div>
+    <div id="sortGrid"></div>
+    <div id="sortBar" class="none">
+      <span id="sortCount">No pages selected</span>
+      <button id="sortDup">Duplicate</button>
+      <button id="sortFirst">Move to start</button>
+      <button id="sortDel" class="warn">Delete</button>
+    </div>
   </div>
 
   <!-- template gallery: each template as a picture, applied to a page or all -->
@@ -3441,6 +3532,7 @@ function noteRecord(n) {
            /* side by side is the note's own, not the viewer's: a note
               written across stays across on whatever it is opened on */
            horiz: n.horiz ? 1 : 0, pw: n.pw || 0,
+           tpl: n.tpl || null,         /* a template per page, where one was set */
            trash: n.trash || 0,        /* when it went to the trash */
            strokes: serializeNote(n) };
 }
@@ -5325,7 +5417,7 @@ function stripMark() {
   }
   var total = Math.min(pageCount(), PG_THUMB_MAX);
   var t = byId('stripTitle');
-  var txt = 'Page ' + cur + ' of ' + total;
+  var txt = cur + ' / ' + total;       /* short: Sort and close share the bar */
   if (t.innerHTML !== txt) t.innerHTML = txt;
 }
 
@@ -5341,6 +5433,288 @@ function setStrip(on) {
   if (on) buildStrip();
   placeCanvas();
   if (split.on) splitBuild(0);
+}
+
+/* ---------- sort pages ----------
+ * Samsung's page sorter: every page as a thumbnail in a grid. Hold one and
+ * drag it to where it belongs; tap pages to select them, then Duplicate,
+ * Move to start or Delete. Nothing touches the note until Done, and Done
+ * is one undo - so Cancel, or one Undo afterwards, puts everything back.
+ *
+ * The working order is a list of entries { src, k }: src is the page the
+ * entry shows as the note stands now (a duplicate shows its page twice),
+ * k is the entry's own key, so a selection or a cell follows the entry
+ * wherever it is dragged. */
+var sorter = null;
+var SRT_W = 124;                     /* a thumbnail's width */
+
+function openSorter() {
+  var n = activeNote();
+  if (!n) return;
+  if (isEndless()) { toast('An infinite note is one sheet - there are no pages to sort'); return; }
+  var total = pageCount(), p;
+  if (total > PG_THUMB_MAX) { toast('The sorter takes notes of up to ' + PG_THUMB_MAX + ' pages'); return; }
+  closePanels();
+  byId('pagesOverlay').className = 'overlay';
+  sorter = { order: [], sel: {}, thumbs: [], key: 0, cells: {}, drag: null, cur: currentPage() - 1, total: total };
+  for (p = 0; p < total; p++) {
+    sorter.thumbs.push(pageThumb(p, SRT_W));
+    sorter.order.push({ src: p, k: sorter.key++ });
+  }
+  byId('sortGrid').innerHTML = '';
+  byId('sortGrid').scrollTop = 0;
+  byId('sortOverlay').className = 'on';
+  srtLayout();
+}
+function closeSorter() {
+  if (sorter && sorter.drag) clearTimeout(sorter.drag.timer);
+  sorter = null;
+  byId('sortOverlay').className = '';
+  byId('sortGrid').innerHTML = '';
+}
+
+/* where entry i sits in the grid, in the grid's own scrolled space */
+function srtGeom() {
+  var g = byId('sortGrid'), th = sorter.thumbs[0];
+  var cw = SRT_W + 28, ch = (th ? parseFloat(th.style.height) || SRT_W : SRT_W) + 46;
+  var cols = Math.max(2, Math.floor(((g.clientWidth || 1024) - 24) / cw));
+  return { cw: cw, ch: ch, cols: cols, x0: Math.max(12, ((g.clientWidth || 1024) - cols * cw) / 2), y0: 14 };
+}
+function srtPlace(cell, x, y) {
+  var t = 'translate(' + Math.round(x) + 'px,' + Math.round(y) + 'px)';
+  cell.style.webkitTransform = t;
+  cell.style.transform = t;
+}
+function srtCell(e) {
+  var cell = document.createElement('div'), src = sorter.thumbs[e.src], cv = document.createElement('canvas');
+  cell.className = 'srt-cell';
+  cv.width = src.width; cv.height = src.height;
+  cv.style.width = src.style.width; cv.style.height = src.style.height;
+  var cx = cv.getContext('2d');
+  if (cx) { try { cx.drawImage(src, 0, 0); } catch (err) {} }
+  cell.appendChild(cv);
+  var num = document.createElement('span');
+  num.className = 'srt-num';
+  cell.appendChild(num);
+  var chk = document.createElement('span');
+  chk.className = 'srt-chk';
+  chk.innerHTML = IC.check;
+  cell.appendChild(chk);
+  cell._num = num;
+  cell._k = e.k;
+  cell.addEventListener('touchstart', function (ev) { srtDown(ev, e.k); }, false);
+  cell.addEventListener('click', function () { srtToggle(e.k); }, false);
+  return cell;
+}
+/* lay every entry out in its slot - the dragged one follows the finger */
+function srtLayout() {
+  if (!sorter) return;
+  var g = byId('sortGrid'), m = srtGeom(), keep = {}, i, e, cell, k;
+  for (i = 0; i < sorter.order.length; i++) {
+    e = sorter.order[i];
+    keep[e.k] = 1;
+    cell = sorter.cells[e.k];
+    if (!cell) { cell = sorter.cells[e.k] = srtCell(e); g.appendChild(cell); }
+    cell._num.textContent = String(i + 1);
+    cell.className = 'srt-cell' + (sorter.sel[e.k] ? ' sel' : '') +
+                     (sorter.drag && sorter.drag.live && sorter.drag.k === e.k ? ' lift' : '');
+    if (!(sorter.drag && sorter.drag.live && sorter.drag.k === e.k)) {
+      srtPlace(cell, m.x0 + (i % m.cols) * m.cw, m.y0 + Math.floor(i / m.cols) * m.ch);
+    }
+  }
+  for (k in sorter.cells) {
+    if (sorter.cells.hasOwnProperty(k) && !keep[k]) { g.removeChild(sorter.cells[k]); delete sorter.cells[k]; }
+  }
+  /* the cells float, so something has to give the grid its height to scroll */
+  var pad = sorter.pad;
+  if (!pad) { pad = sorter.pad = document.createElement('div'); g.appendChild(pad); }
+  pad.style.height = (m.y0 + Math.ceil(sorter.order.length / m.cols) * m.ch + 20) + 'px';
+  var ns = 0;
+  for (k in sorter.sel) if (sorter.sel.hasOwnProperty(k) && sorter.sel[k]) ns++;
+  byId('sortCount').textContent = ns ? (ns === 1 ? '1 page selected' : ns + ' pages selected')
+                                     : sorter.order.length + (sorter.order.length === 1 ? ' page' : ' pages');
+  byId('sortBar').className = ns ? '' : 'none';
+}
+function srtIndex(k) {
+  for (var i = 0; i < sorter.order.length; i++) if (sorter.order[i].k === k) return i;
+  return -1;
+}
+function srtToggle(k) {
+  if (!sorter || (sorter.drag && sorter.drag.live)) return;
+  sorter.sel[k] = !sorter.sel[k];
+  srtLayout();
+}
+
+/* ---- dragging: hold still, then the page lifts and follows the finger ---- */
+function srtDown(ev, k) {
+  if (!sorter || !ev.touches || ev.touches.length !== 1) { if (sorter && sorter.drag) srtCancelDrag(); return; }
+  var t = ev.touches[0], d = { k: k, x0: t.clientX, y0: t.clientY, x: t.clientX, y: t.clientY, live: false };
+  if (sorter.drag) clearTimeout(sorter.drag.timer);
+  d.timer = setTimeout(function () { srtLift(d); }, 360);
+  sorter.drag = d;
+}
+function srtLift(d) {
+  if (!sorter || sorter.drag !== d) return;
+  var g = byId('sortGrid'), r = g.getBoundingClientRect(), m = srtGeom(), i = srtIndex(d.k);
+  d.live = true;
+  /* where on the page the finger took hold, so it does not jump to a corner */
+  d.ox = d.x0 - r.left + g.scrollLeft - (m.x0 + (i % m.cols) * m.cw);
+  d.oy = d.y0 - r.top + g.scrollTop - (m.y0 + Math.floor(i / m.cols) * m.ch);
+  srtLayout();
+  srtFollow();
+  if (!sorter.rAF) sorter.rAF = window.requestAnimationFrame(srtTick);
+}
+function srtFollow() {
+  var d = sorter && sorter.drag;
+  if (!d || !d.live) return;
+  var g = byId('sortGrid'), r = g.getBoundingClientRect(), m = srtGeom();
+  var fx = d.x - r.left + g.scrollLeft, fy = d.y - r.top + g.scrollTop;
+  var cell = sorter.cells[d.k];
+  if (cell) srtPlace(cell, fx - d.ox, fy - d.oy);
+  /* the slot under the middle of the lifted page */
+  var cx = fx - d.ox + m.cw / 2, cy = fy - d.oy + m.ch / 2;
+  var col = lim(Math.floor((cx - m.x0) / m.cw), 0, m.cols - 1), row = Math.max(0, Math.floor((cy - m.y0) / m.ch));
+  var to = lim(row * m.cols + col, 0, sorter.order.length - 1), from = srtIndex(d.k);
+  if (to !== from && from >= 0) {
+    var e = sorter.order.splice(from, 1)[0];
+    sorter.order.splice(to, 0, e);
+    srtLayout();
+  }
+}
+/* near the top or bottom edge the grid scrolls on its own, so a page can be
+   carried further than the screen shows */
+function srtTick() {
+  sorter && (sorter.rAF = 0);
+  var d = sorter && sorter.drag;
+  if (!d || !d.live) return;
+  var g = byId('sortGrid'), r = g.getBoundingClientRect(), v = 0;
+  if (d.y < r.top + 60) v = -Math.ceil((r.top + 60 - d.y) / 6);
+  else if (d.y > r.bottom - 60) v = Math.ceil((d.y - (r.bottom - 60)) / 6);
+  if (v) { g.scrollTop = Math.max(0, g.scrollTop + v); srtFollow(); }
+  sorter.rAF = window.requestAnimationFrame(srtTick);
+}
+function srtMove(ev) {
+  var d = sorter && sorter.drag;
+  if (!d || !ev.touches || !ev.touches.length) return;
+  d.x = ev.touches[0].clientX; d.y = ev.touches[0].clientY;
+  if (!d.live) {
+    /* moved before the hold: that is a scroll of the grid, let it be one */
+    if (Math.abs(d.x - d.x0) > 10 || Math.abs(d.y - d.y0) > 10) srtCancelDrag();
+    return;
+  }
+  if (ev.preventDefault) ev.preventDefault();
+  srtFollow();
+}
+function srtUp(ev) {
+  var d = sorter && sorter.drag;
+  if (!d) return;
+  clearTimeout(d.timer);
+  sorter.drag = null;
+  if (ev.cancelable && ev.preventDefault) ev.preventDefault();   /* no late click */
+  if (d.live) { srtLayout(); return; }       /* dropped: it glides into its slot */
+  srtToggle(d.k);
+}
+function srtCancelDrag() {
+  if (!sorter || !sorter.drag) return;
+  clearTimeout(sorter.drag.timer);
+  var was = sorter.drag.live;
+  sorter.drag = null;
+  if (was) srtLayout();
+}
+
+/* ---- the bar's actions, on whatever is selected ---- */
+function srtSelected() {
+  var out = [], i;
+  for (i = 0; i < sorter.order.length; i++) if (sorter.sel[sorter.order[i].k]) out.push(sorter.order[i]);
+  return out;
+}
+function srtDuplicate() {
+  if (!sorter || !srtSelected().length) return;
+  var out = [], sel = {}, i, e, c, made = 0;
+  for (i = 0; i < sorter.order.length; i++) {
+    e = sorter.order[i];
+    out.push(e);
+    if (sorter.sel[e.k]) { c = { src: e.src, k: sorter.key++ }; out.push(c); sel[c.k] = 1; made++; }
+  }
+  if (out.length > PG_THUMB_MAX) { toast('That would be more than ' + PG_THUMB_MAX + ' pages'); return; }
+  sorter.order = out;
+  sorter.sel = sel;                  /* the copies are what is selected now */
+  srtLayout();
+  toast(made === 1 ? 'Page duplicated' : made + ' pages duplicated');
+}
+function srtFirst() {
+  if (!sorter) return;
+  var pick = srtSelected(), rest = [], i;
+  if (!pick.length) return;
+  for (i = 0; i < sorter.order.length; i++) if (!sorter.sel[sorter.order[i].k]) rest.push(sorter.order[i]);
+  sorter.order = pick.concat(rest);
+  srtLayout();
+  byId('sortGrid').scrollTop = 0;
+}
+function srtDelete() {
+  if (!sorter) return;
+  var pick = srtSelected(), keep = [], i;
+  if (!pick.length) return;
+  if (pick.length === sorter.order.length) { toast('A note keeps at least one page'); return; }
+  for (i = 0; i < sorter.order.length; i++) if (!sorter.sel[sorter.order[i].k]) keep.push(sorter.order[i]);
+  sorter.order = keep;
+  sorter.sel = {};
+  srtLayout();
+  toast(pick.length === 1 ? 'Page deleted - Cancel brings it back' : pick.length + ' pages deleted - Cancel brings them back');
+}
+function srtDone() {
+  if (!sorter) return;
+  var order = [], same = sorter.order.length === sorter.total, cur = sorter.cur, i;
+  for (i = 0; i < sorter.order.length; i++) {
+    order.push(sorter.order[i].src);
+    if (sorter.order[i].src !== i) same = false;
+  }
+  closeSorter();
+  if (same) return;
+  applyPageOrder(order);
+  var at = order.indexOf(cur);
+  goToPage(at >= 0 ? at + 1 : 1);
+  toast('Pages sorted - Undo puts them back');
+}
+
+/* Put the note's pages in a new order: order[j] is the page (as the note
+ * stands now) that becomes page j. A page named twice is copied, a page
+ * not named is dropped. A page is a band of the roll, so this is marks
+ * sliding from one band to another - one undo step, like every other
+ * page edit here. */
+function applyPageOrder(order) {
+  var n = activeNote();
+  if (!n) return;
+  var h = horiz(), span = pageSpan(), total = pageCount(), byPage = [], i, j, s, bb, p, d;
+  for (p = 0; p < total; p++) byPage.push([]);
+  for (i = 0; i < n.strokes.length; i++) {
+    s = n.strokes[i];
+    bb = strokeBBox(s);
+    p = lim(Math.floor((h ? (bb.x0 + bb.x1) : (bb.y0 + bb.y1)) / 2 / span), 0, total - 1);
+    byPage[p].push(s);
+  }
+  var moves = [], added = [], removed = [], seen = {}, tpl = [];
+  for (j = 0; j < order.length; j++) {
+    p = order[j];
+    d = (j - p) * span;
+    /* copies go down in the order the originals were written, so a PDF page
+       under the ink stays under it */
+    byPage[p].sort(function (a, b) { return a.ord - b.ord; });
+    for (i = 0; i < byPage[p].length; i++) {
+      s = byPage[p][i];
+      if (seen[p]) added.push(cloneStroke(s, h ? d : 0, h ? 0 : d));
+      else if (d) moves.push({ s: s, d: d });
+    }
+    seen[p] = 1;
+    tpl.push(n.tpl && n.tpl[p] !== undefined ? n.tpl[p] : null);
+  }
+  for (p = 0; p < total; p++) if (!seen[p]) removed = removed.concat(byPage[p]);
+  var op = { t: 'pages', h: h, moves: moves, added: added, removed: removed,
+             tplFrom: n.tpl ? n.tpl.slice() : null, tplTo: n.tpl ? tpl : null,
+             minFrom: n.minPages || 0, minTo: order.length };
+  applyOp(op, false);
+  pushUndo(op);
+  saveSoon();
 }
 
 /* ---------- tidy writing ----------
@@ -6158,6 +6532,23 @@ function applyOp(op, reverse) {
     requestRender();
   } else if (op.t === 'tidy') {
     tidyApply(op.items, reverse);
+  } else if (op.t === 'pages') {
+    /* the page sorter's new order: marks slid to other pages, copies laid
+       down, dropped pages taken away - and all of it back again */
+    var gone = {}, keepS = [], pd, out = reverse ? op.added : op.removed, back = reverse ? op.removed : op.added;
+    for (i = 0; i < op.moves.length; i++) {
+      pd = reverse ? -op.moves[i].d : op.moves[i].d;
+      shiftStroke(op.moves[i].s, op.h ? pd : 0, op.h ? 0 : pd);
+    }
+    for (i = 0; i < out.length; i++) gone[out[i].id] = 1;
+    for (i = 0; i < n.strokes.length; i++) if (!gone[n.strokes[i].id]) keepS.push(n.strokes[i]);
+    n.strokes = keepS.concat(back);
+    var tp = reverse ? op.tplFrom : op.tplTo;
+    n.tpl = tp ? tp.slice() : null;
+    n.minPages = reverse ? op.minFrom : op.minTo;
+    invalidateAll();
+    recomputeDoc();
+    requestRender();
   } else if (op.t === 'kid') {
     /* a stroke written on a sticky */
     var ki = op.st.kids.indexOf(op.s);
@@ -8987,7 +9378,7 @@ function cloneStroke(s, dx, dy) {
   for (j = 0; j < s.pts.length; j++) pts.push([s.pts[j][0] + dx, s.pts[j][1] + dy, s.pts[j][2]]);
   var c = { id: genId(), pen: s.pen, w: s.w, color: s.color, a: s.a, ord: strokeSeq++, pts: pts };
   if (s.pen === PEN_TEXT) { c.txt = s.txt; c.sz = s.sz; c.tw = s.tw; c.th = s.th; }
-  if (s.pen === PEN_IMG) { c.src = s.src; c.iw = s.iw; c.ih = s.ih; }
+  if (s.pen === PEN_IMG) { c.src = s.src; c.iw = s.iw; c.ih = s.ih; if (s.bg) c.bg = 1; }
   if (s.pen === PEN_STICKY) {
     c.iw = s.iw; c.ih = s.ih; c.fold = s.fold; c.kids = [];
     for (j = 0; j < s.kids.length; j++) c.kids.push(cloneStroke(s.kids[j], 0, 0));
@@ -11177,6 +11568,9 @@ window.__mnPen = function () {
 window.__mnSave = function () { saveTick(); };
 window.__mnRec = function () { return noteRecord(activeNote()); };
 window.__mnUnpackRec = unpackRec;
+/* the sorter's hold, without the wait - a test cannot sit through 360ms of real time */
+window.__mnSorted = function () { var o = [], i; for (i = 0; sorter && i < sorter.order.length; i++) o.push(sorter.order[i].src); return o; };
+window.__mnSortLift = function () { if (sorter && sorter.drag) { clearTimeout(sorter.drag.timer); srtLift(sorter.drag); } };
 window.__mnPack = { pack: packPts, unpack: unpackPts, report: storageReport, quota: QUOTA_CHARS,
                     ok: function () { return storageOk; }, full: function () { return saveFull; } };
 window.__mnPages = function () {
@@ -14293,6 +14687,8 @@ var SET_SECTIONS = [
     { lbl: 'Pages', hint: 'Jump to a page by its thumbnail', leave: true,
       show: function () { return !isEndless(); },
       v: function () { return currentPage() + ' / ' + pageCount(); }, act: openPageMenu },
+    { lbl: 'Sort pages', hint: 'Drag pages into order, duplicate or delete them', edit: true, leave: true,
+      show: function () { return !isEndless(); }, act: openSorter },
     { lbl: 'Page type', hint: 'Separate pages or one endless sheet', edit: true,
       v: function () { return isEndless() ? 'Infinite' : 'Pages'; },
       act: function () {
@@ -14828,6 +15224,16 @@ redoBtn.addEventListener('click', doRedo);
 byId('readChip').addEventListener('click', function () { setReading(false); });
 byId('stripTab').addEventListener('click', function () { setStrip(!stripOn); });
 byId('stripClose').addEventListener('click', function () { setStrip(false); });
+byId('stripSort').addEventListener('click', openSorter);
+byId('pagesSortBtn').addEventListener('click', openSorter);
+byId('sortCancel').addEventListener('click', function () { closeSorter(); });
+byId('sortDone').addEventListener('click', srtDone);
+byId('sortDup').addEventListener('click', srtDuplicate);
+byId('sortFirst').addEventListener('click', srtFirst);
+byId('sortDel').addEventListener('click', srtDelete);
+byId('sortGrid').addEventListener('touchmove', srtMove, false);
+byId('sortGrid').addEventListener('touchend', srtUp, false);
+byId('sortGrid').addEventListener('touchcancel', srtCancelDrag, false);
 byId('exportCloseBtn').addEventListener('click', function () { exportOverlay.className = 'overlay'; });
 byId('traceCloseBtn').addEventListener('click', function () { traceOverlay.className = 'overlay'; });
 byId('pagesCloseBtn').addEventListener('click', function () {

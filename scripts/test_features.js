@@ -2133,6 +2133,82 @@ var snD = sn.strokes();
 check('Duplicate copies the sticky with its writing', snD.length === 2 && snD[1].kids.length === 1 && snD[1].id !== snD[0].id,
       snD.length + ' cards');
 
+/* ---------- sort pages ---------- */
+/* three pages, each with one mark at a known height and its own template */
+function srtApp() {
+  function mark(id, y) { return { id: id, pen: 0, w: 3, color: '#000000', a: 1, ord: +id.slice(1),
+    pts: [[200, y, 0], [260, y + 5, 16], [320, y, 32]] }; }
+  var a = H.load({ quiet: true, dpr: 2, viewW: 1024, viewH: 712,
+    seed: { mathnotes_v4: JSON.stringify({ v: 4,
+      notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
+      notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, minPages: 3, tpl: [2, null, 3],
+        strokes: [mark('s1', 100), mark('s2', 1020 + 100), mark('s3', 2040 + 100)] } },
+      cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
+  a.flushFrames();
+  return a;
+}
+/* which page each mark is on now, by its id */
+function srtPages(a) {
+  var out = {};
+  a.strokes().forEach(function (s) { out[s.id] = Math.floor(s.pts[0][1] / 1020) + 1; });
+  return out;
+}
+function srtCells(a) { return a.els.sortGrid.children.filter(function (c) { return c._num; }); }
+/* where slot i sits: six across at 152px, 167px down, from (56, 14) */
+function srtAt(i) { return { x: 56 + (i % 6) * 152 + 60, y: 14 + Math.floor(i / 6) * 167 + 60 }; }
+
+var so = srtApp();
+so.els.stripSort._fire('click', {});
+check('Sort opens a grid with a thumbnail for every page', so.els.sortOverlay.className === 'on' && srtCells(so).length === 3,
+      so.els.sortOverlay.className + ', ' + srtCells(so).length + ' cells');
+var so3 = srtCells(so)[2], sp0 = srtAt(2), sp1 = srtAt(0);
+so3._fire('touchstart', { touches: [{ clientX: sp0.x, clientY: sp0.y }] });
+so.win.__mnSortLift();
+so.els.sortGrid._fire('touchmove', { touches: [{ clientX: sp1.x, clientY: sp1.y }], preventDefault: function () {} });
+so.els.sortGrid._fire('touchend', { touches: [], cancelable: true, preventDefault: function () {} });
+check('holding page 3 and dragging it to the front puts it first',
+      so3._num.textContent === '1' && so.win.__mnSorted().join(',') === '2,0,1',
+      so.win.__mnSorted().join(','));
+so.els.sortDone._fire('click', {});
+so.flushFrames();
+var soP = srtPages(so);
+check('Done moves the writing with its page: 3 is now 1, 1 is 2, 2 is 3',
+      soP.s3 === 1 && soP.s1 === 2 && soP.s2 === 3, JSON.stringify(soP));
+check('...and each page takes its template with it', JSON.stringify(so.note('n1').tpl) === '[3,2,null]',
+      JSON.stringify(so.note('n1').tpl));
+so.undo();
+soP = srtPages(so);
+check('one Undo puts the pages back in their old order', soP.s1 === 1 && soP.s2 === 2 && soP.s3 === 3, JSON.stringify(soP));
+
+var sd = srtApp();
+sd.els.stripSort._fire('click', {});
+srtCells(sd)[0]._fire('click', {});
+sd.els.sortDup._fire('click', {});
+sd.els.sortDone._fire('click', {});
+sd.flushFrames();
+var sdS = sd.strokes();
+check('Duplicate adds a copy of the page right after it', sd.pages().total === 4 && sdS.length === 4 &&
+      sdS.filter(function (s) { return Math.floor(s.pts[0][1] / 1020) === 1; }).length === 1 && srtPages(sd).s2 === 3,
+      sd.pages().total + ' pages, ' + sdS.length + ' marks, ' + JSON.stringify(srtPages(sd)));
+
+var sx2 = srtApp();
+sx2.els.stripSort._fire('click', {});
+srtCells(sx2)[1]._fire('click', {});
+sx2.els.sortDel._fire('click', {});
+sx2.els.sortDone._fire('click', {});
+sx2.flushFrames();
+var sxP = srtPages(sx2);
+check('Delete drops the page and its writing, and the pages after it move up',
+      sx2.pages().total === 2 && !sxP.s2 && sxP.s1 === 1 && sxP.s3 === 2, sx2.pages().total + ' pages, ' + JSON.stringify(sxP));
+
+var sc2 = srtApp();
+sc2.els.stripSort._fire('click', {});
+srtCells(sc2)[0]._fire('click', {});
+sc2.els.sortDel._fire('click', {});
+sc2.els.sortCancel._fire('click', {});
+check('Cancel leaves the note exactly as it was', sc2.pages().total === 3 && sc2.strokes().length === 3,
+      sc2.pages().total + ' pages');
+
 /* ---------- pages side by side, and two to a screen ---------- */
 /* a page is 1024 across with a 44px gutter between neighbours (the view
    is 768 wide, so the page takes the 1024 floor rather than the screen) */
