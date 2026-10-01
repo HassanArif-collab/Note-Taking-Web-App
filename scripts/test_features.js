@@ -2964,6 +2964,76 @@ var nxm = (nxn * sxy - sx * sy) / (nxn * sxx - sx * sx), nxc = (sy - nxm * sx) /
 nxP.forEach(function (q) { nxMax = Math.max(nxMax, Math.abs(q[1] - (nxm * q[0] + nxc))); });
 check('"x2 + y2 = z2" moves as one piece: no 2 is lifted away from its letter', nxMax < 4, 'strokes shifted apart by up to ' + nxMax.toFixed(1) + 'px');
 
+/* ---------- maths answers: working, keeping, fixing ---------- */
+function stepsOf(str) {
+  var t = [], i, up = false;
+  for (i = 0; i < str.length; i++) { if (str[i] === '^') { up = true; continue; } t.push({ c: str[i], sup: up }); }
+  return (ma.win.__mnMath.steps(t) || []).join(' | ');
+}
+check('the working goes the way it is done on paper: brackets first, then times, then plus',
+      stepsOf('(3+5)x12') === '8 × 12 | 96' && stepsOf('2+3x4') === '2 + 12 | 14',
+      stepsOf('(3+5)x12') + ' / ' + stepsOf('2+3x4'));
+check('...powers are worked out together, and written raised', stepsOf('5^2') === '25' &&
+      stepsOf('2+3^2') === '2 + 9 | 11', stepsOf('5^2') + ' / ' + stepsOf('2+3^2'));
+
+var mk = scApp();
+onePlusOne(mk);
+var mkA = mk.win.__mnMath.now();
+check('the answer stays on the page with Keep, Fix and close under it', mkA && mkA.txt === '2' && mk.els.mathBar.className === 'on' &&
+      mk.els.mathKeepW.style.display === 'none', mk.els.mathBar.className);
+mk.tick(9000);
+mk.flushFrames();
+check('...and is still there long after - it no longer fades on a timer', !!mk.win.__mnMath.ans());
+mk.els.mathKeepA._fire('click', {});
+mk.flushFrames();
+var mkT = mk.strokes().filter(function (s) { return s.pen === 5; });
+check('Keep writes the answer into the note, in a handwriting face, after the =',
+      mkT.length === 1 && mkT[0].txt === '2' && mkT[0].font === 'hand' && mkT[0].pts[0][0] > 450 &&
+      mk.els.mathBar.className === '', JSON.stringify(mkT.map(function (s) { return [s.txt, s.font, Math.round(s.pts[0][0])]; })));
+mk.undo();
+check('...and one undo takes it off again', mk.strokes().filter(function (s) { return s.pen === 5; }).length === 0);
+
+var mw2 = fresh();
+/* 2 squared + 2 squared = : two steps of working */
+mw2.loadInk(mLine([{ s: mB[1], gap: 3 }, { s: mB[1], k: 0.55, up: 22, gap: 16 }, { s: mA[2], gap: 16 },
+                   { s: mB[1], gap: 3 }, { s: mB[1], k: 0.55, up: 22, gap: 18 }, { s: mA[5] }]));
+var mwA2 = mw2.win.__mnMath.now();
+check('a sum with working offers Keep answer and Keep working', mwA2 && mwA2.txt === '8' && mwA2.steps.join(' | ') === '4 + 4 | 8' &&
+      mw2.els.mathKeepA.textContent === 'Keep answer' && mw2.els.mathKeepW.style.display === '',
+      mwA2 ? mwA2.steps.join(' | ') : 'no answer');
+mw2.els.mathKeepW._fire('click', {});
+mw2.flushFrames();
+var mwT = mw2.strokes().filter(function (s) { return s.pen === 5; }).sort(function (a, b) { return a.pts[0][1] - b.pts[0][1]; });
+check('...Keep working writes every step, each = under the first',
+      mwT.length === 2 && mwT[0].txt === '4 + 4' && mwT[1].txt === '= 8' && mwT[1].pts[0][1] > mwT[0].pts[0][1] + 20,
+      JSON.stringify(mwT.map(function (s) { return s.txt; })));
+
+/* Fix: tap the 2 of "10 + 2", say it is a 3 - the answer changes and the 2 is remembered as a 3 */
+var mfx = fresh();
+mfx.win.__mnMath.mine([]);
+var mfxInk = mLine([{ s: mA[6], gap: 6 }, { s: mA[7], gap: 18 }, { s: mA[2], gap: 18 }, { s: mA[4], gap: 18 }, { s: mA[5] }]);
+mfx.loadInk(JSON.parse(JSON.stringify(mfxInk)));
+mfx.win.__mnMath.now();
+mfx.els.mathFixBtn._fire('click', {});
+var mfxChips = mfx.els.mathFixRead.children;
+check('Fix shows what was read, symbol by symbol', mfx.els.mathFix.className === 'on' &&
+      mfxChips.map(function (c) { return c.textContent; }).join('') === '10+2', mfxChips.map(function (c) { return c.textContent; }).join(''));
+mfxChips[3]._fire('click', {});
+var mfxKeys = mfx.els.mathFixKeys.children.filter(function (k) { return k._lbl === 'key 3'; });
+mfxKeys[0]._fire('click', {});
+check('...picking the right symbol reads the sum again', mfx.win.__mnMath.ans() && mfx.win.__mnMath.ans().txt === '13',
+      JSON.stringify(mfx.win.__mnMath.ans() && mfx.win.__mnMath.ans().txt));
+mfx.loadInk(JSON.parse(JSON.stringify(mfxInk)));
+var mfxB = mfx.win.__mnMath.now();
+check('...and remembers it: the same shape is read the user\'s way from then on', mfxB && mfxB.txt === '13',
+      JSON.stringify(mfxB && mfxB.txt));
+
+var mgo = scApp();
+onePlusOne(mgo);
+mgo.win.__mnMath.now();
+scPath(mgo, 9, scWord(150, 600));
+check('writing somewhere else puts the answer away', !mgo.win.__mnMath.ans() && mgo.els.mathBar.className === '');
+
 /* ---------- the maths session, and sending notes to the PC ---------- */
 var msn = fresh();
 msn.ref().start(msn.ref().maths);

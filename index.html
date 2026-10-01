@@ -616,6 +616,44 @@ body.dark .cv-tile.on { box-shadow: 0 0 0 2px #232326, 0 0 0 4px #4DA3FF; }
   box-shadow: 0 8px 24px rgba(0,0,0,0.25);
 }
 #mathTeach.on { display: -webkit-flex; display: flex; }
+/* the bar under a maths answer */
+#mathBar {
+  position: absolute; z-index: 26; display: none; height: 40px; padding: 0 3px; border-radius: 20px;
+  background: rgba(255,255,255,0.98); box-shadow: 0 6px 20px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.05);
+  -webkit-align-items: center; align-items: center; white-space: nowrap;
+  -webkit-animation: mbIn 0.22s cubic-bezier(0.16, 1, 0.3, 1); animation: mbIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#mathBar.on { display: -webkit-flex; display: flex; }
+@-webkit-keyframes mbIn { from { opacity: 0; -webkit-transform: translateY(-6px); } to { opacity: 1; -webkit-transform: none; } }
+@keyframes mbIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+#mathBar button { height: 34px; padding: 0 13px; border-radius: 17px; font-size: 14px; font-weight: 600; color: #1A73E8; }
+#mathBar button:active { background: #EAF2FD; }
+#mathCloseBtn { color: #8B939B !important; padding: 0 11px !important; }
+/* fixing a misread symbol: what was read, and what it really is */
+#mathFix {
+  position: absolute; z-index: 27; display: none; max-width: 320px; padding: 10px 12px 12px 12px; border-radius: 16px;
+  background: #FFFFFF; box-shadow: 0 12px 34px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.05);
+}
+#mathFix.on { display: block; }
+#mathFixHint { font-size: 12.5px; font-weight: 600; color: #8B939B; margin: 0 0 8px 2px; }
+#mathFixRead:after, #mathFixKeys:after { content: ''; display: block; clear: both; }
+.mf-chip {
+  float: left; min-width: 34px; height: 38px; margin: 0 5px 5px 0; padding: 0 8px; border-radius: 10px;
+  background: #F2F4F7; font-size: 20px; font-weight: 600; color: #16181A;
+}
+.mf-chip.sup { font-size: 14px; }
+.mf-chip.on { background: #1A73E8; color: #FFFFFF; }
+.mf-chip[disabled] { opacity: 0.45; }
+#mathFixKeys { display: none; margin-top: 8px; padding-top: 8px; border-top: 1px solid #ECEFF2; }
+#mathFixKeys.on { display: block; }
+.mf-key {
+  float: left; width: 38px; height: 38px; margin: 0 5px 5px 0; border-radius: 10px;
+  background: #EAF2FD; font-size: 18px; font-weight: 600; color: #1A73E8;
+}
+.mf-key:active { background: #1A73E8; color: #FFFFFF; }
+body.dark #mathBar, body.dark #mathFix { background: #232326; }
+body.dark .mf-chip { background: #2C2C30; color: #EDEDEF; }
+body.dark .mf-key { background: #1E2A3A; color: #6FB1FF; }
 #mathTeachMsg { overflow: hidden; text-overflow: ellipsis; }
 #mathTeach button { height: 34px; padding: 0 14px; margin-left: 8px; border-radius: 17px; font-size: 14px; font-weight: 700; color: #C9CDD2; }
 #mathTeachDone { background: #0381FE; color: #FFFFFF !important; }
@@ -2103,6 +2141,9 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
 <!-- ============ A NEWER VERSION IS READY ============ -->
 <!-- Teach my handwriting: what to write, and Done when it is written -->
 <div id="mathTeach"><span id="mathTeachMsg"></span><button id="mathTeachCancel">Cancel</button><button id="mathTeachDone">Done</button></div>
+<!-- under a maths answer: keep it, keep the working, fix a misread symbol, or put it away -->
+<div id="mathBar"><button id="mathKeepA">Keep</button><button id="mathKeepW">Keep working</button><button id="mathFixBtn">Fix</button><button id="mathCloseBtn" aria-label="Put the answer away">&#10005;</button></div>
+<div id="mathFix"><div id="mathFixHint"></div><div id="mathFixRead"></div><div id="mathFixKeys"></div></div>
 <div id="updBar"><span>A new version is ready</span><button id="updGo">Restart</button><button id="updLater">Later</button></div>
 
 <!-- ============ PDF: choose the pages to bring in ============ -->
@@ -3635,6 +3676,7 @@ function serializeNote(n) {
       rec.sz = s.sz || 24;
       rec.tw = s.tw || 100;
       rec.th = s.th || s.sz || 24;
+      if (s.font) rec.font = s.font;
     }
     if (s.pen === PEN_IMG) { rec.src = s.src; rec.iw = s.iw; rec.ih = s.ih; if (s.bg) rec.bg = 1; }
     if (s.pen === PEN_STICKY) {
@@ -3894,16 +3936,18 @@ function mkStroke(pen, w, color, pts) {
 }
 
 /* ---------- text objects (T tool) ---------- */
-function mkTextStroke(x, y, sz, color, txt) {
+function textFace(s) { return s.font === 'hand' ? 'Noteworthy, "Marker Felt", "Comic Sans MS", cursive' : 'Helvetica, Arial, sans-serif'; }
+function mkTextStroke(x, y, sz, color, txt, font) {
   var s = { id: genId(), pen: PEN_TEXT, w: 1, color: color, a: 1,
             pts: [[x, y, Date.now()]], txt: txt, sz: sz, ord: strokeSeq++ };
+  if (font) s.font = font;
   measureTextStroke(s);
   return s;
 }
 function measureTextStroke(s) {
   if (!ctx) { s.tw = 100; s.th = s.sz * 1.32; return; }
   var lines = String(s.txt || '').split('\n');
-  ctx.font = s.sz + 'px Helvetica, Arial, sans-serif';
+  ctx.font = s.sz + 'px ' + textFace(s);
   var w = 0, i;
   for (i = 0; i < lines.length; i++) {
     var m = ctx.measureText(lines[i]);
@@ -3915,7 +3959,7 @@ function measureTextStroke(s) {
 function renderTextStroke(c, s) {
   var p = s.pts[0];
   var lines = String(s.txt || '').split('\n');
-  c.font = s.sz + 'px Helvetica, Arial, sans-serif';
+  c.font = s.sz + 'px ' + textFace(s);
   c.textBaseline = 'top';
   c.fillStyle = s.color;
   for (var i = 0; i < lines.length; i++) {
@@ -8474,7 +8518,7 @@ function commitInk(st, s, now) {
     if (st.unsure) { handRecent.push({ s: s, y: handZone.y, t: now, id: st.id }); if (handRecent.length > 6) handRecent.shift(); }
   }
   pushUndo({ t: 'add', s: s });
-  mathSoon();                       /* was that the = at the end of a sum? */
+  mathSoon(s);                      /* was that the = at the end of a sum? */
   var bb = strokeBBox(s);
   if (!paintStrokeIntoTiles(s)) invalidateRange(bb.y0, bb.y1);
   growDocFor(s);
@@ -8540,6 +8584,7 @@ function flushDot(q) {
   if (stickyTake(n, s)) { saveSoon(); return; }
   n.strokes.push(s);
   pushUndo({ t: 'add', s: s });
+  mathSoon(s);                      /* a decimal point, or a dot away from an answer */
   var bb = strokeBBox(s);
   invalidateRange(bb.y0, bb.y1);
   recomputeDoc();
@@ -9751,7 +9796,7 @@ function cloneStroke(s, dx, dy) {
   var pts = [], j;
   for (j = 0; j < s.pts.length; j++) pts.push([s.pts[j][0] + dx, s.pts[j][1] + dy, s.pts[j][2]]);
   var c = { id: genId(), pen: s.pen, w: s.w, color: s.color, a: s.a, ord: strokeSeq++, pts: pts };
-  if (s.pen === PEN_TEXT) { c.txt = s.txt; c.sz = s.sz; c.tw = s.tw; c.th = s.th; }
+  if (s.pen === PEN_TEXT) { c.txt = s.txt; c.sz = s.sz; c.tw = s.tw; c.th = s.th; if (s.font) c.font = s.font; }
   if (s.pen === PEN_IMG) { c.src = s.src; c.iw = s.iw; c.ih = s.ih; if (s.bg) c.bg = 1; }
   if (s.pen === PEN_STICKY) {
     c.iw = s.iw; c.ih = s.ih; c.fold = s.fold; c.kids = [];
@@ -10786,7 +10831,7 @@ function resetTouchTracking() {
   hidePendingDot();
   clearSelection();
   closeTextEditor();
-  mathAns = null;
+  if (mathAns) mathHide();
   if (mathTeach) mathTeachEnd();
 }
 
@@ -10810,66 +10855,31 @@ function resetTouchTracking() {
  * Letters (a, y, z) are matched too, so algebra is recognised as algebra
  * and left alone rather than answered wrongly.
  * ============================================================ */
+/* letters only - digits and signs are the network's. They are here so that
+   algebra is seen for what it is and left unanswered. X is the letter x,
+   written joined up in one stroke; a times sign is two. */
 var MATH_TPL = [
-  ['0', [[28,0,10,8,3,26,0,45,2,64,8,83,21,97,39,98,51,83,55,64,56,45,53,26,44,9,28,0]]],
-  ['1', [[0,20,6,13,13,5,18,2,18,12,18,22,18,31,18,41,18,51,18,60,18,70,18,80,18,89,18,99]]],
-  ['2', [[3,22,12,7,28,1,45,5,54,19,51,35,42,50,31,63,18,76,7,89,5,99,22,99,40,99,57,99]]],
-  ['3', [[3,12,18,2,35,1,49,11,50,27,39,40,23,47,39,51,54,61,57,78,47,93,30,98,13,96,0,85]]],
-  ['4', [[38,0,33,9,28,19,24,28,19,38,13,47,8,55,2,64,7,67,17,67,28,67,38,67,49,67,59,67],[43,30,43,40,43,50,43,59,43,69,43,79,43,89,43,99]]],
-  ['5', [[8,0,7,15,5,30,5,44,19,38,34,38,47,44,55,56,57,71,51,85,40,94,26,98,11,95,0,85],[8,0,20,0,32,0,44,0,55,0]]],
-  ['6', [[48,2,29,1,14,14,6,32,2,50,1,69,8,87,22,99,41,98,55,85,55,66,41,53,21,54,6,65]]],
-  ['7', [[0,0,12,0,25,0,37,0,50,0,55,5,50,16,45,27,40,39,37,51,33,63,30,75,27,87,24,99]]],
-  ['8', [[48,12,30,0,9,8,6,29,24,43,44,55,54,76,42,94,19,97,3,84,7,63,24,47,43,33,48,12]]],
-  ['9', [[51,18,40,4,23,0,8,8,1,23,7,38,22,44,38,39,51,27,51,28,51,46,50,63,49,81,48,99]]],
-  ['1', [[2,20,8,13,15,5,20,2,20,12,20,22,20,31,20,41,20,51,20,60,20,70,20,80,20,89,20,99],[0,99,13,99,26,99,40,99]]],
-  ['3', [[2,0,19,0,37,0,53,0,43,14,33,28,31,39,47,46,57,60,55,77,45,91,31,99,14,97,0,87]]],
-  ['4', [[45,99,45,80,45,62,45,43,45,25,45,6,38,10,28,26,17,41,7,57,6,67,24,67,43,67,61,67]]],
-  ['4', [[4,0,3,10,3,20,2,30,1,40,0,50,5,54,15,54,25,54,35,54,45,54,55,54],[44,0,44,10,44,20,44,30,44,40,44,50,44,59,44,69,44,79,44,89,44,99]]],
-  ['5', [[55,0,37,0,18,0,7,9,5,28,6,44,23,38,41,40,54,53,57,71,50,89,33,97,15,96,0,85]]],
-  ['7', [[0,0,12,0,25,0,37,0,50,0,55,5,50,16,45,27,40,39,37,51,33,63,30,75,27,87,24,99],[18,50,30,50,42,50,53,50]]],
-  ['9', [[51,18,39,3,22,0,6,9,1,25,8,40,25,43,41,37,51,22,50,32,49,51,43,68,36,85,24,99]]],
-  ['x', [[0,0,8,8,15,15,23,23,30,30,38,38,46,46,53,53,61,61,69,69,76,76,84,84,91,91,99,99],[99,0,91,8,84,15,76,23,69,30,61,38,53,46,46,53,38,61,30,69,23,76,15,84,8,91,0,99]]],
-  ['+', [[0,50,10,50,20,50,30,50,40,50,50,50,59,50,69,50,79,50,89,50,99,50],[50,0,50,10,50,20,50,30,50,40,50,50,50,59,50,69,50,79,50,89,50,99]]],
-  ['(', [[32,0,24,7,17,14,10,21,6,30,3,40,0,50,3,59,6,69,10,78,17,85,24,92,32,99]]],
-  [')', [[0,0,7,7,15,14,22,21,25,30,28,40,32,50,28,59,25,69,22,78,15,85,7,92,0,99]]],
-  ['x', [[0,14,24,1,39,17,38,45,24,69,17,74,36,54,58,36,78,17,75,20,63,46,57,73,71,92,99,91]]],
-  ['2', [[15,9,32,1,44,12,45,31,43,50,40,68,33,85,17,95,1,95,12,82,30,78,49,78,68,82,87,83]]],
-  ['+', [[38,0,35,10,32,19,29,29,27,39,25,49,24,60,22,70,22,80,20,90,16,99],[0,38,11,41,22,42,34,42,45,43,56,43]]],
+  ['X', [[0,14,24,1,39,17,38,45,24,69,17,74,36,54,58,36,78,17,75,20,63,46,57,73,71,92,99,91]]],
   ['y', [[32,0,31,20,47,26,58,10,52,12,44,29,38,48,33,67,26,86,11,98,0,88,4,69,18,55,32,41]]],
-  ['2', [[8,30,18,14,33,2,45,11,48,30,49,49,46,68,37,85,22,97,3,99,8,83,25,75,41,83,60,86]]],
   ['z', [[24,5,46,2,67,0,72,9,56,23,41,38,25,52,9,66,1,86,13,97,34,99,56,98,77,95,98,94]]],
-  ['2', [[0,24,9,9,24,0,37,8,41,25,40,42,36,59,28,75,18,89,5,98,11,83,27,83,44,88,61,91]]],
-  ['x', [[0,16,22,27,24,54,17,80,7,95,21,71,35,48,52,27,70,7,71,11,56,34,47,59,58,77,84,82]]],
-  ['2', [[5,17,18,5,35,2,42,18,41,36,37,53,28,69,16,82,4,96,4,87,17,74,34,72,51,75,66,85]]],
-  ['+', [[54,0,49,9,45,17,42,26,40,35,38,45,37,54,35,64,33,73,30,82,26,90,22,99],[0,50,9,48,19,47,29,46,39,46,49,45,59,43]]],
+  ['X', [[0,16,22,27,24,54,17,80,7,95,21,71,35,48,52,27,70,7,71,11,56,34,47,59,58,77,84,82]]],
   ['y', [[32,0,37,17,52,7,52,25,48,43,43,62,35,79,23,93,6,98,2,81,7,62,18,48,32,36,50,28]]],
-  ['2', [[16,14,31,3,48,5,54,23,53,41,46,58,34,72,21,86,7,98,9,90,25,82,44,77,62,76,81,81]]],
   ['z', [[14,17,21,3,39,0,53,7,46,24,34,37,20,50,7,62,7,74,25,72,44,70,62,67,80,64,99,64]]],
-  ['2', [[15,7,34,2,47,8,50,28,44,46,34,63,20,77,4,89,7,75,24,66,43,59,63,59,81,66,99,75]]],
   ['a', [[49,0,28,3,12,15,3,33,0,53,16,63,35,60,47,43,53,24,53,21,53,42,60,60,78,67,99,68]]],
-  ['1', [[23,0,18,9,15,19,13,29,11,39,10,49,9,59,7,70,6,80,4,90,0,99]]],
-  ['+', [[48,0,45,9,41,17,37,26,34,35,31,44,29,53,26,62,23,71,18,78,13,86,7,94,4,96],[0,45,12,45,23,45,35,45,46,42,57,41]]],
   ['a', [[47,0,25,7,10,23,2,45,0,68,18,75,37,63,53,46,61,25,52,19,51,42,55,64,76,70,99,71]]],
-  ['1', [[22,0,22,10,22,20,22,30,21,40,19,49,18,59,16,69,12,78,7,86,2,95,2,94]]],
-  ['0', [[44,5,26,17,13,33,8,54,0,74,5,93,25,98,44,92,61,78,68,59,72,38,73,17,64,1,43,2]]],
   ['a', [[0,34,17,25,33,14,48,2,56,13,52,32,36,42,31,27,42,13,56,18,58,38,74,46,89,34,98,19]]],
-  ['1', [[18,12,23,3,22,5,19,15,17,24,15,33,13,43,10,52,8,61,5,71,3,80,1,89,0,99]]],
-  ['+', [[32,0,30,10,27,19,25,29,24,39,23,49,21,59,20,69,20,79],[0,48,10,45,19,43,29,40,39,39,49,38,59,37,69,37,79,36,89,36,99,36]]],
-  ['a', [[0,48,19,33,38,19,58,6,67,13,62,36,47,55,29,62,30,39,44,19,64,8,70,29,75,50,99,49]]],
-  ['1', [[17,0,15,10,13,20,11,30,8,39,6,49,4,59,1,69,0,79,0,89,0,99]]],
-  ['0', [[54,0,35,12,19,25,7,43,0,63,3,82,23,90,45,91,65,84,83,73,95,55,99,34,99,13,78,9]]]
+  ['a', [[0,48,19,33,38,19,58,6,67,13,62,36,47,55,29,62,30,39,44,19,64,8,70,29,75,50,99,49]]]
 ];
 
 var MATH_N = 32;            /* points a symbol is resampled to for $P */
 var MATH_WAIT = 650;        /* the pause after the "=" before the sum is read */
-var MATH_SHOW = 6000;       /* how long the answer stays */
-var MATH_FADE = 700;        /* ...and how long it takes to go */
 var MATH_TOL = 2.4;         /* a $P distance past which a mark is not one this knows.
                                The user's own symbols, from traces the templates were not
                                made from, matched at 1.6 at worst and the misreads sat at
                                0.9-1.7 - so this only turns away marks like nothing known */
 var GLYPH_KEY = 'mathnotes_glyphs';
-var mathAns = null, mathTimer = null, mathSeen = {}, mathClouds = null, mathFadeT = null;
+var mathAns = null, mathTimer = null, mathSeen = {}, mathClouds = null;
+var mathDbg = '';           /* why the last reading stopped where it did - for Copy report */
 
 /* ---- symbols ---- */
 function mathSymbols(list) {
@@ -10898,6 +10908,105 @@ function mathSymbols(list) {
   syms.sort(function (p, r) { return p.x0 - r.x0; });
   return syms;
 }
+/* Do two strokes touch or cross? The bar of a 7 crosses its stem, the
+   bar of a + crosses the other bar, the flag of a 5 touches its stem - but
+   on the user's iPad the 7's bar also sticks out past the 7, so "shares
+   half its width" missed it and read a 7 as "7 -". Touching is the
+   question that is actually being asked. */
+function mathSegX(a, b, c, d) {
+  function side(p, q, r) { return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]); }
+  var d1 = side(c, d, a), d2 = side(c, d, b), d3 = side(a, b, c), d4 = side(a, b, d);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+function mathTouch(a, b, tol) {
+  var A = a.pts, B = b.pts, ba = inkBox([a]), bb = inkBox([b]), i, j;
+  if (ba.x1 + tol < bb.x0 || bb.x1 + tol < ba.x0 || ba.y1 + tol < bb.y0 || bb.y1 + tol < ba.y0) return false;
+  for (i = 0; i < A.length; i++) {
+    if (B.length === 1 && dist(A[i][0], A[i][1], B[0][0], B[0][1]) <= tol) return true;
+    for (j = 1; j < B.length; j++) {
+      if (segDist(A[i][0], A[i][1], B[j - 1][0], B[j - 1][1], B[j][0], B[j][1]) <= tol) return true;
+    }
+  }
+  for (j = 0; j < B.length; j++) {
+    if (A.length === 1 && dist(B[j][0], B[j][1], A[0][0], A[0][1]) <= tol) return true;
+    for (i = 1; i < A.length; i++) {
+      if (segDist(B[j][0], B[j][1], A[i - 1][0], A[i - 1][1], A[i][0], A[i][1]) <= tol) return true;
+    }
+  }
+  for (i = 1; i < A.length; i++) for (j = 1; j < B.length; j++) if (mathSegX(A[i - 1], A[i], B[j - 1], B[j])) return true;
+  return false;
+}
+/* The symbols of a sum, for reading it. Strokes that touch are one symbol;
+   strokes sharing most of their width are one too (the two bars of an =,
+   the dots of a divide, a fraction's top, bar and bottom). And a mark too
+   small to be a digit belongs to whatever it sits on top of - the user's
+   5 often has its flag as a tiny tick, sometimes written first, sometimes
+   not touching the 5 at all - while one down on the line stays on its own,
+   to be read as a decimal point if it sits between digits. */
+function mathGroup(list) {
+  var n = list.length, hs = [], i, j, hmax = 0, H, tol, par = [], groups = {}, g, syms = [];
+  if (!n) return [];
+  for (i = 0; i < n; i++) {
+    var b0 = inkBox([list[i]]);
+    hs.push(Math.max(b0.y1 - b0.y0, b0.x1 - b0.x0));
+    hmax = Math.max(hmax, b0.y1 - b0.y0);
+  }
+  var big = [];
+  for (i = 0; i < n; i++) if (hs[i] >= hmax * 0.4) big.push(hs[i]);
+  H = Math.max(tidyMedian(big), 8);
+  tol = Math.max(1.5, H * 0.05);
+  function root(k) { while (par[k] !== k) k = par[k] = par[par[k]]; return k; }
+  for (i = 0; i < n; i++) par.push(i);
+  for (i = 0; i < n; i++) for (j = i + 1; j < n; j++) if (root(i) !== root(j) && mathTouch(list[i], list[j], tol)) par[root(i)] = root(j);
+  for (i = 0; i < n; i++) { g = root(i); (groups[g] = groups[g] || []).push(list[i]); }
+  for (g in groups) if (groups.hasOwnProperty(g)) syms.push(inkBox(groups[g]));
+  /* then sharing most of their width, as before */
+  var merged = true, a, b, ov, narrow, inside, q;
+  while (merged) {
+    merged = false;
+    for (i = 0; i < syms.length && !merged; i++) {
+      for (q = i + 1; q < syms.length; q++) {
+        a = syms[i]; b = syms[q];
+        ov = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+        narrow = Math.max(Math.min(a.x1 - a.x0, b.x1 - b.x0), 6);
+        inside = (a.x0 >= b.x0 - 3 && a.x1 <= b.x1 + 3) || (b.x0 >= a.x0 - 3 && b.x1 <= a.x1 + 3);
+        if (ov > narrow * 0.5 || (inside && ov > -3)) {
+          syms[i] = inkBox(a.list.concat(b.list));
+          syms.splice(q, 1);
+          merged = true;
+          break;
+        }
+      }
+    }
+  }
+  /* a small mark - a dot, or a short flat bar - is kept with the symbol
+     whose top it sits on, if any: the flag of a 5 that did not touch it */
+  for (i = syms.length - 1; i >= 0; i--) {
+    a = syms[i];
+    var aw = a.x1 - a.x0, ah = a.y1 - a.y0;
+    /* a dot, or one flat stroke - a 5's top bar can be a tick, or longer
+       than the 5 is tall and sloping off to the right */
+    var real = 0;           /* a speck dropped on it is no part of its shape */
+    for (q = 0; q < a.list.length; q++) { var rb = inkBox([a.list[q]]); if (Math.max(rb.x1 - rb.x0, rb.y1 - rb.y0) >= H * 0.15) real++; }
+    if (Math.max(aw, ah) >= H * 0.3 && !(real === 1 && ah < H * 0.45 && ah < aw * 0.5 && aw < H * 1.6)) continue;
+    var cx = (a.x0 + a.x1) / 2, cy = (a.y0 + a.y1) / 2, host = -1, bd = 1e9, d;
+    for (q = 0; q < syms.length; q++) {
+      b = syms[q];
+      if (q === i || b.y1 - b.y0 < H * 0.5) continue;              /* only a digit-sized symbol has a top to sit on */
+      if (cy > b.y0 + (b.y1 - b.y0) * 0.35 || cy < b.y0 - H * 0.35) continue;       /* not at its top */
+      /* lying across its top: starting no later than its right edge */
+      if (a.x0 > b.x1 + H * 0.25 || a.x1 < b.x0 - H * 0.15) continue;
+      d = Math.abs(cx - (b.x0 + b.x1) / 2);
+      if (d < bd) { bd = d; host = q; }
+    }
+    if (host >= 0) {
+      syms[host] = inkBox(syms[host].list.concat(a.list));
+      syms.splice(i, 1);
+    }
+  }
+  syms.sort(function (p, r) { return p.x0 - r.x0; });
+  return syms;
+}
 /* how straight a stroke is, and at what angle: 0 flat, 90 upright */
 function mathLine(s) {
   var p = s.pts, n = p.length, L = 0, i;
@@ -10906,17 +11015,120 @@ function mathLine(s) {
   return { straight: L > 0 ? net / L : 1, ang: Math.atan2(Math.abs(dy), Math.abs(dx)) * 180 / Math.PI,
            rise: dx * dy < 0 };
 }
-/* two short level bars, one over the other */
+/* Two short level bars, one over the other. Measured on the user's own
+   23 equals signs: the bars are often far from equal (5px against 24px),
+   sometimes no wider than 5px, and one had a hook on its end - so a bar
+   here is something flat, not something long and straight. */
+function mathBar(s) {
+  var b = inkBox([s]), w = b.x1 - b.x0, h = b.y1 - b.y0;
+  return w >= 4 && h <= Math.max(4, w * 0.45) && (s.pts.length < 3 || mathLine(s).ang <= 25);
+}
 function mathEquals(a, b) {
-  if (a.pts.length < 2 || b.pts.length < 2) return null;
-  var la = mathLine(a), lb = mathLine(b), A = inkBox([a]), B = inkBox([b]);
-  if (la.straight < 0.85 || lb.straight < 0.85 || la.ang > 22 || lb.ang > 22) return null;
-  var wa = A.x1 - A.x0, wb = B.x1 - B.x0;
-  if (wa < 8 || wb < 8 || Math.min(wa, wb) / Math.max(wa, wb) < 0.45) return null;
-  if (Math.min(A.x1, B.x1) - Math.max(A.x0, B.x0) < Math.min(wa, wb) * 0.5) return null;
-  var gap = Math.abs((A.y0 + A.y1) / 2 - (B.y0 + B.y1) / 2), w = (wa + wb) / 2;
-  if (gap < w * 0.12 || gap > w * 0.9) return null;
+  if (!a || !b || a.pts.length < 2 || b.pts.length < 2 || !mathBar(a) || !mathBar(b)) return null;
+  var A = inkBox([a]), B = inkBox([b]), wa = A.x1 - A.x0, wb = B.x1 - B.x0;
+  if (Math.min(wa, wb) / Math.max(wa, wb) < 0.25) return null;
+  if (Math.min(A.x1, B.x1) - Math.max(A.x0, B.x0) < Math.min(wa, wb) * 0.4) return null;
+  var gap = Math.abs((A.y0 + A.y1) / 2 - (B.y0 + B.y1) / 2);
+  if (gap < 3 || gap > Math.max(wa, wb) * 1.2 + 4) return null;
   return inkBox([a, b]);
+}
+
+/* ---- a digit, as a learned reader sees it ----
+ * The drawn templates and the user's own examples were enough to read
+ * one writer, and no one else - and the user's point was exactly that:
+ * the next person to pick the iPad up should not need anyone to tune it.
+ * So the digits are read by a small neural network trained on 7,494
+ * digits from 30 different people (the UCI pen-based digits set; checked
+ * against 14 more it never saw), and what each user corrects is
+ * remembered on the iPad and consulted first - see mathRecall.
+ *
+ * What the network is shown is not the order or direction of the ink,
+ * which differs from person to person, but where the ink is and which way
+ * it runs: the symbol, scaled to a square, is cut into a 6x6 grid, and
+ * every bit of line adds its length to its cell under one of four
+ * orientations. A 0 drawn either way round, or a 4 in one stroke or two,
+ * comes out the same. Two numbers more: how tall it is against its width,
+ * and how many strokes it took. */
+var MF_G = 6, MF_B = 4;
+function mathFeat(strokes) {
+  var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, i, j, p, k, f = [], tot = 0;
+  for (i = 0; i < strokes.length; i++) {
+    p = strokes[i];
+    for (j = 0; j < p.length; j++) {
+      if (p[j][0] < x0) x0 = p[j][0]; if (p[j][0] > x1) x1 = p[j][0];
+      if (p[j][1] < y0) y0 = p[j][1]; if (p[j][1] > y1) y1 = p[j][1];
+    }
+  }
+  var w = x1 - x0, h = y1 - y0, s = Math.max(w, h, 1e-6), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  for (k = 0; k < MF_G * MF_G * MF_B; k++) f.push(0);
+  for (i = 0; i < strokes.length; i++) {
+    p = strokes[i];
+    for (j = 1; j < p.length; j++) {
+      var ax = (p[j - 1][0] - cx) / s + 0.5, ay = (p[j - 1][1] - cy) / s + 0.5;
+      var dx = (p[j][0] - p[j - 1][0]) / s, dy = (p[j][1] - p[j - 1][1]) / s, L = Math.sqrt(dx * dx + dy * dy);
+      if (L < 1e-6) continue;
+      var th = Math.atan2(dy, dx);
+      if (th < 0) th += Math.PI;
+      if (th >= Math.PI) th -= Math.PI;
+      var bp = th / (Math.PI / MF_B), b0 = Math.floor(bp) % MF_B, bw = bp - Math.floor(bp), b1 = (b0 + 1) % MF_B;
+      var ns = Math.max(1, Math.ceil(L / 0.05)), q, u, v, t, gx, gy, ix, iy, fx, fy, wgt, cxi, cyi, l = L / ns;
+      for (q = 0; q < ns; q++) {
+        t = (q + 0.5) / ns;
+        gx = (ax + dx * t) * MF_G - 0.5; gy = (ay + dy * t) * MF_G - 0.5;
+        ix = Math.floor(gx); iy = Math.floor(gy); fx = gx - ix; fy = gy - iy;
+        for (u = 0; u <= 1; u++) {
+          for (v = 0; v <= 1; v++) {
+            cxi = ix + u; cyi = iy + v;
+            if (cxi < 0 || cyi < 0 || cxi >= MF_G || cyi >= MF_G) continue;
+            wgt = l * (u ? fx : 1 - fx) * (v ? fy : 1 - fy);
+            f[(cyi * MF_G + cxi) * MF_B + b0] += wgt * (1 - bw);
+            f[(cyi * MF_G + cxi) * MF_B + b1] += wgt * bw;
+            tot += wgt;
+          }
+        }
+      }
+    }
+  }
+  if (tot > 0) for (k = 0; k < f.length; k++) f[k] = f[k] / tot * 8;
+  f.push(Math.max(-1.5, Math.min(1.5, Math.log((h + 1) / (w + 1)))));
+  f.push(Math.min(strokes.length, 3) / 3);
+  return f;
+}
+/* the network: features -> 64 -> one score per digit. Its weights are
+   written in by scripts/trainmath.js, between the markers. */
+/*MATH_NET_BEGIN*/var MATH_NET = {"nin":146,"nh":64,"nout":15,"cls":"0123456789+-x()","s":[0.0686111,0.0266867,0.0259134,0.0546091],"w":"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"};/*MATH_NET_END*/
+var mathNetW = null;
+function mathNetLoad() {
+  if (mathNetW || !MATH_NET) return mathNetW;
+  /* stored as signed bytes, one scale per layer, in base64 */
+  var bin = window.atob ? window.atob(MATH_NET.w) : '', a = [], i, v;
+  for (i = 0; i < bin.length; i++) { v = bin.charCodeAt(i); a.push(v > 127 ? v - 256 : v); }
+  var N = MATH_NET, n1 = N.nin * N.nh, n2 = N.nh, n3 = N.nh * N.nout, o = 0, W = { W1: [], b1: [], W2: [], b2: [] };
+  for (i = 0; i < n1; i++) W.W1.push(a[o++] * N.s[0]);
+  for (i = 0; i < n2; i++) W.b1.push(a[o++] * N.s[1]);
+  for (i = 0; i < n3; i++) W.W2.push(a[o++] * N.s[2]);
+  for (i = 0; i < N.nout; i++) W.b2.push(a[o++] * N.s[3]);
+  mathNetW = W;
+  return W;
+}
+/* how likely each digit is, from the features */
+function mathNet(f) {
+  var W = mathNetLoad(), N = MATH_NET, hdn = [], out = [], i, j, s, mx = -1e9, sum = 0;
+  if (!W) return null;
+  for (j = 0; j < N.nh; j++) {
+    s = W.b1[j];
+    for (i = 0; i < N.nin; i++) s += W.W1[j * N.nin + i] * f[i];
+    hdn.push(s > 0 ? s : 0);
+  }
+  for (j = 0; j < N.nout; j++) {
+    s = W.b2[j];
+    for (i = 0; i < N.nh; i++) s += W.W2[j * N.nh + i] * hdn[i];
+    out.push(s);
+    if (s > mx) mx = s;
+  }
+  for (j = 0; j < N.nout; j++) { out[j] = Math.exp(out[j] - mx); sum += out[j]; }
+  for (j = 0; j < N.nout; j++) out[j] /= sum;
+  return out;
 }
 
 /* ---- $P ---- */
@@ -10992,9 +11204,12 @@ function mathGlyphs() {
 }
 function mathLoadTpl() {
   if (mathClouds) return;
+  /* signs and letters: the user's own as well as the stock ones - digits
+     are the network's, and a taught digit is recalled by mathRecall */
   var all = mathGlyphs().concat(MATH_TPL), i, c;
   mathClouds = [];
   for (i = 0; i < all.length; i++) {
+    if (all[i][0] >= '0' && all[i][0] <= '9') continue;
     c = mathCloud(mathUnflat(all[i][1]));
     if (c) mathClouds.push({ c: all[i][0], p: c });
   }
@@ -11014,18 +11229,31 @@ function mathMatch(sym) {
 /* one symbol: the plain shapes by rule, the rest by example */
 function mathClassify(sym, H) {
   var n = sym.list.length, w = sym.x1 - sym.x0, h = sym.y1 - sym.y0, L = [], i;
-  if (Math.max(w, h) < H * 0.28) return { c: '.', d: 0 };
+  if (Math.max(w, h) < H * 0.28) {
+    /* small: a dot - unless it is a short flat dash, and the user's minus
+       sign is short (9px against 35px digits) */
+    return { c: n === 1 && w >= 5 && w >= h * 2.5 ? '-' : '.', d: 0 };
+  }
   for (i = 0; i < n; i++) L.push(sym.list[i].pts.length > 1 ? mathLine(sym.list[i]) : { straight: 0, ang: 0 });
-  if (n === 1 && L[0].straight > 0.94) {
-    if (L[0].ang < 20 && w > h * 2) return { c: '-', d: 0 };
-    if (L[0].ang > 62) return { c: '1', d: 0 };
-    if (L[0].rise && L[0].ang >= 30) return { c: '/', d: 0 };
+  /* The signs, by their shape - shapes every writer shares, and the network
+     knows only digits, so it would call a bracket a 6 and mean it. A speck
+     the pen dropped on the way is no part of a sign's shape. */
+  var core = [], cl = [];
+  for (i = 0; i < n; i++) {
+    var cb = inkBox([sym.list[i]]);
+    if (Math.max(cb.x1 - cb.x0, cb.y1 - cb.y0) >= H * 0.15) { core.push(sym.list[i]); cl.push(L[i]); }
   }
-  if (n === 2 && L[0].straight > 0.85 && L[1].straight > 0.85) {
-    if ((L[0].ang < 25 && L[1].ang > 60) || (L[1].ang < 25 && L[0].ang > 60)) return { c: '+', d: 0 };
-    if (L[0].ang > 25 && L[0].ang < 65 && L[1].ang > 25 && L[1].ang < 65 && L[0].rise !== L[1].rise) return { c: 'x', d: 0 };
-    if (L[0].ang < 22 && L[1].ang < 22) return { c: '=', d: 0 };
+  if (core.length === 1 && h < w * 0.35 && w >= H * 0.3) return { c: '-', d: 0 };
+  if (core.length === 1 && cl[0].straight > 0.94) {
+    if (cl[0].ang > 62) return { c: '1', d: 0 };
+    if (cl[0].rise && cl[0].ang >= 30) return { c: '/', d: 0 };
   }
+  /* Plus, times and brackets are the network's: it learned them with the
+     digits (scripts/trainmath.js), so where a plus ends and a 7 with a bar
+     through it begins is learned from examples, not guessed in a rule.
+     Only the shapes that cannot be anything else are settled here. */
+  if (core.length === 2 && cl[0].ang < 22 && cl[1].ang < 22 && cl[0].straight > 0.8 && cl[1].straight > 0.8 &&
+      Math.min(inkBox([core[0]]).x1, inkBox([core[1]]).x1) - Math.max(inkBox([core[0]]).x0, inkBox([core[1]]).x0) > 0) return { c: '=', d: 0 };
   if (n === 3) {
     var bars = 0, dots = 0, b;
     for (i = 0; i < 3; i++) {
@@ -11035,7 +11263,60 @@ function mathClassify(sym, H) {
     }
     if (bars === 1 && dots === 2) return { c: '÷', d: 0 };
   }
-  return mathMatch(sym);
+  /* what this user has taught, first: a shape they corrected once is read
+     their way from then on */
+  var mine = mathRecall(sym);
+  if (mine) return mine;
+  var strokes = [];
+  for (i = 0; i < n; i++) strokes.push(sym.list[i].pts);
+  var pr = mathNet(mathFeat(strokes)), other = mathMatch(sym), b = 0, j;
+  if (!pr) return other;
+  for (j = 1; j < pr.length; j++) if (pr[j] > pr[b]) b = j;
+  /* a letter that matches closely, while the network is unsure: algebra */
+  if (other && other.d < MATH_SIGN && pr[b] < 0.9) return other;
+  return { c: MATH_NET.cls.charAt(b), d: 0, p: pr[b] };
+}
+
+/* ---- what this user has taught ----
+ * Every symbol the user corrects, or writes for Teach my handwriting, is
+ * kept on the iPad with its right name. A new symbol close to one of those
+ * - closer than any two different symbols of the user's own came in the
+ * maths session - is read as that. Measured on that session: every match
+ * that close was right. So a reader that started out knowing only other
+ * people's handwriting learns this one's from being corrected. */
+var MATH_MINE = 0.75;
+var MATH_SIGN = 1.2;          /* $P: this close to a bracket, an x or a letter, it may be one */
+var mathMine = null;
+function mathMineLoad() {
+  if (mathMine) return mathMine;
+  var g = mathGlyphs(), i;
+  mathMine = [];
+  for (i = 0; i < g.length; i++) mathMine.push({ c: g[i][0], f: mathFeat(mathUnflat(g[i][1])) });
+  return mathMine;
+}
+function mathRecall(sym) {
+  var mine = mathMineLoad(), strokes = [], i, j, d, e, best = null, bd = 1e9, f;
+  if (!mine.length) return null;
+  for (i = 0; i < sym.list.length; i++) strokes.push(sym.list[i].pts);
+  f = mathFeat(strokes);
+  for (i = 0; i < mine.length; i++) {
+    d = 0;
+    for (j = 0; j < f.length; j++) { e = f[j] - mine[i].f[j]; d += e * e; }
+    if (d < bd) { bd = d; best = mine[i].c; }
+  }
+  return Math.sqrt(bd) < MATH_MINE ? { c: best, d: 0, mine: 1 } : null;
+}
+/* remember a symbol by its right name - at most six of each, newest first */
+function mathLearn(sym, c) {
+  var g = mathGlyphs(), per = {}, keep = [], i;
+  g.unshift([c, mathFlat(sym)]);
+  for (i = 0; i < g.length; i++) {
+    per[g[i][0]] = (per[g[i][0]] || 0) + 1;
+    if (per[g[i][0]] <= 6) keep.push(g[i]);
+  }
+  try { localStorage.setItem(GLYPH_KEY, JSON.stringify(keep)); } catch (e) {}
+  mathMine = null;
+  mathClouds = null;
 }
 
 /* ---- the sum ---- */
@@ -11068,7 +11349,7 @@ function mathFraction(sy, H) {
 }
 /* the value of a little sum on its own - the top or bottom of a fraction */
 function mathValue(list) {
-  var syms = mathSymbols(list), hs = [], mids = [], i, H, ax;
+  var syms = mathGroup(list), hs = [], mids = [], i, H, ax;
   for (i = 0; i < syms.length; i++) hs.push(syms[i].y1 - syms[i].y0);
   H = Math.max(tidyMedian(hs), 8);
   for (i = 0; i < syms.length; i++) mids.push((syms[i].y0 + syms[i].y1) / 2);
@@ -11081,22 +11362,34 @@ function mathTokens(line, H, axis) {
   var mids = [], i, sy, fr, cls, toks = [];
   for (i = 0; i < line.length; i++) if (line[i].y1 - line[i].y0 >= H * 0.6) mids.push((line[i].y0 + line[i].y1) / 2);
   if (mids.length) axis = tidyMedian(mids);          /* the middle of the digits actually there */
+  var base = null, baseC = '', bh, up;
   for (i = 0; i < line.length; i++) {
     sy = line[i];
     fr = mathFraction(sy, H);
     if (fr === false) return null;
-    if (fr !== null) { toks.push({ c: '#', v: fr, sup: false }); continue; }
+    if (fr !== null) { toks.push({ c: '#', v: fr, sup: false, sy: sy }); base = sy; baseC = ')'; continue; }
     cls = mathClassify(sy, H);
     if (!cls || cls.d > MATH_TOL) return null;       /* something this cannot read */
-    if (cls.c === 'a' || cls.c === 'y' || cls.c === 'z' || cls.c === '=') return null;   /* algebra */
-    toks.push({ c: cls.c, sup: cls.c !== '.' && cls.c !== '-' && cls.c !== '+' &&
-                (axis - (sy.y0 + sy.y1) / 2) > H * 0.45 && (sy.y1 - sy.y0) < H * 0.85 });
+    /* a dot is a decimal point only down on the line; a stray one higher up
+       - beside an =, above a digit - is a slip of the pen, and is left out */
+    if (cls.c === '.' && (sy.y0 + sy.y1) / 2 < axis) continue;
+    if (cls.c === 'a' || cls.c === 'y' || cls.c === 'z' || cls.c === 'X' || cls.c === '=') return null;   /* algebra */
+    /* A power: a digit raised against the one before it - its foot no lower
+       than that one's middle, its top above that one's top. Measured against
+       its neighbour rather than the line, because the user's exponents were
+       often as tall as their other digits: it is the raise that says power. */
+    bh = base ? base.y1 - base.y0 : 0;
+    up = !!base && ((baseC >= '0' && baseC <= '9') || baseC === ')') && cls.c >= '0' && cls.c <= '9' &&
+         sy.y1 < (base.y0 + base.y1) / 2 + bh * 0.15 && sy.y0 < base.y0 + bh * 0.1;
+    toks.push({ c: cls.c, sup: up, sy: sy, unsure: cls.p !== undefined && cls.p < 0.9 });
+    if (!up) { base = sy; baseC = cls.c; }
   }
   return toks;
 }
-/* tokens into numbers and operators; a run of raised symbols is a power */
+/* tokens into numbers and operators; a run of raised symbols is a power,
+   carried as a little sum of its own */
 function mathLex(toks) {
-  var out = [], num = '', i, t, run, ev, c;
+  var out = [], num = '', i, t, run, ex, c;
   function flush() {
     if (!num) return true;
     if (num === '.' || num.split('.').length > 2) return false;
@@ -11111,9 +11404,9 @@ function mathLex(toks) {
       while (i < toks.length && toks[i].sup) { run.push({ c: toks[i].c, v: toks[i].v, sup: false }); i++; }
       i--;
       if (!flush() || !out.length) return null;      /* a power of nothing */
-      ev = mathEval(run);
-      if (ev === null) return null;
-      out.push({ k: '^', v: ev });
+      ex = mathTree(run);
+      if (!ex) return null;
+      out.push({ k: '^', v: ex });
       continue;
     }
     c = t.c;
@@ -11124,63 +11417,126 @@ function mathLex(toks) {
   }
   return flush() ? out : null;
 }
-/* the usual order: brackets, powers, times and divide, plus and minus.
-   A number next to a bracket multiplies it, as 2(3+4) does on paper. */
-function mathEval(toks) {
+/* The sum as a tree, in the usual order: brackets, powers, times and
+   divide, plus and minus. A number next to a bracket multiplies it, as
+   2(3+4) does on paper. Nodes: { n: value } a number, { o, a, b } a sum of
+   two, { o: '^', a, b } a power, { o: 'neg', a } a minus sign in front,
+   { o: '()', a } brackets - kept, so the working can show them. */
+function mathTree(toks) {
   var lx = mathLex(toks), p = 0;
   if (!lx || !lx.length) return null;
   function op(c) { return lx[p] && lx[p].k === 'o' && lx[p].v === c; }
   function atom() {
     var t = lx[p], v;
     if (!t) return null;
-    if (t.k === 'n') { p++; return t.v; }
+    if (t.k === 'n') { p++; return { n: t.v }; }
     if (op('(')) {
       p++;
       v = expr();
-      if (v === null || !op(')')) return null;
+      if (!v || !op(')')) return null;
       p++;
-      return v;
+      return { o: '()', a: v };
     }
     return null;
   }
   function power() {
     var v = atom();
-    while (v !== null && lx[p] && lx[p].k === '^') v = Math.pow(v, lx[p++].v);
+    while (v && lx[p] && lx[p].k === '^') v = { o: '^', a: v, b: lx[p++].v };
     return v;
   }
   function unary() {
-    if (op('-')) { p++; var u = unary(); return u === null ? null : -u; }
+    if (op('-')) { p++; var u = unary(); return u ? { o: 'neg', a: u } : null; }
     return power();
   }
   function term() {
     var v = unary(), r, o;
-    while (v !== null) {
+    while (v) {
       if (op('×') || op('÷') || op('/')) {
         o = lx[p++].v;
         r = unary();
-        if (r === null) return null;
-        v = o === '×' ? v * r : v / r;
+        if (!r) return null;
+        v = { o: o, a: v, b: r };
       } else if (lx[p] && (lx[p].k === 'n' || op('('))) {
         r = unary();
-        if (r === null) return null;
-        v = v * r;
+        if (!r) return null;
+        v = { o: '×', a: v, b: r };
       } else break;
     }
     return v;
   }
   function expr() {
     var v = term(), o, r;
-    while (v !== null && (op('+') || op('-'))) {
+    while (v && (op('+') || op('-'))) {
       o = lx[p++].v;
       r = term();
-      if (r === null) return null;
-      v = o === '+' ? v + r : v - r;
+      if (!r) return null;
+      v = { o: o, a: v, b: r };
     }
     return v;
   }
-  var v = expr();
-  if (v === null || p !== lx.length || !isFinite(v)) return null;
-  return v;
+  var t = expr();
+  return t && p === lx.length ? t : null;
+}
+function mathVal(t) {
+  if (t.n !== undefined) return t.n;
+  var a = mathVal(t.a);
+  if (t.o === '()') return a;
+  if (t.o === 'neg') return -a;
+  var b = mathVal(t.b);
+  if (t.o === '+') return a + b;
+  if (t.o === '-') return a - b;
+  if (t.o === '×') return a * b;
+  if (t.o === '^') return Math.pow(a, b);
+  return a / b;
+}
+function mathEval(toks) {
+  var t = mathTree(toks), v = t ? mathVal(t) : null;
+  return v === null || !isFinite(v) ? null : v;
+}
+/* the tree written out the way it would be on paper */
+var MATH_PREC = { '+': 1, '-': 1, '×': 2, '÷': 2, '/': 2, neg: 3, '^': 4 };
+var MATH_SUP = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+function mathShow(t) {
+  if (t.n !== undefined) return mathFmt(t.n);
+  if (t.o === '()') return '(' + mathShow(t.a) + ')';
+  if (t.o === 'neg') return '−' + mathShow(t.a);
+  if (t.o === '^') {
+    var e = mathShow(t.b), k, up = '';
+    /* a whole-number power is raised, as it was written */
+    if (/^[0-9]+$/.test(e)) { for (k = 0; k < e.length; k++) up += MATH_SUP.charAt(+e[k]); return mathShow(t.a) + up; }
+    return mathShow(t.a) + '^' + e;
+  }
+  return mathShow(t.a) + ' ' + (t.o === '-' ? '−' : t.o) + ' ' + mathShow(t.b);
+}
+/* One step of working: every part that can be worked out at the highest
+   level still waiting is worked out at once - innermost brackets come
+   first because nothing in them waits on anything else. */
+function mathReady(t) { return t.n === undefined && (t.o === '()' ? t.a.n !== undefined : (t.a.n !== undefined && (t.o === 'neg' || t.b.n !== undefined))); }
+function mathTop(t, best) {
+  if (t.n !== undefined) return best;
+  if (mathReady(t)) { var pr = t.o === '()' ? 9 : MATH_PREC[t.o]; return Math.max(best, pr); }
+  best = mathTop(t.a, best);
+  return t.b ? mathTop(t.b, best) : best;
+}
+function mathStep(t, lvl) {
+  if (t.n !== undefined) return t;
+  if (mathReady(t) && (t.o === '()' ? 9 : MATH_PREC[t.o]) === lvl) return { n: mathVal(t) };
+  var c = { o: t.o, a: mathStep(t.a, lvl) };
+  if (t.b) c.b = mathStep(t.b, lvl);
+  /* brackets round a number that is now worked out have done their job */
+  if (c.o === '()' && c.a.n !== undefined && lvl !== 9) return c.a;
+  return c;
+}
+function mathSteps(t) {
+  var out = [], guard = 0, lvl;
+  while (t.n === undefined && guard++ < 20) {
+    lvl = mathTop(t, -1);
+    if (lvl < 0) break;
+    t = mathStep(t, lvl);
+    if (t.n !== undefined && !isFinite(t.n)) return null;
+    out.push(mathShow(t));
+  }
+  return out;
 }
 /* a sum worth answering has something to work out, not just a number */
 function mathWorthIt(toks) {
@@ -11209,8 +11565,9 @@ function mathRead(n, eq) {
     if (b.x1 > eq.x0 + 3 || m < axis - 1.7 * H0 || m > axis + 1.7 * H0) continue;
     cand.push(s);
   }
+  mathDbg = 'nothing left of the =';
   if (!cand.length) return null;
-  var syms = mathSymbols(cand), hs = [], k, sy, hmax = 0, plain = false;
+  var syms = mathGroup(cand), hs = [], k, sy, hmax = 0, plain = false;
   /* the height of the writing, from symbols of one or two strokes: a
      fraction is three or more and would make the line look twice as tall */
   for (k = 0; k < syms.length; k++) if (syms[k].list.length <= 2) plain = true;
@@ -11231,21 +11588,40 @@ function mathRead(n, eq) {
     line.unshift(sy);
     edge = Math.min(edge, sy.x0);
   }
+  mathDbg = 'H ' + Math.round(H) + ', ' + line.length + ' symbols on the line';
   if (!line.length) return null;
   var toks = mathTokens(line, H, axis);
-  if (!toks || !mathWorthIt(toks)) return null;
-  var v = mathEval(toks);
-  if (v === null) return null;
-  return { v: v, txt: mathFmt(v), H: H, axis: axis };
+  if (!toks) { mathDbg += ', a symbol it could not read'; return null; }
+  var tt = '';
+  for (k = 0; k < toks.length; k++) tt += (toks[k].sup ? '^' : '') + (toks[k].c === '#' ? '[' + toks[k].v + ']' : toks[k].c);
+  mathDbg += ', read ' + tt;
+  if (!mathWorthIt(toks)) { mathDbg += ', nothing to work out'; return null; }
+  var tree = mathTree(toks), v = tree ? mathVal(tree) : null;
+  if (v === null || !isFinite(v)) { mathDbg += ', not a sum it can work out'; return null; }
+  var steps = mathSteps(tree) || [mathFmt(v)];
+  return { v: v, txt: mathFmt(v), H: H, axis: axis, toks: toks, steps: steps, eq: eq };
 }
 
-/* ---- when to read, and showing the answer ---- */
-function mathSoon() {
+/* ---- when to read, and showing the answer ----
+ * The answer stays until it is used or put away - the user asked for a way
+ * to keep it on the screen, and a reading that fades on a timer cannot be
+ * checked, kept or corrected. Writing somewhere else puts it away; writing
+ * beside it (copying it out) does not. Under it, a small bar: Keep the
+ * answer, or Keep the working when there was more than one step - written
+ * into the note in a handwriting face - Fix a symbol that was misread,
+ * which is also how the reader learns this writer, or put it away. */
+function mathSoon(s) {
   if (!settings.mathOn || mathTeach) return;
+  /* a stroke away from the answer means the user has moved on */
+  if (mathAns && s && !mathNear(s)) mathHide();
   if (mathTimer) clearTimeout(mathTimer);
   mathTimer = setTimeout(mathCheck, MATH_WAIT);
 }
-function mathCheck() {
+function mathNear(s) {
+  var b = inkBox([s]), a = mathAns, m = (b.y0 + b.y1) / 2;
+  return m > a.axis - a.h * 1.2 && m < a.axis + a.h * (1.2 + 1.6 * (a.steps.length - 1)) && b.x0 > a.eq.x0 - a.h;
+}
+function mathCheck(force) {
   mathTimer = null;
   var n = activeNote();
   if (!n || !settings.mathOn || mathTeach) return;
@@ -11253,36 +11629,154 @@ function mathCheck() {
     /* still writing: wait for the pen to lift again */
     if (inkNow.hasOwnProperty(id)) { mathTimer = setTimeout(mathCheck, 300); return; }
   }
-  var last = [], i;
+  var last = [], i, lb;
   for (i = n.strokes.length - 1; i >= 0 && last.length < 2; i--) {
-    if (n.strokes[i].pen < PEN_TEXT && !n.strokes[i].bg) last.push(n.strokes[i]);
+    if (n.strokes[i].pen >= PEN_TEXT || n.strokes[i].bg) continue;
+    /* a dot dropped after the = is not the end of the sum */
+    lb = inkBox([n.strokes[i]]);
+    if (!last.length && Math.max(lb.x1 - lb.x0, lb.y1 - lb.y0) < 3) continue;
+    last.push(n.strokes[i]);
   }
   if (last.length < 2) return;
   var key = last[0].id + '|' + last[1].id;
-  if (mathSeen[key]) return;
+  if (mathSeen[key] && !force) return;
   var eq = mathEquals(last[0], last[1]);
   if (!eq) return;
   mathSeen[key] = 1;
+  mathShowRead(n, eq);
+}
+function mathShowRead(n, eq) {
   var r = mathRead(n, eq);
-  if (!r) return;
-  mathAns = { x: eq.x1 + r.H * 0.35, y: r.axis + r.H * 0.5, h: r.H, txt: r.txt, t0: Date.now(), note: n.id };
+  if (!r) { if (mathAns) mathHide(); return; }
+  mathAns = { x: eq.x1 + r.H * 0.35, axis: r.axis, h: r.H, txt: r.txt, steps: r.steps, toks: r.toks,
+              eq: eq, t0: Date.now(), note: n.id };
+  mathBarPaint();
   requestRender();
 }
+function mathHide() {
+  mathAns = null;
+  byId('mathBar').className = '';
+  byId('mathFix').className = '';
+  requestRender();
+}
+/* the working is written the way it is on paper: the first step after the
+   =, and each one after that on a line of its own, its = under the first */
+function mathLines(a) {
+  var out = [], k, lh = Math.max(settings.spacing, a.h * 1.5);
+  if (a.steps.length < 2) { out.push({ x: a.x, y: a.axis, t: a.txt }); return out; }
+  out.push({ x: a.x, y: a.axis, t: a.steps[0] });
+  for (k = 1; k < a.steps.length; k++) out.push({ x: a.eq.x0, y: a.axis + lh * k, t: '= ' + a.steps[k] });
+  return out;
+}
+function mathFont(h) { return Math.round(Math.max(14, Math.min(72, h * 1.3))) + 'px Noteworthy, "Marker Felt", "Comic Sans MS", cursive'; }
 function drawMathAnswer(c) {
-  var a = mathAns, age = Date.now() - a.t0, al;
-  if (a.note !== curNoteId || age > MATH_SHOW + MATH_FADE) { mathAns = null; return; }
-  al = age < 220 ? age / 220 : (age > MATH_SHOW ? 1 - (age - MATH_SHOW) / MATH_FADE : 1);
+  var a = mathAns, age = Date.now() - a.t0, ls, k;
+  if (a.note !== curNoteId) { mathHide(); return; }
   c.save();
-  c.globalAlpha = Math.max(0, al);
+  c.globalAlpha = Math.min(1, age / 220);
   c.fillStyle = '#1A73E8';
-  c.font = Math.round(a.h * 1.3) + 'px Noteworthy, "Marker Felt", "Comic Sans MS", cursive';
+  c.font = mathFont(a.h);
   c.textAlign = 'left';
-  c.textBaseline = 'alphabetic';
-  c.fillText(a.txt, a.x, a.y);
+  c.textBaseline = 'middle';
+  ls = mathLines(a);
+  for (k = 0; k < ls.length; k++) c.fillText(ls[k].t, ls[k].x, ls[k].y);
   c.restore();
-  /* frames only while it fades in or out; a timer wakes it for the fade */
-  if (age < 220 || age > MATH_SHOW) requestRender();
-  else if (!mathFadeT) mathFadeT = setTimeout(function () { mathFadeT = null; requestRender(); }, MATH_SHOW - age + 16);
+  if (age < 220) requestRender();
+  mathBarPlace();
+}
+/* the bar under the answer, kept beside it as the page scrolls */
+function mathBarPaint() {
+  var a = mathAns, multi = a.steps.length > 1;
+  byId('mathKeepA').textContent = multi ? 'Keep answer' : 'Keep';
+  byId('mathKeepW').style.display = multi ? '' : 'none';
+  byId('mathFix').className = '';
+  byId('mathBar').className = 'on';
+}
+function mathBarPlace() {
+  var a = mathAns, bar = byId('mathBar');
+  if (!a || bar.className !== 'on') return;
+  var ls = mathLines(a), last = ls[ls.length - 1], sp = docToScreen(a.eq.x0, last.y + a.h * 0.9);
+  var bw = bar.offsetWidth || 260, x = Math.round(lim(sp.x - 10, 8, viewW - bw - 8)), y = Math.round(lim(sp.y, 62, viewH - 54));
+  if (bar._x !== x || bar._y !== y) { bar.style.left = x + 'px'; bar.style.top = y + 'px'; bar._x = x; bar._y = y; }
+  var fx = byId('mathFix');
+  if (fx.className === 'on') { fx.style.left = x + 'px'; fx.style.top = (y + 50) + 'px'; }
+}
+
+/* Keep: the answer, or the whole working, written into the note in the pen's
+   colour - as text in a handwriting face, so it can be moved, erased and
+   lassoed like anything else on the page. One undo takes it away. Keeping
+   is also the user saying "you read that right", so the symbols the reader
+   was least sure of are remembered as this writer's. */
+function mathKeep(all) {
+  var a = mathAns, n = activeNote();
+  if (!a || !n) return;
+  var ls = mathLines(a), list = [], k, sz = Math.round(Math.max(14, Math.min(72, a.h * 1.3))), s;
+  if (!all) ls = [{ x: a.x, y: a.axis, t: a.txt }];
+  for (k = 0; k < ls.length; k++) {
+    s = mkTextStroke(ls[k].x, ls[k].y - sz * 0.62, sz, settings.color, ls[k].t, 'hand');
+    addStroke(n, s);
+    list.push(s);
+  }
+  pushUndo({ t: 'adds', list: list });
+  for (k = 0; k < a.toks.length; k++) {
+    var tk = a.toks[k];
+    if (tk.sy && tk.unsure) mathLearn(tk.sy, tk.c);
+  }
+  recomputeDoc();
+  saveSoon();
+  mathHide();
+}
+
+/* Fix: what was read, symbol by symbol; tap one, pick what it really is.
+   The sum is read again at once - and the symbol is remembered, so the
+   same shape is read this writer's way from then on. */
+var MATH_KEYS = '0123456789+-x÷().';
+function mathFixOpen() {
+  var a = mathAns, fx = byId('mathFix'), row = byId('mathFixRead'), keys = byId('mathFixKeys'), k;
+  if (!a) return;
+  row.innerHTML = '';
+  keys.innerHTML = '';
+  keys.className = '';
+  for (k = 0; k < a.toks.length; k++) {
+    (function (tk) {
+      var b = document.createElement('button');
+      b.className = 'mf-chip' + (tk.sup ? ' sup' : '');
+      b.textContent = tk.c === '#' ? mathFmt(tk.v) : (tk.c === 'x' ? '×' : tk.c === '-' ? '−' : tk.c);
+      b._lbl = 'read ' + tk.c;
+      if (tk.c === '#' || !tk.sy) b.disabled = true;
+      else b.addEventListener('click', function () { mathFixPick(tk, b); });
+      row.appendChild(b);
+    })(a.toks[k]);
+  }
+  byId('mathFixHint').textContent = 'Tap the one that is wrong';
+  fx.className = 'on';
+  mathBarPlace();
+}
+function mathFixPick(tk, chip) {
+  var keys = byId('mathFixKeys'), k, row = byId('mathFixRead');
+  for (k = 0; k < row.children.length; k++) row.children[k].className = row.children[k].className.replace(' on', '');
+  chip.className += ' on';
+  keys.innerHTML = '';
+  for (k = 0; k < MATH_KEYS.length; k++) {
+    (function (c) {
+      var b = document.createElement('button');
+      b.className = 'mf-key';
+      b.textContent = c === 'x' ? '×' : c === '-' ? '−' : c;
+      b._lbl = 'key ' + c;
+      b.addEventListener('click', function () { mathFixSet(tk, c); });
+      keys.appendChild(b);
+    })(MATH_KEYS.charAt(k));
+  }
+  keys.className = 'on';
+  byId('mathFixHint').textContent = 'What is it?';
+}
+function mathFixSet(tk, c) {
+  var a = mathAns, n = activeNote();
+  if (!a || !n) return;
+  mathLearn(tk.sy, c);
+  mathShowRead(n, a.eq);
+  if (mathAns) mathFixOpen();
+  toast(mathAns ? 'Learned - it now reads ' + mathAns.txt : 'Learned - but it still is not a sum it can work out');
 }
 
 /* ---- Teach my handwriting ----
@@ -11352,6 +11846,7 @@ function mathTeachDone() {
   }
   try { localStorage.setItem(GLYPH_KEY, JSON.stringify(keep)); } catch (e) {}
   mathClouds = null;
+  mathMine = null;
   mathTeach.step++;
   if (mathTeach.step >= TEACH_STEPS.length) {
     mathTeachEnd();
@@ -12581,7 +13076,39 @@ window.__mnRec = function () { return noteRecord(activeNote()); };
 window.__mnUnpackRec = unpackRec;
 /* maths answers without the pause: read now, and say what is on show */
 window.__mnMath = { now: function () { if (mathTimer) clearTimeout(mathTimer); mathAns = null; mathCheck(); return mathAns; },
-  syms: mathSymbols, frac: mathFraction, tokens: mathTokens,
+  syms: mathSymbols, group: mathGroup, frac: mathFraction, tokens: mathTokens,
+  /* the examples to read by - for measuring the reader on takes it has not seen */
+  setTpl: function (list) { MATH_TPL = list; mathClouds = null; }, getTpl: function () { return MATH_TPL; },
+  flat: function (strokes) { return mathFlat(inkBox(strokes)); },
+  feat: mathFeat, net: function (f) { return mathNet(f); },
+  /* what the user has taught, replaced wholesale - [[symbol, flat strokes], ...] */
+  mine: function (list) { try { localStorage.setItem(GLYPH_KEY, JSON.stringify(list || [])); } catch (e) {} mathMine = null; mathClouds = null; },
+  setNet: function (n) { MATH_NET = n; mathNetW = null; }, getNet: function () { return MATH_NET; },
+  steps: function (toks) { var t = mathTree(toks); return t ? mathSteps(t) : null; },
+  keep: mathKeep, fixOpen: mathFixOpen, hide: mathHide,
+  /* what the reader did with the last thing written, step by step */
+  why: function () {
+    var n = activeNote(), last = [], i;
+    for (i = n.strokes.length - 1; i >= 0 && last.length < 2; i--) if (n.strokes[i].pen < PEN_TEXT) last.push(n.strokes[i]);
+    if (last.length < 2) return 'no strokes';
+    var eq = mathEquals(last[0], last[1]);
+    if (!eq) return 'no = at the end';
+    var cand = [], b, m, axis = (eq.y0 + eq.y1) / 2, H0 = Math.max((eq.x1 - eq.x0) * 1.25, 14);
+    for (i = 0; i < n.strokes.length; i++) {
+      var s = n.strokes[i];
+      if (s.pen >= PEN_TEXT || eq.list.indexOf(s) >= 0) continue;
+      b = inkBox([s]); m = (b.y0 + b.y1) / 2;
+      if (b.x1 > eq.x0 + 3 || m < axis - 1.7 * H0 || m > axis + 1.7 * H0) continue;
+      cand.push(s);
+    }
+    var syms = mathGroup(cand), out = [];
+    for (i = 0; i < syms.length; i++) {
+      var r = mathClassify(syms[i], 28);
+      out.push((r ? r.c : '?') + '@' + Math.round(syms[i].x0) + '/' + Math.round((syms[i].y0 + syms[i].y1) / 2) + ' h' + Math.round(syms[i].y1 - syms[i].y0));
+    }
+    var rd = mathRead(n, eq);
+    return 'axis ' + Math.round(axis) + ' H0 ' + Math.round(H0) + ' | ' + out.join(' ') + ' | ' + (rd ? rd.txt : 'no answer: ' + mathDbg);
+  },
   ans: function () { return mathAns; }, calc: mathEval, fmt: mathFmt, teach: function () { return mathTeach; },
   teachStart: mathTeachStart,
   classify: function (strokes, H) { return mathClassify(inkBox(strokes), H); } };
@@ -15813,7 +16340,7 @@ var SET_SECTIONS = [
       v: function () { return settings.mathOn ? 'On' : 'Off'; },
       act: function () {
         settings.mathOn = !settings.mathOn;
-        mathAns = null;
+        if (mathAns) mathHide();
         toast(settings.mathOn ? 'Write a sum and finish it with = to see the answer' : 'Off - sums are left as written');
         afterSettingChange();
       } },
@@ -16394,6 +16921,10 @@ byId('stripClose').addEventListener('click', function () { setStrip(false); });
 byId('stripSort').addEventListener('click', openSorter);
 byId('covCancel').addEventListener('click', covClose);
 byId('mathTeachDone').addEventListener('click', mathTeachDone);
+byId('mathKeepA').addEventListener('click', function () { mathKeep(false); });
+byId('mathKeepW').addEventListener('click', function () { mathKeep(true); });
+byId('mathFixBtn').addEventListener('click', function () { if (byId('mathFix').className === 'on') byId('mathFix').className = ''; else mathFixOpen(); });
+byId('mathCloseBtn').addEventListener('click', mathHide);
 byId('mathTeachCancel').addEventListener('click', function () { mathTeachEnd(); toast('Teaching stopped'); });
 byId('covDone').addEventListener('click', covDone);
 byId('pagesSortBtn').addEventListener('click', openSorter);

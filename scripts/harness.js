@@ -421,7 +421,8 @@ function load(opts) {
     devicePixelRatio: opts.dpr || 2,
     requestAnimationFrame: function (fn) { rafQueue.push(fn); return rafQueue.length; },
     addEventListener: function (t, fn) { (this._h[t] = this._h[t] || []).push(fn); },
-    alert: function () {}, confirm: function () { return true; }, prompt: function () { return null; }
+    alert: function () {}, confirm: function () { return true; }, prompt: function () { return null; },
+    atob: function (b) { return Buffer.from(b, 'base64').toString('binary'); }
   };
   /* anything else the page expects of the browser, e.g. applicationCache */
   if (opts.win) { for (var wk in opts.win) win[wk] = opts.win[wk]; }
@@ -494,6 +495,7 @@ function load(opts) {
       };
     },
     btoa: function (b) { return Buffer.from(b, 'binary').toString('base64'); },
+    atob: function (b) { return Buffer.from(b, 'base64').toString('binary'); },
     unescape: unescape, encodeURIComponent: encodeURIComponent,
     /* The app keeps a repeating timer alive for as long as it runs, which
        is correct on a tablet and fatal here: a real setInterval holds the
