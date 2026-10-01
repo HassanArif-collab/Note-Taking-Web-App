@@ -7143,6 +7143,7 @@ var selHidden = {};       /* id -> 1 while dragged off the tile cache */
 var selBBox = null;       /* union bbox of the selection (+pad) */
 var selDrag = null;       /* live selmove touch ref while dragging */
 var selScale = null;      /* live selscale touch ref while resizing */
+var selRot = null;        /* live selrot touch ref while turning */
 var lassoId = null;       /* identifier of the active lasso touch */
 
 /* ---------- text tool state ---------- */
@@ -7663,9 +7664,22 @@ function beginTouch(touch, now, burst) {
      A second finger while a drag/resize is live stays inert (it
      cannot start a new lasso against the moving selection). */
   if (tool === 'select') {
-    if ((selDrag && selDrag.live) || (selScale && selScale.live)) {
+    if ((selDrag && selDrag.live) || (selScale && selScale.live) || (selRot && selRot.live)) {
       touchStates[id] = { kind: 'selignore', id: id, cx: touch.clientX, cy: touch.clientY };
       return;
+    }
+    if (selection.length && selBBox) {
+      var rh = selRotHandle(), ocx = (selBBox.x0 + selBBox.x1) / 2, ocy = (selBBox.y0 + selBBox.y1) / 2;
+      if (dist(pt.x, pt.y, rh.x, rh.y) <= Math.min(60, Math.max(18, 26 / zoom))) {
+        touchStates[id] = {
+          kind: 'selrot', id: id, sx: pt.x, sy: pt.y,
+          cx: touch.clientX, cy: touch.clientY, t0: now, live: false,
+          ox: ocx, oy: ocy, a0: Math.atan2(pt.y - ocy, pt.x - ocx), th: 0
+        };
+        selRot = touchStates[id];
+        hideSelBar();
+        return;
+      }
     }
     if (selection.length && selBBox) {
       var hR = Math.min(80, Math.max(22, 30 / zoom));
@@ -7816,7 +7830,8 @@ function toolTwoFinger(touch, now) {
   if (eraserTouchId === other.id) eraserTouchId = null;
   if (selDrag === other) selDrag = null;
   if (selScale === other) selScale = null;
-  if (other.live && (other.kind === 'selmove' || other.kind === 'selscale')) unhideSelectedFromTiles();
+  if (selRot === other) selRot = null;
+  if (other.live && (other.kind === 'selmove' || other.kind === 'selscale' || other.kind === 'selrot')) unhideSelectedFromTiles();
   other.kind = 'gesture';
   touchStates[touch.identifier] = { kind: 'gesture', id: touch.identifier,
                                     cx: touch.clientX, cy: touch.clientY, t0: now };
@@ -8159,6 +8174,16 @@ function moveTouch(touch, now) {
   }
   if (st.kind === 'gesture') { st.cx = touch.clientX; st.cy = touch.clientY; return; }
   if (st.kind === 'selignore') { st.cx = touch.clientX; st.cy = touch.clientY; return; }
+  if (st.kind === 'selrot') {
+    st.cx = touch.clientX; st.cy = touch.clientY;
+    var th = angDiff(Math.atan2(pt.y - st.oy, pt.x - st.ox), st.a0), q4 = Math.round(th / (Math.PI / 2)) * (Math.PI / 2);
+    /* square to the page when close to it, as Apple and Samsung both do */
+    if (Math.abs(th - q4) < 0.07) th = q4;
+    st.th = th;
+    if (!st.live && Math.abs(th) > 0.035) { st.live = true; hideSelectedFromTiles(); }
+    if (st.live) requestRender();
+    return;
+  }
   if (st.kind === 'selscale') {
     st.x = pt.x; st.y = pt.y;
     st.cx = touch.clientX; st.cy = touch.clientY;
@@ -8659,6 +8684,11 @@ function endTouch(touch, now, cancelled) {
   if (st.kind === 'selscale') {
     if (selScale === st) selScale = null;
     commitSelScale(st);
+    return;
+  }
+  if (st.kind === 'selrot') {
+    if (selRot === st) selRot = null;
+    commitSelRot(st);
     return;
   }
   if (st.kind === 'selignore') return;
@@ -9703,7 +9733,7 @@ function commitSelScale(st) {
 /* -/+ action bar buttons: scale around the selection center */
 function scaleSelectionBy(k) {
   if (!selection.length || !selBBox) return;
-  if (selDrag || selScale) return;
+  if (selDrag || selScale || selRot) return;
   var cx = (selBBox.x0 + selBBox.x1) / 2;
   var cy = (selBBox.y0 + selBBox.y1) / 2;
   applyScaleToSelection(selection.slice(), cx, cy, k);
@@ -9753,21 +9783,24 @@ function clearSelection() {
   selBBox = null;
   selDrag = null;
   selScale = null;
+  selRot = null;
   hideSelBar();
   if (hadHidden) { invalidateAll(); requestRender(); }
 }
 
 function positionSelBar() {
-  if (!selection.length || !selBBox || selDrag || selScale) { hideSelBar(); return; }
+  if (!selection.length || !selBBox || selDrag || selScale || selRot) { hideSelBar(); return; }
   selBarEl.style.display = 'block';
   var bw = selBarEl.offsetWidth || 150;
   var sp = docToScreen((selBBox.x0 + selBBox.x1) / 2, selBBox.y0);
   var left = sp.x - bw / 2;
   if (left < 10) left = 10;
   if (left > viewW - bw - 10) left = viewW - bw - 10;
-  var top = sp.y - 56;
-  if (top < 62) top = 62;
-  if (top > viewH - 20) top = viewH - 20;
+  /* above the turn handle, which sits on its stalk over the box - or, with
+     no room up there, under the box */
+  var top = sp.y - 56 - Math.max(22 * zoom, 30) - 8;
+  if (top < 62) top = docToScreen((selBBox.x0 + selBBox.x1) / 2, selBBox.y1).y + 16;
+  if (top > viewH - 52) top = Math.max(62, viewH - 52);
   selBarEl.style.left = left + 'px';
   selBarEl.style.top = top + 'px';
 }
@@ -9986,6 +10019,8 @@ function drawSelectionOverlays(c) {
 
   var dragSt = (selDrag && selDrag.live) ? selDrag : null;
   var sclSt = (selScale && selScale.live) ? selScale : null;
+  var rotSt = (selRot && selRot.live) ? selRot : null;
+  if (rotSt) { drawSelRot(c, rotSt); return; }
   var rx0 = selBBox.x0, ry0 = selBBox.y0, rx1 = selBBox.x1, ry1 = selBBox.y1;
 
   if (dragSt) {
@@ -10020,9 +10055,106 @@ function drawSelectionOverlays(c) {
   c.strokeRect(rx0, ry0, rx1 - rx0, ry1 - ry0);
   if (c.setLineDash) c.setLineDash([]);
 
-  /* resize handle on the bottom-right corner (Samsung-style) */
+  /* resize handle on the bottom-right corner (Samsung-style), and the turn
+     handle on a stalk above the middle */
   if (!dragSt) drawResizeHandle(c, rx1, ry1, Math.max(5.5, 7 / zoom), 1.6 / zoom, '#0381FE');
+  if (!dragSt && !sclSt) drawRotHandle(c, (rx0 + rx1) / 2, ry0, Math.max(5.5, 7 / zoom), 1.6 / zoom);
   c.restore();
+}
+
+/* ---------- turning a selection ----------
+ * A handle on a stalk above the box, as Apple and Samsung both put it:
+ * drag it round and the selection turns about its middle, squaring to the
+ * page within four degrees of it. Ink turns; a photo, a sticky or a box of
+ * text moves with the turn but stays upright. One undo. */
+function selRotHandle() {
+  return { x: (selBBox.x0 + selBBox.x1) / 2, y: selBBox.y0 - Math.max(22, 30 / zoom) };
+}
+function drawRotHandle(c, x, y0, r, lw) {
+  var y = y0 - Math.max(22, 30 / zoom) + 8;
+  c.strokeStyle = '#0381FE';
+  c.lineWidth = lw;
+  c.beginPath();
+  c.moveTo(x, y0); c.lineTo(x, y + r);
+  c.stroke();
+  c.fillStyle = '#FFFFFF';
+  c.beginPath();
+  c.arc(x, y, r, 0, Math.PI * 2);
+  c.fill();
+  c.stroke();
+  /* a curved arrow inside: "turn me" */
+  c.beginPath();
+  c.arc(x, y, r * 0.5, -Math.PI * 0.9, Math.PI * 0.35);
+  c.stroke();
+  var ex = x + Math.cos(Math.PI * 0.35) * r * 0.5, ey = y + Math.sin(Math.PI * 0.35) * r * 0.5;
+  c.beginPath();
+  c.moveTo(ex - r * 0.3, ey); c.lineTo(ex, ey); c.lineTo(ex + r * 0.05, ey - r * 0.3);
+  c.stroke();
+}
+function rotPt(x, y, ox, oy, co, sn) { var dx = x - ox, dy = y - oy; return [ox + dx * co - dy * sn, oy + dx * sn + dy * co]; }
+function drawSelRot(c, st) {
+  var i, co = Math.cos(st.th), sn = Math.sin(st.th);
+  c.save();
+  c.translate(st.ox, st.oy);
+  c.rotate(st.th);
+  c.translate(-st.ox, -st.oy);
+  for (i = 0; i < selection.length; i++) renderStrokeFull(c, selection[i]);
+  c.fillStyle = 'rgba(3,129,254,0.07)';
+  c.fillRect(selBBox.x0, selBBox.y0, selBBox.x1 - selBBox.x0, selBBox.y1 - selBBox.y0);
+  c.strokeStyle = 'rgba(3,129,254,0.9)';
+  c.lineWidth = 1.4 / zoom;
+  if (c.setLineDash) c.setLineDash([8 / zoom, 5 / zoom]);
+  c.strokeRect(selBBox.x0, selBBox.y0, selBBox.x1 - selBBox.x0, selBBox.y1 - selBBox.y0);
+  if (c.setLineDash) c.setLineDash([]);
+  c.restore();
+  /* how far round it has gone, in a pill by the handle */
+  var h = rotPt((selBBox.x0 + selBBox.x1) / 2, selBBox.y0 - Math.max(22, 30 / zoom) - 18 / zoom, st.ox, st.oy, co, sn);
+  var deg = Math.round(st.th * 180 / Math.PI), txt = (deg > 0 ? '+' : '') + deg + '\u00b0';
+  c.save();
+  c.font = '600 ' + (13 / zoom) + 'px Helvetica, Arial, sans-serif';
+  var tw = c.measureText ? c.measureText(txt).width : 30;
+  c.fillStyle = 'rgba(22,24,26,0.86)';
+  c.fillRect(h[0] - tw / 2 - 7 / zoom, h[1] - 10 / zoom, tw + 14 / zoom, 20 / zoom);
+  c.fillStyle = '#FFFFFF';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText(txt, h[0], h[1]);
+  c.restore();
+}
+function commitSelRot(st) {
+  if (!st.live || Math.abs(st.th) < 0.01) {
+    unhideSelectedFromTiles();
+    selBBox = selUnionBBox();
+    positionSelBar();
+    requestRender();
+    return;
+  }
+  var co = Math.cos(st.th), sn = Math.sin(st.th), list = [], i, j, s, to, b, c0, c1;
+  for (i = 0; i < selection.length; i++) {
+    s = selection[i];
+    to = [];
+    if (s.pen === PEN_TEXT || s.pen === PEN_IMG || s.pen === PEN_STICKY) {
+      /* an object goes round with the rest, its middle on the circle, upright */
+      b = strokeBBox(s);
+      c0 = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
+      c1 = rotPt(c0[0], c0[1], st.ox, st.oy, co, sn);
+      for (j = 0; j < s.pts.length; j++) to.push([s.pts[j][0] + c1[0] - c0[0], s.pts[j][1] + c1[1] - c0[1], s.pts[j][2]]);
+    } else {
+      for (j = 0; j < s.pts.length; j++) {
+        var q = rotPt(s.pts[j][0], s.pts[j][1], st.ox, st.oy, co, sn);
+        to.push([q[0], q[1], s.pts[j][2]]);
+      }
+    }
+    list.push({ s: s, from: s.pts, to: to });
+  }
+  var op = { t: 'pts', list: list };
+  applyOp(op, false);
+  pushUndo(op);
+  unhideSelectedFromTiles();
+  selBBox = selUnionBBox();
+  positionSelBar();
+  saveSoon();
+  requestRender();
 }
 
 /* a white disc with a diagonal double arrow: "drag to resize" */
@@ -10826,6 +10958,7 @@ function resetTouchTracking() {
   lassoId = null;
   selDrag = null;
   selScale = null;
+  selRot = null;
   lastHandTap = null;
   if (dotQueue) { clearTimeout(dotQueue.timer); dotQueue = null; }
   hidePendingDot();
@@ -13074,6 +13207,7 @@ window.__mnPen = function () {
 window.__mnSave = function () { saveTick(); };
 window.__mnRec = function () { return noteRecord(activeNote()); };
 window.__mnUnpackRec = unpackRec;
+window.__mnSelBox = function () { return selBBox ? { x0: selBBox.x0, y0: selBBox.y0, x1: selBBox.x1, y1: selBBox.y1 } : null; };
 /* maths answers without the pause: read now, and say what is on show */
 window.__mnMath = { now: function () { if (mathTimer) clearTimeout(mathTimer); mathAns = null; mathCheck(); return mathAns; },
   syms: mathSymbols, group: mathGroup, frac: mathFraction, tokens: mathTokens,

@@ -3034,6 +3034,29 @@ mgo.win.__mnMath.now();
 scPath(mgo, 9, scWord(150, 600));
 check('writing somewhere else puts the answer away', !mgo.win.__mnMath.ans() && mgo.els.mathBar.className === '');
 
+/* ---------- lasso: turning a selection ---------- */
+var srt = scApp(), srtP = [], srti;
+for (srti = 0; srti <= 40; srti++) srtP.push([300 + srti * 5, 400]);
+scPath(srt, 1, srtP);
+lassoAround(srt, 280, 370, 520, 430);
+var srtB = srt.win.__mnSelBox();
+var hx = (srtB.x0 + srtB.x1) / 2, hy = srtB.y0 - 30, ocx = (srtB.x0 + srtB.x1) / 2, ocy = (srtB.y0 + srtB.y1) / 2;
+/* the handle, then a quarter turn round the middle, in screen terms (+56 for the toolbar) */
+srt.down(50, hx, hy + 56);
+for (srti = 1; srti <= 12; srti++) {
+  var ang = -Math.PI / 2 + (Math.PI / 2) * srti / 12, rr = ocy - hy;
+  srt.tick(16);
+  srt.moveTo(50, ocx + Math.cos(ang) * rr, ocy + Math.sin(ang) * rr + 56);
+}
+srt.tick(16); srt.up(50); srt.tick(100); srt.flushFrames();
+function spanOf(s) { var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; s.pts.forEach(function (p) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }); return [x1 - x0, y1 - y0]; }
+var srtS = spanOf(srt.strokes()[0]);
+check('the lasso\'s turn handle turns a line a quarter turn, squared to upright', srtS[0] < 2 && srtS[1] > 190,
+      'width ' + srtS[0].toFixed(1) + ', height ' + srtS[1].toFixed(1));
+srt.undo();
+srtS = spanOf(srt.strokes()[0]);
+check('...and one undo turns it back', srtS[1] < 2 && srtS[0] > 190, 'width ' + srtS[0].toFixed(1) + ', height ' + srtS[1].toFixed(1));
+
 /* ---------- the maths session, and sending notes to the PC ---------- */
 var msn = fresh();
 msn.ref().start(msn.ref().maths);
