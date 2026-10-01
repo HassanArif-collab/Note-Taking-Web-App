@@ -104,8 +104,19 @@ Build one at a time, copying how Samsung Notes does it.
 - **Maths answers** (Samsung's Turn on math): end a sum with = and the answer
   shows in blue, then fades. Teach my handwriting learns the user's own digits.
 - **Neaten** replaced Tidy: smooth shaky strokes, each line levelled and put on
-  its rule as one piece. Still to try, only with a trace to measure against:
-  setting single words down on the line (it broke printed words when tried).
+  its rule as one piece.
+
+## Built 2026-10-01
+- **Maths answers that learn**: a trained reader, the working for multi-step
+  sums, Keep (full working or answer) and Fix; lasso rotate.
+- **Neaten that learns the writer**: words set back on the line and their
+  lean evened, by how much the note shows they wander and how precisely each
+  was measured; touching strokes and dots kept together; no snapping one
+  line into another. Measured with `scripts/neatcv.js` on the reference
+  lines (normal-speed takes now sit as straight as the careful ones).
+  Not done: evening word sizes - read off a few letter tops it misjudged
+  short words and blew one up into its neighbour; would need a sturdier
+  measure first.
 
 ## Pen pop-up extras (seen in the videos)
 - ~~Favourite pens inside the pop-up, each with its own colour.~~ **Done** —

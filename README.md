@@ -68,7 +68,7 @@ thickness, with 24 colours to choose from.
 |------|--------------|
 | **Pen** | Write. Tap again to open the pen tray. |
 | **Eraser** | Rub out strokes. Stroke mode removes a whole line, Area mode rubs out what you touch. |
-| **Lasso** | Draw a loop around ink to select it, then drag to move, pinch the corner handle to resize, or use the bar: **Colour** re-inks it, **Neaten** straightens shapes and sets handwriting straight, Cut / Copy / Duplicate / Delete. What you copy can be pasted into any note — tap with the lasso, or **+ → Paste** — even after the app has been closed. |
+| **Lasso** | Draw a loop around ink to select it, then drag to move, pinch the corner handle to resize, turn it with the round handle above it, or use the bar: **Colour** re-inks it, **Neaten** straightens shapes and sets handwriting straight, Cut / Copy / Duplicate / Delete. What you copy can be pasted into any note — tap with the lasso, or **+ → Paste** — even after the app has been closed. |
 | **T (text)** | Tap the page and type. Text behaves like ink — movable, erasable, selectable. |
 | **Hand** | One finger drags the paper instead of drawing. Double-tap resets zoom. |
 | **Undo / Redo** | Up to 60 steps. |
@@ -131,11 +131,16 @@ but never the sticky itself; the lasso moves, resizes and recolours it.
 ### Maths answers
 
 Write a sum, finish it with **=**, and pause: the answer appears in **blue**
-just after the equals sign and fades after a few seconds, so you can write
-it in yourself (Samsung's "Turn on math"). It reads digits, + − × ÷ /,
-brackets, decimal points, small raised powers and fractions written one
-over the other, and works the sum out in the usual order. Letters mean
-algebra, and algebra gets no answer rather than a wrong one.
+just after the equals sign and stays there (Samsung's "Turn on math"). When
+the sum takes more than one step, the working shows too. Under it:
+**Keep** writes it into the note in a handwriting face - the full working
+or just the answer - **Fix** lets you pick the right symbol when one was
+misread, and **×** closes it. It reads digits, + − × ÷ /, brackets, decimal
+points, small raised powers and fractions written one over the other, and
+works the sum out in the usual order. Letters mean algebra, and algebra
+gets no answer rather than a wrong one. The reader is a small network
+trained on many people's handwriting, so it is not tuned to one hand, and
+every Fix and Keep teaches it yours.
 **⋮ → Maths answers** turns it off. **⋮ → Teach my handwriting** asks you to
 write 0–9 (and × and brackets) once on the page; it learns them from that
 and removes the writing again.
@@ -143,11 +148,20 @@ and removes the writing again.
 ### Neaten — correction and alignment
 
 **⋮ → Neaten handwriting** (the whole note), or **Neaten** on the lasso bar
-(just what you selected): shaky strokes are smoothed — gently, corners kept
-— and each line is turned level and dropped onto its rule **as one piece**,
-so words, exponents and fractions never move against each other. It
-replaced Tidy, which lifted whole words and slid them about. One undo takes
-it back.
+(just what you selected). It reads the writing by where the pen turned -
+the bottoms and tops of the letters - and learns from the note how much
+this writer's words usually wander, and how precisely each word can be
+measured. Then each line is turned level when it clearly slopes, each word
+that slipped off the line is set back on it (by as much as Neaten is sure
+of: a careful hand barely moves, a hurried one is pulled into line), words
+leaning differently from their neighbours are evened, and each line is
+dropped onto its rule unless that would push it into the writing above or
+below. Words move whole, so exponents, fractions and an i's dot stay with
+their letters, and strokes that touch (a P's loop and stem, a ≠) stay
+together. Shaky strokes are smoothed by at most 1.6 px. What it learns is
+remembered, so one lassoed line benefits from the rest of your notes. One
+undo takes it back. `node scripts/neatcv.js` measures it on the recorded
+reference lines.
 
 ### Reading mode
 

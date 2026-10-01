@@ -2964,6 +2964,76 @@ var nxm = (nxn * sxy - sx * sy) / (nxn * sxx - sx * sx), nxc = (sy - nxm * sx) /
 nxP.forEach(function (q) { nxMax = Math.max(nxMax, Math.abs(q[1] - (nxm * q[0] + nxc))); });
 check('"x2 + y2 = z2" moves as one piece: no 2 is lifted away from its letter', nxMax < 4, 'strokes shifted apart by up to ' + nxMax.toFixed(1) + 'px');
 
+/* an i's dot is a single touch of the pen, and goes where its i goes */
+function neInk(prefix) {
+  return JSON.parse(fsM.readFileSync(pathM.join(__dirname, '..', 'traces', mFile(prefix)))).ink
+    .filter(function (s) { return s.pts.length; })
+    .map(function (s) { return { pen: s.pen, w: s.w, ord: s.ord, pts: s.pts.map(function (p) { return [p[0], p[1], p[2]]; }) }; });
+}
+var nd = fresh();
+nd.loadInk(neInk('ref-E3-norm-1'));
+var ndB = nd.strokes();
+nd.win.__mnNeaten();
+nd.flushFrames();
+var ndA = nd.strokes(), ndWorst = 0, ndDots = 0;
+ndB.forEach(function (d, i) {
+  if (d.pts.length !== 1) return;
+  ndDots++;
+  /* the nearest point of another stroke: how far it moved, against how far the dot did */
+  var best = null, bd = 1e9;
+  ndB.forEach(function (s, k) {
+    if (s.pts.length < 2) return;
+    s.pts.forEach(function (p, j) { var e = Math.pow(p[0] - d.pts[0][0], 2) + Math.pow(p[1] - d.pts[0][1], 2); if (e < bd) { bd = e; best = [k, j]; } });
+  });
+  var hb = ndB[best[0]].pts[best[1]], ha = ndA[best[0]].pts[best[1]];
+  ndWorst = Math.max(ndWorst, Math.abs((ndA[i].pts[0][1] - d.pts[0][1]) - (ha[1] - hb[1])));
+});
+check('Neaten takes an i\'s dot along with its word', ndDots === 2 && ndWorst < 2.5, ndDots + ' dots, left behind by up to ' + ndWorst.toFixed(1) + 'px');
+
+/* A word that slipped off the line is set back on it. One word of a neat
+   line is dropped a third of an x-height; neatened, the line should come
+   out as it does when nothing was dropped - laid over each other as a
+   whole (a levelling is not a difference), the points should sit closer
+   than the drop put them. */
+function neAlign(A, B) {
+  var a = [], b = [];
+  A.forEach(function (s, i) { s.pts.forEach(function (p, j) { a.push(p); b.push(B[i].pts[j]); }); });
+  var ax = 0, ay = 0, bx = 0, by = 0, n = a.length, sc = 0, ss = 0, t = 0, i;
+  for (i = 0; i < n; i++) { ax += a[i][0] / n; ay += a[i][1] / n; bx += b[i][0] / n; by += b[i][1] / n; }
+  for (i = 0; i < n; i++) { var u = a[i][0] - ax, v = a[i][1] - ay, p = b[i][0] - bx, q = b[i][1] - by; sc += u * p + v * q; ss += u * q - v * p; }
+  var th = Math.atan2(ss, sc), c = Math.cos(th), sn = Math.sin(th);
+  for (i = 0; i < n; i++) {
+    var u2 = a[i][0] - ax, v2 = a[i][1] - ay;
+    t += Math.sqrt(Math.pow(bx + u2 * c - v2 * sn - b[i][0], 2) + Math.pow(by + u2 * sn + v2 * c - b[i][1], 2));
+  }
+  return t / n;
+}
+var nsInk = neInk('ref-E3-neat-1'), nsDrop = JSON.parse(JSON.stringify(nsInk));
+/* "wax": the strokes between the two widest gaps */
+var nsBox = nsDrop.map(function (s, i) { var x0 = 1e9, x1 = -1e9; s.pts.forEach(function (p) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); }); return { i: i, x0: x0, x1: x1 }; })
+  .sort(function (a, b) { return a.x0 - b.x0; });
+var nsGaps = [], nsR = nsBox[0].x1;
+nsBox.forEach(function (o, k) { if (k && o.x0 > nsR) nsGaps.push({ k: k, g: o.x0 - nsR }); nsR = Math.max(nsR, o.x1); });
+nsGaps.sort(function (a, b) { return b.g - a.g; });
+var nsCut = nsGaps.slice(0, 2).map(function (g) { return g.k; }).sort(function (a, b) { return a - b; });
+nsBox.slice(nsCut[0], nsCut[1]).forEach(function (o) { nsDrop[o.i].pts.forEach(function (p) { p[1] += 7; }); });
+var nsA = fresh(); nsA.loadInk(nsInk); nsA.win.__mnNeaten(); nsA.flushFrames();
+var nsB = fresh(); nsB.loadInk(nsDrop); var nsB0 = nsB.strokes(); nsB.win.__mnNeaten(); nsB.flushFrames();
+var nsBefore = neAlign(nsA.strokes(), nsB0), nsAfter = neAlign(nsA.strokes(), nsB.strokes());
+check('Neaten sets a word that slipped down the line back on it', nsAfter < nsBefore * 0.5,
+      'dropped: ' + nsBefore.toFixed(2) + 'px off, neatened: ' + nsAfter.toFixed(2) + 'px');
+
+/* two rows squeezed into one rule's space are not dropped into each other */
+var nq = fresh(), nqi;
+nq.loadInk([0, 1, 2].map(function (k) { return { pen: 0, w: 3, pts: scWord(120 + k * 200, 420).map(function (p) { return [p[0], p[1], 0]; }) }; })
+  .concat([0, 1, 2].map(function (k) { return { pen: 0, w: 3, pts: scWord(140 + k * 200, 444).map(function (p) { return [p[0], p[1], 0]; }) }; })));
+nq.win.__mnNeaten();
+nq.flushFrames();
+var nqS = nq.strokes(), nqGap = 1e9;
+for (nqi = 0; nqi < 3; nqi++) nqGap = Math.min(nqGap, nqS[nqi + 3].pts[0][1] - nqS[nqi].pts[0][1]);
+check('...and two rows squeezed into one ruled space are not snapped into each other', nqGap > 22,
+      'rows ' + nqGap.toFixed(1) + 'px apart (written 24 apart)');
+
 /* ---------- maths answers: working, keeping, fixing ---------- */
 function stepsOf(str) {
   var t = [], i, up = false;

@@ -398,7 +398,7 @@ App.prototype.settle = function (cb) {
 /* ---------- build the app in a sandbox ---------- */
 function load(opts) {
   opts = opts || {};
-  var htmlPath = opts.html || path.join(__dirname, '..', 'index.html');
+  var htmlPath = opts.html || process.env.MN_HTML || path.join(__dirname, '..', 'index.html');
   var html = fs.readFileSync(htmlPath, 'utf8');
   var m = html.match(/<script>([\s\S]*?)<\/script>/);
   if (!m) throw new Error('no inline <script> found in ' + htmlPath);
