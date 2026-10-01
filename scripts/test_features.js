@@ -2964,6 +2964,22 @@ var nxm = (nxn * sxy - sx * sy) / (nxn * sxx - sx * sx), nxc = (sy - nxm * sx) /
 nxP.forEach(function (q) { nxMax = Math.max(nxMax, Math.abs(q[1] - (nxm * q[0] + nxc))); });
 check('"x2 + y2 = z2" moves as one piece: no 2 is lifted away from its letter', nxMax < 4, 'strokes shifted apart by up to ' + nxMax.toFixed(1) + 'px');
 
+/* ---------- the maths session, and sending notes to the PC ---------- */
+var msn = fresh();
+msn.ref().start(msn.ref().maths);
+check('the maths session asks for the digits first, then the sums', msn.ref().on() && msn.ref().id() === 'mth-D1-norm-1' &&
+      msn.ref().maths.length === 27 && msn.ref().take().text === '0 1 2 3 4 5 6 7 8 9',
+      msn.ref().id() + ', ' + msn.ref().maths.length + ' takes');
+msn.ref().exit();
+var mbk = H.load({ quiet: true, win: { location: { protocol: 'http:' } } });
+mbk.flushFrames();
+mbk.els.backupText.value = JSON.stringify({ mathnotes: 1, at: 'now', sum: 1, body: '{}' });
+mbk.els.backupSendBtn._fire('click', {});
+var mbkS = mbk.requests().filter(function (r) { return r.url === '/backup'; });
+check('opened from the PC, Send to this PC posts the pasted notes to it',
+      mbkS.length === 1 && JSON.parse(mbkS[0].body).mathnotes === 1 && String(mbk.els.backupInfo.textContent).indexOf('Sent') === 0,
+      mbkS.length + ' sent, ' + mbk.els.backupInfo.textContent);
+
 /* ---------- storage: the room there is, and using less of it ----------
  * Safari keeps 2.6 million characters for a site, not the five million the
  * app assumed, so the store filled while the app thought it half empty -

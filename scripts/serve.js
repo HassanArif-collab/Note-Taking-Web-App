@@ -20,6 +20,9 @@ var os = require('os');
 
 var ROOT = path.resolve(__dirname, '..');
 var TRACES = path.join(ROOT, 'traces');
+/* a whole collection of the user's notes, sent for study: kept here and
+   NEVER committed - data/ is in .gitignore, and the repo is public */
+var DATA = path.join(ROOT, 'data');
 var PORT = Number(process.env.PORT || 8080);
 
 if (!fs.existsSync(TRACES)) fs.mkdirSync(TRACES);
@@ -92,6 +95,23 @@ function saveTrace(body, res) {
   res.end('ok');
 }
 
+function saveBackup(body, res) {
+  var ok = false;
+  try { ok = !!JSON.parse(body).mathnotes; } catch (e) { ok = false; }
+  if (!ok) {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('not a backup');
+    console.log('  !! rejected a backup that was not one (' + body.length + ' bytes)');
+    return;
+  }
+  if (!fs.existsSync(DATA)) fs.mkdirSync(DATA);
+  var file = path.join(DATA, 'notes-' + stamp() + '.json');
+  fs.writeFileSync(file, body);
+  console.log('  <- ' + path.relative(ROOT, file) + '   ' + Math.round(body.length / 1024) + ' KB of notes');
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('ok');
+}
+
 var srv = http.createServer(function (req, res) {
   /* Log first, answer second. If the iPad cannot get here at all, the
      terminal stays silent and the problem is the network - a firewall,
@@ -118,6 +138,17 @@ function handle(req, res) {
       if (body.length > 20e6) { req.destroy(); }
     });
     req.on('end', function () { saveTrace(body, res); });
+    return;
+  }
+
+  if (req.method === 'POST' && req.url.split('?')[0] === '/backup') {
+    var all = '';
+    req.setEncoding('utf8');
+    req.on('data', function (c) {
+      all += c;
+      if (all.length > 40e6) { req.destroy(); }
+    });
+    req.on('end', function () { saveBackup(all, res); });
     return;
   }
 

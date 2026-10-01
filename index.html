@@ -1852,6 +1852,7 @@ body.dark .set-hint { color: #8C8C8C; }
   background: rgba(255,255,255,0.16);
 }
 #backupExportBtn { background: #0381FE; }
+#backupSendBtn { background: #0FA958; }
 #traceHint { color: #E8E8E8; font-size: 13px; margin-bottom: 10px; }
 #traceText {
   width: 92%; max-width: 660px; height: 52%;
@@ -2594,6 +2595,7 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
       <button id="backupCloseBtn">Close</button>
       <button id="backupImportBtn">Restore</button>
       <button id="backupExportBtn">Copy my notes</button>
+      <button id="backupSendBtn">Send to this PC</button>
     </div>
   </div>
 
@@ -11638,6 +11640,7 @@ function restoreBackup(txt) {
 /* ---------- backup panel ---------- */
 function openBackup() {
   closePanels();
+  byId('backupSendBtn').style.display = canUpload() ? '' : 'none';
   backupText.value = '';
   backupInfo.textContent = countNotes() + ' note(s) on this device.';
   backupOverlay.className = 'overlay on';
@@ -11651,6 +11654,26 @@ function doExport() {
   backupInfo.textContent = countNotes() + ' note(s), ' +
     Math.round(txt.length / 1024) + ' KB. Select all, copy, and paste it somewhere safe.';
   try { backupText.focus(); backupText.setSelectionRange(0, txt.length); } catch (e) {}
+}
+
+/* Opened from the test server, a backup pasted here can be sent to the PC
+   - the way a whole collection of notes reaches it for study. It is kept
+   in the PC's data folder, which is never uploaded anywhere. */
+function doSendBackup() {
+  var txt = backupText.value || '';
+  if (!txt) { backupInfo.textContent = 'Paste the copy of your notes into the box first.'; return; }
+  try { var b = JSON.parse(txt); if (!b || !b.mathnotes) throw 0; }
+  catch (e) { backupInfo.textContent = 'That is not a MathNotes backup - copy it again from your MathNotes.'; return; }
+  backupInfo.textContent = 'Sending ' + Math.round(txt.length / 1024) + ' KB...';
+  var x;
+  try { x = new XMLHttpRequest(); x.open('POST', '/backup', true); } catch (e2) { backupInfo.textContent = 'Could not reach the PC.'; return; }
+  x.setRequestHeader('Content-Type', 'application/json');
+  x.onreadystatechange = function () {
+    if (x.readyState !== 4) return;
+    backupInfo.textContent = x.status >= 200 && x.status < 300 ? 'Sent - your notes are on the PC now. Thank you.'
+                                                               : 'The PC did not take it (' + x.status + '). Is the server still running?';
+  };
+  try { x.send(txt); } catch (e3) { backupInfo.textContent = 'Could not reach the PC.'; }
 }
 
 function doImport() {
@@ -11766,6 +11789,34 @@ function refDrills() {
   return out;
 }
 var REF_DRILLS = refDrills();
+
+/* THE MATHS SESSION. Maths answers read "22 + 4 =" as 31 on the user's
+   iPad, and a recogniser cannot be fixed from a description of one sum.
+   This asks for the digits and the signs it has to know, and the kind of
+   sums that went wrong, each three times at normal speed - how notes are
+   actually written - so every symbol arrives labelled by its prompt. */
+var MATH_ITEMS = [
+  { id: 'D1', text: '0 1 2 3 4 5 6 7 8 9', why: 'every digit, as you write them' },
+  { id: 'S1', text: '22 + 4 =', why: 'the sum that came out as 31' },
+  { id: 'S2', text: '47 - 19 =', why: 'a minus sign, a 7 and a 9' },
+  { id: 'S3', text: '6 \u00d7 8 =', why: 'a times sign' },
+  { id: 'S4', text: '56 \u00f7 7 =', why: 'a divide sign' },
+  { id: 'S5', text: '(3 + 5) \u00d7 12 =', why: 'brackets' },
+  { id: 'S6', text: '3.5 + 1.25 =', why: 'decimal points' },
+  { id: 'S7', text: '5\u00b2 + 12\u00b2 =', why: 'powers - the small 2s written raised' },
+  { id: 'S8', text: '½ + ¾ =  (each one written as a number, a line under it, a number under that)', why: 'stacked fractions' }
+];
+var MATH_DRILLS = (function () {
+  var out = [], i, t;
+  for (i = 0; i < MATH_ITEMS.length; i++) {
+    for (t = 1; t <= 3; t++) {
+      out.push({ id: 'mth-' + MATH_ITEMS[i].id + '-norm-' + t, s: 30, want: -2,
+                 ref: { item: MATH_ITEMS[i].id, mode: 'norm', take: t, text: MATH_ITEMS[i].text } });
+    }
+  }
+  return out;
+})();
+var refList = REF_DRILLS;       /* the session being run: the reference one, or the maths one */
 
 var DRILLS = [
   { id: 'palm-rest', s: 20, want: 0,
@@ -12165,12 +12216,12 @@ function refRemember() {
 }
 var REF_BAR_H = 92, REF_FOOT_H = 58;
 
-function refCurrent() { return REF_DRILLS[refIdx] || null; }
+function refCurrent() { return refList[refIdx] || null; }
 
 function refPaint() {
   var d = refCurrent();
   if (!d) return;
-  byId('refCount').innerHTML = 'TAKE ' + (refIdx + 1) + ' OF ' + REF_DRILLS.length +
+  byId('refCount').innerHTML = 'TAKE ' + (refIdx + 1) + ' OF ' + refList.length +
     ' &nbsp;&middot;&nbsp; ' + d.ref.item +
     (refSent[d.id] ? ' &nbsp;&middot;&nbsp; RECORDED' : '');
   byId('refPhrase').innerHTML = d.ref.text;
@@ -12188,7 +12239,8 @@ function refBegin() {
   refPaint();
 }
 
-function refStart() {
+function refStart(list) {
+  refList = list && list.length ? list : REF_DRILLS;
   closePanels();
   byId('trainOverlay').className = 'overlay';
   refOn = true;
@@ -12198,8 +12250,8 @@ function refStart() {
   resizeView();
   /* find the first take still missing, so a session can be resumed */
   refIdx = 0;
-  while (refIdx < REF_DRILLS.length && refSent[REF_DRILLS[refIdx].id]) refIdx++;
-  if (refIdx >= REF_DRILLS.length) refIdx = 0;
+  while (refIdx < refList.length && refSent[refList[refIdx].id]) refIdx++;
+  if (refIdx >= refList.length) refIdx = 0;
   refBegin();
 }
 
@@ -12306,6 +12358,7 @@ function drillById(id) {
   var i;
   for (i = 0; i < DRILLS.length; i++) if (DRILLS[i].id === id) return DRILLS[i];
   for (i = 0; i < REF_DRILLS.length; i++) if (REF_DRILLS[i].id === id) return REF_DRILLS[i];
+  for (i = 0; i < MATH_DRILLS.length; i++) if (MATH_DRILLS[i].id === id) return MATH_DRILLS[i];
   return null;
 }
 
@@ -12356,8 +12409,21 @@ function drillShowList() {
     'on what you can remember about how it looked.</span>' +
     (refDoneCount() ? '<span class="res">&#10003; ' + refDoneCount() + ' of ' +
        REF_DRILLS.length + ' done &middot; picks up where you left off</span>' : '');
-  rb.addEventListener('click', refStart);
+  rb.addEventListener('click', function () { refStart(REF_DRILLS); });
   list.appendChild(rb);
+  var mDone = 0, mi;
+  for (mi = 0; mi < MATH_DRILLS.length; mi++) if (refSent[MATH_DRILLS[mi].id]) mDone++;
+  var mb = document.createElement('button');
+  mb.className = mDone >= MATH_DRILLS.length ? 'pass' : '';
+  mb.innerHTML = (mDone ? 'Carry on with the maths session' : 'Start the maths session') +
+    '<span class="sub">Your digits, and nine short sums - 22 + 4, a times, a divide, ' +
+    'brackets, decimals, powers, fractions - each written three times at your ' +
+    'normal speed. Write, tap Done, the next appears. About eight minutes.<br><br>' +
+    'It is what maths answers will learn your handwriting from.</span>' +
+    (mDone ? '<span class="res">&#10003; ' + mDone + ' of ' + MATH_DRILLS.length +
+       ' done &middot; picks up where you left off</span>' : '');
+  mb.addEventListener('click', function () { refStart(MATH_DRILLS); });
+  list.appendChild(mb);
 
   byId('trainProgress').innerHTML = drillDoneCount() + ' of ' +
     (DRILLS.length + REF_DRILLS.length) +
@@ -12474,7 +12540,8 @@ window.__mnRef = {
   skip: refSkip, exit: refExit,
   at: function () { return refIdx; },
   on: function () { return refOn; },
-  take: function () { var d = refCurrent(); return d ? d.ref : null; }
+  take: function () { var d = refCurrent(); return d ? d.ref : null; },
+  maths: MATH_DRILLS, id: function () { var d = refCurrent(); return d ? d.id : null; }
 };
 window.__mnNb = {
   move: moveNotebook, rename: renameNotebook, del: deleteNotebook,
@@ -16385,6 +16452,7 @@ photoInput.addEventListener('change', function () {
   if (f) insertPhotoFile(f);
 });
 byId('backupExportBtn').addEventListener('click', doExport);
+byId('backupSendBtn').addEventListener('click', doSendBackup);
 byId('backupImportBtn').addEventListener('click', doImport);
 
 /* drawing on the canvas closes floating panels (closePanels is
