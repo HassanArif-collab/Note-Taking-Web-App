@@ -7871,6 +7871,15 @@ window.__mnFeat = function () {
   return out;
 };
 window.__mnFeatNames = FEAT_NAMES;
+/* tooling: the lines being drawn right now, and which are kept out of sight -
+   scripts/palmfate.js reads what was on the screen from this */
+window.__mnInkNow = function () {
+  var out = {}, k, n = activeNote();
+  for (k in inkNow) {
+    if (inkNow.hasOwnProperty(k)) out[k] = { n: inkNow[k].stroke.pts.length, held: !!inkNow[k].held };
+  }
+  return { ink: out, strokes: n ? n.strokes : [] };
+};
 
 function inkStraightness(st) {
   return st.net / Math.max(st.pathLen, 1);
@@ -8370,6 +8379,10 @@ function handBegin(st, now) {
 function handPalm(o, now) {
   if (o.hpalm) return;
   var seen = inkNow[o.id] && !inkNow[o.id].held;
+  /* a tap with the hand in it is not two fingers asking for undo - said now,
+     not when the hand lifts: by then the pen's dot had been dropped as half
+     of a "two-finger tap" (recorded) */
+  handVetoTaps();
   o.hpalm = true;
   o.state = 'palm';
   o.wait = false;
@@ -8855,9 +8868,11 @@ function appendInk(st, pt, now, touch) {
   s.pts.push([st.fx, st.fy, now]);
   st.net = dist(st.csx, st.csy, cx, cy);
 
-  /* incremental live segment (one per move, never the tail) */
+  /* incremental live segment (one per move, never the tail) - not for a line
+     kept out of sight: painting it anyway flashed every hidden palm mark and
+     the first finger of every gesture until the next redraw wiped it */
   var k = s.pts.length - 1;
-  if (k >= 2) {
+  if (k >= 2 && !ink.held) {
     ctx.save();
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -dpr * zoom * scrollX, -dpr * zoom * scrollY);
     ctx.globalAlpha = s.a;
@@ -9061,8 +9076,11 @@ function endTouch(touch, now, cancelled) {
   if (holdEnd(st)) return;
   st.cancelled = cancelled;
   if (st.hpalm) { handVetoTaps(); requestRender(); return; }
+  /* ...unless it is surely the pen: well above the hand, and long, or on the
+     line being written - the iPad cancels every touch at once now and then,
+     and a 26px stroke on the line went with the palm (recorded) */
   if (cancelled && settings.palmLevel === PALM_AUTO && st.kind === 'probe' && st.state === 'ink' &&
-      !(st.penProof && st.pathLen > 40 && now - st.t0 > 150)) {
+      !(st.penProof && (st.onLine || (st.pathLen > 40 && now - st.t0 > 150)))) {
     handVetoTaps();
     handCancel(st, now);
     return;

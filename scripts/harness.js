@@ -23,14 +23,17 @@ function setClock(ms) { _clock = ms; }
 function realNow() { return _realNow.call(Date); }
 Date.now = function () { return _clock === null ? _realNow.call(Date) : _clock; };
 
-/* a canvas 2D context that accepts anything and does nothing */
+/* a canvas 2D context that accepts anything and does nothing - except
+   count its calls in __n, so a test can tell whether something was painted */
 function mockCtx() {
+  var n = {};
   return new Proxy({}, {
     get: function (t, k) {
+      if (k === '__n') return n;
       if (k === 'measureText') return function (s) { return { width: String(s).length * 7 }; };
       if (k === 'toDataURL') return function () { return 'data:image/png;base64,'; };
       if (Object.prototype.hasOwnProperty.call(t, k)) return t[k];
-      return function () {};
+      return function () { n[k] = (n[k] || 0) + 1; };
     },
     set: function (t, k, v) { t[k] = v; return true; }
   });

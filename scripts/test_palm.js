@@ -1275,6 +1275,73 @@ test('Auto: writing started lower down the page shows without waiting', function
   done();
 });
 
+/* recorded on every Auto session: a touch kept out of sight was painted all
+   the same, segment by segment as it moved, and wiped at the next redraw -
+   palm marks flashing under the hand, two-finger gestures drawing a line
+   first, and a hidden pen stroke shown, gone, then back 2.5s later */
+function paints(app) { return app.els.noteCanvas.getContext('2d').__n.stroke || 0; }
+test('Auto: a touch kept out of sight is not painted while it moves', function (done) {
+  var app = freshAtLevel(4), i, n0;
+  autoLine(app, 1, 200, 200);
+  app.tick(400);
+  app.flushFrames();
+  app.down(2, 520, 600);                   /* far below the line: the hand, probably */
+  n0 = paints(app);
+  for (i = 1; i <= 12; i++) { app.tick(16); app.moveTo(2, 520 + i * 4, 600 + i); }
+  check('Auto: nothing painted for the hidden touch', paints(app) === n0, (paints(app) - n0) + ' segments painted');
+  app.tick(16); app.up(2);
+  done();
+});
+test('Auto: the first finger of a two-finger gesture paints no line', function (done) {
+  var app = freshAtLevel(4), i, n0;
+  app.down(1, 400, 420); app.tick(20); app.down(2, 520, 422);
+  n0 = paints(app);
+  for (i = 1; i <= 6; i++) { app.tick(16); app.moveTo(1, 400, 420 - i * 6); app.moveTo(2, 520, 422 - i * 6); }
+  check('Auto: no segment painted before the gesture is known', paints(app) === n0, (paints(app) - n0) + ' segments painted');
+  app.tick(16); app.up(1); app.up(2);
+  done();
+});
+
+/* recorded (live-20260929-084019): short pen marks - a dot, a tick - lost
+   as "a two-finger tap" because the palm landed within a quarter second of
+   the nib. The palm was known to be the hand the moment it landed. */
+test('Auto: a short pen mark made as the palm lands is kept, and undoes nothing', function (done) {
+  var app = freshAtLevel(4), i;
+  autoLine(app, 1, 200, 330);
+  app.tick(900);
+  app.down(2, 340, 336);                   /* the pen: a little tick */
+  app.tick(60);
+  app.down(3, 600, 620);                   /* the palm, 60ms later, well below */
+  for (i = 1; i <= 6; i++) { app.tick(20); app.moveTo(2, 340 + i * 2, 336 + i); }
+  app.tick(20); app.up(2);
+  app.tick(120); app.up(3);
+  after(300, function () {
+    app.flushFrames();
+    check('Auto: both pen marks on the page', app.strokes().length === 2, app.strokes().length + ' strokes');
+    done();
+  });
+});
+
+/* recorded (live-20260929-075029): the iPad cancelled every touch at once,
+   the pen's with the hand's. The pen was on the line being written and well
+   above the hand - a short stroke (26px) still went, because only long ones
+   were spared. */
+test('Auto: a short pen stroke on the line survives the iPad cancelling it with the palm', function (done) {
+  var app = freshAtLevel(4), i;
+  autoLine(app, 1, 200, 300);
+  app.tick(600);
+  app.down(2, 330, 302);                   /* the pen, on the line */
+  app.tick(40);
+  app.down(3, 520, 560);                   /* the hand, 258px below */
+  for (i = 1; i <= 6; i++) { app.tick(25); app.moveTo(2, 330 + i * 4, 302 + (i % 2)); }
+  app.up(3, true); app.up(2, true);        /* the iPad cancels both */
+  after(300, function () {
+    app.flushFrames();
+    check('Auto: the pen\'s short stroke stays', app.strokes().length === 2, app.strokes().length + ' strokes');
+    done();
+  });
+});
+
 (function run(i) {
   if (i >= tests.length) {
     console.log('\n' + pass + ' passed, ' + fail + ' failed');
