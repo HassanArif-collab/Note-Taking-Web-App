@@ -1938,6 +1938,16 @@ body.dark #tokenInput { background: #26282D; color: #E8E8E8; border-color: #3A43
   font-size: 12px; padding: 5px 12px; border-radius: 12px;
   z-index: 14; display: none;
 }
+#zoomCtl {
+  position: absolute; right: 12px; bottom: 12px; z-index: 14; white-space: nowrap;
+  background: rgba(38,38,38,0.72); border-radius: 20px;
+}
+.zc-b {
+  display: inline-block; vertical-align: top; height: 40px; min-width: 44px; padding: 0 4px;
+  border: 0; background: none; color: #FFFFFF; font-size: 13px; border-radius: 20px;
+}
+#zoomOut, #zoomIn { font-size: 22px; font-weight: 300; }
+.zc-b:active { background: rgba(255,255,255,0.18); }
 
 /* ---------- shape assist row (pen palette) ---------- */
 #shapeRow { margin-top: 12px; }
@@ -2362,6 +2372,8 @@ body.dark #toast { background: rgba(20,21,24,0.94); }
   <!-- scroll/zoom pill: outside canvasWrap so its tap is not eaten
        by the canvas touch handlers (tap = jump to page) -->
   <div id="scrollPill"></div>
+  <!-- how far the page is zoomed, in the corner: - and + step it, the number puts it back -->
+  <div id="zoomCtl"><button id="zoomOut" class="zc-b" aria-label="Zoom out">&minus;</button><button id="zoomPct" class="zc-b" aria-label="Back to 100%">100%</button><button id="zoomIn" class="zc-b" aria-label="Zoom in">+</button></div>
 
   <!-- tool bar (docked under the header) -->
   <div id="toolbar">
@@ -4999,6 +5011,7 @@ function zwToggle() {
     toast('Write in the strip - it lands in the box above');
   }
   zwBarPlace();
+  zoomCtlPlace();
   applyPalmUI();
   requestRender();
 }
@@ -5087,6 +5100,7 @@ function resizeView() {
   measureWrap();
   popPlace();
   zwBarPlace();
+  zoomCtlPlace();
   clampScroll();
   positionSelBar();
   requestRender();
@@ -11344,24 +11358,18 @@ function commitText() {
 /* ---------- scroll position pill ---------- */
 function updateScrollPill() {
   if (stripOn) stripMark();
-  var totalPages = pageCount();
-  var page = currentPage();
-  var txt = page + ' / ' + totalPages;
-  if (Math.abs(zoom - 1) > 0.01) txt = txt + '  ' + Math.round(zoom * 100) + '%';
-  /* an endless page has no page numbers to show - only the zoom, if any */
-  if (isEndless()) {
-    if (Math.abs(zoom - 1) <= 0.01) { scrollPill.style.display = 'none'; return; }
-    txt = Math.round(zoom * 100) + '%';
-  }
+  /* the zoom has a place of its own in the corner now, always showing */
+  var pct = Math.round(zoom * 100) + '%', zp = byId('zoomPct');
+  if (zp.textContent !== pct) zp.textContent = pct;
+  /* an endless page has no page numbers to show */
+  if (isEndless()) { scrollPill.style.display = 'none'; return; }
+  var txt = currentPage() + ' / ' + pageCount();
   /* this runs on every frame of a scroll; touching the DOM only when the
      text actually changes spares the browser a style pass per frame */
   if (scrollPill.textContent !== txt) scrollPill.textContent = txt;
   if (scrollPill.style.display !== 'block') scrollPill.style.display = 'block';
   if (scrollPillTimer) clearTimeout(scrollPillTimer);
-  /* while zoomed the pill stays visible as the zoom indicator */
-  if (Math.abs(zoom - 1) <= 0.01) {
-    scrollPillTimer = setTimeout(function () { scrollPill.style.display = 'none'; }, 1300);
-  }
+  scrollPillTimer = setTimeout(function () { scrollPill.style.display = 'none'; }, 1300);
 }
 /* ---------- turning to a page ----------
  * Side by side, a change of page glides across instead of jumping: the
@@ -11472,6 +11480,40 @@ function resetZoom() {
   if (scrollPillTimer) { clearTimeout(scrollPillTimer); scrollPillTimer = null; }
   scrollPillTimer = setTimeout(function () { scrollPill.style.display = 'none'; }, 1300);
   toast('Zoom 100%');
+}
+/* - and + in the corner: a step at a time, gliding there round the middle
+   of what is on screen - above the zoom window's strip when it is open */
+var ZOOM_STEPS = [0.6, 0.75, 1, 1.25, 1.5, 2, 2.6], zoomTw = null;
+function zoomStep(dir) {
+  var to = zoomTw ? zoomTw.z1 : zoom, i, z = dir > 0 ? Z_MAX : zMin();
+  for (i = 0; i < ZOOM_STEPS.length; i++) {
+    if (dir > 0 && ZOOM_STEPS[i] > to + 0.01) { z = ZOOM_STEPS[i]; break; }
+    if (dir < 0 && ZOOM_STEPS[i] < to - 0.01) z = ZOOM_STEPS[i];
+  }
+  z = lim(z, zMin(), Z_MAX);
+  if (Math.abs(z - zoom) < 0.001) return;
+  stopMomentum();
+  var vh = (viewH - (zw.on ? zwGeom().h : 0)) / 2;
+  zoomTw = { z0: zoom, z1: z, cx: scrollX + viewW / 2 / zoom, cy: scrollY + vh / zoom, vh: vh, t0: Date.now() };
+  zoomTwStep();
+}
+function zoomTwStep() {
+  var a = zoomTw;
+  if (!a || gesture) { zoomTw = null; return; }     /* fingers took the page over */
+  var e = lim((Date.now() - a.t0) / 180, 0, 1), t = 1 - Math.pow(1 - e, 3);
+  zoom = a.z0 + (a.z1 - a.z0) * t;
+  scrollX = a.cx - viewW / 2 / zoom;
+  scrollY = a.cy - a.vh / zoom;
+  clampScroll();
+  requestRender();
+  if (e < 1) window.requestAnimationFrame(zoomTwStep); else zoomTw = null;
+}
+/* in the paper's bottom corner, wherever the paper is: beside a split
+   pane, clear of the docked pens, above the zoom window's strip */
+function zoomCtlPlace() {
+  var el = byId('zoomCtl'), R = parseInt(canvasWrap.style.right, 10) || 0, B = parseInt(canvasWrap.style.bottom, 10) || 0;
+  el.style.right = (R + 12 + (pdState && pdState.on ? 108 : 0)) + 'px';
+  el.style.bottom = (B + 12 + (zw.on ? zwGeom().h : 0) + (refOn ? REF_FOOT_H : 0)) + 'px';
 }
 
 /* ---------- reset (note switch) ---------- */
@@ -16527,11 +16569,13 @@ function dockToggle() {
   void el.offsetWidth;                      /* a forced reflow, so the slide-in has a start */
   el.className = 'on in';
   pdPaint();
+  zoomCtlPlace();
 }
 function pdHide() {
   var el = byId('penDock');
   if (!pdState.on) return;
   pdState.on = false;
+  zoomCtlPlace();
   el.setAttribute('aria-hidden', 'true');
   el.className = 'on';                      /* kept on while it slides out */
   if (pdOfT) clearTimeout(pdOfT);
@@ -17608,6 +17652,9 @@ scrollPill.addEventListener('click', function () {
   if (homeView.className.indexOf('on') >= 0) return;
   openPageMenu();
 });
+byId('zoomOut').addEventListener('click', function () { zoomStep(-1); });
+byId('zoomIn').addEventListener('click', function () { zoomStep(1); });
+byId('zoomPct').addEventListener('click', function () { zoomTw = null; resetZoom(); });
 
 undoBtn.addEventListener('click', doUndo);
 redoBtn.addEventListener('click', doRedo);

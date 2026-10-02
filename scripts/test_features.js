@@ -549,6 +549,14 @@ check('the box advances once writing reaches its right edge',
 
 /* with the strip open the page above aims rather than writes - it is the
    only way to start a new line without leaving the strip */
+/* the zoom in the corner sits above the strip, not under it */
+check('the zoom readout moves up above the strip while it is open',
+      za.els.zoomCtl.style.bottom === (12 + (826 - zg.top)) + 'px', za.els.zoomCtl.style.bottom + ', strip ' + (826 - zg.top));
+var zz = zwApp(), zcz0 = zz.geom().zoom;      /* a fresh one: the test clock is shared between apps */
+zz.els.zoomIn._fire('click', {}); zz.tick(200); zz.flushFrames();
+check('...and + still zooms the page with the zoom window open', zz.geom().zoom > zcz0 + 0.2,
+      zcz0.toFixed(2) + ' -> ' + zz.geom().zoom.toFixed(2));
+
 var zc = zwApp();
 zc.down(9, 400, 200 + WRAPTOP);
 zc.tick(120);
@@ -560,6 +568,33 @@ check('tapping the page moves the box there',
       'centre (' + Math.round(zcz.x + zcz.bw / 2) + ',' + Math.round(zcz.y + zcz.bh / 2) + ')');
 check('...and leaves no ink where it was tapped', zc.strokes().length === 0,
       zc.strokes().length + ' strokes');
+
+/* ---------- the zoom in the corner ----------
+ * Asked for: always see how far the page is zoomed, and change it there
+ * with - and + rather than only by pinching. */
+function zcPress(a, id) { a.els[id]._fire('click', {}); a.tick(220); a.flushFrames(); }
+var zk = scApp();
+check('the corner shows the zoom, 100% to begin with', zk.els.zoomPct.textContent === '100%', zk.els.zoomPct.textContent);
+var zkMid = { x: zk.geom().scrollX + 1024 / 2, y: zk.geom().scrollY + 712 / 2 };
+zcPress(zk, 'zoomIn');
+var zkG = zk.geom();
+check('+ zooms in a step, and the corner says so', Math.abs(zkG.zoom - 1.25) < 0.001 && zk.els.zoomPct.textContent === '125%',
+      zkG.zoom.toFixed(3) + ', ' + zk.els.zoomPct.textContent);
+check('...round the middle of the screen, not its corner',
+      Math.abs(zkG.scrollX + 1024 / 2 / zkG.zoom - zkMid.x) < 2 && Math.abs(zkG.scrollY + 712 / 2 / zkG.zoom - zkMid.y) < 2,
+      'middle at ' + Math.round(zkG.scrollX + 1024 / 2 / zkG.zoom) + ',' + Math.round(zkG.scrollY + 712 / 2 / zkG.zoom));
+zcPress(zk, 'zoomOut'); zcPress(zk, 'zoomOut');
+check('- steps back out, past 100%', Math.abs(zk.geom().zoom - 0.75) < 0.001 && zk.els.zoomPct.textContent === '75%',
+      zk.geom().zoom.toFixed(3) + ', ' + zk.els.zoomPct.textContent);
+zcPress(zk, 'zoomOut'); zcPress(zk, 'zoomOut');
+check('...and stops at the furthest out the page goes', Math.abs(zk.geom().zoom - 0.6) < 0.001, zk.geom().zoom.toFixed(3));
+zcPress(zk, 'zoomPct');
+check('tapping the number puts it back to 100%', Math.abs(zk.geom().zoom - 1) < 0.001 && zk.els.zoomPct.textContent === '100%',
+      zk.geom().zoom.toFixed(3) + ', ' + zk.els.zoomPct.textContent);
+var zp = scApp();
+gsPair(zp, 20, function (i) { return [450 - i * 6, 420]; }, function (i) { return [560 + i * 6, 420]; }, 20);
+check('a pinch shows in the corner too', zp.els.zoomPct.textContent === Math.round(zp.geom().zoom * 100) + '%' && zp.geom().zoom > 1.1,
+      zp.els.zoomPct.textContent + ' at zoom ' + zp.geom().zoom.toFixed(2));
 
 /* Samsung's pad: arrows on the strip, a new line, and the end of the line */
 function zwPress(a, id) { a.els[id]._fire('click', {}); a.tick(300); a.flushFrames(); }
@@ -2334,9 +2369,9 @@ var l2g = l2.pages();
 check('the view arrives at that page', l2g.cur === 2 && l2g.tween === false,
       'page ' + l2g.cur + ', tween ' + l2g.tween);
 check('...at the head of it', Math.abs(l2g.x - SPAN_H) < 4, 'x ' + l2g.x);
-check('the page pill counts across, with the zoom it is at',
-      l2.els.scrollPill.textContent === '2 / 3  75%',
-      '"' + l2.els.scrollPill.textContent + '"');
+check('the page pill counts across, and the corner shows the zoom it is at',
+      l2.els.scrollPill.textContent === '2 / 3' && l2.els.zoomPct.textContent === '75%',
+      '"' + l2.els.scrollPill.textContent + '", corner ' + l2.els.zoomPct.textContent);
 
 l2.clickMenu('Pages');
 var l2x = firstPt(l2)[0], l2y = firstPt(l2)[1];
