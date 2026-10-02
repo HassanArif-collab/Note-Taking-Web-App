@@ -6,8 +6,11 @@
  * it: a stroke kept out of sight was still painted while it was written.
  *
  *   node scripts/palmfate.js [--auto] [--html f] [--list] traces/live-*.json
+ *   fates: kept, late (kept out of sight, then shown), shown-removed,
+ *   hidden-dropped (kept out of sight, never shown), never (not drawn), open
  *   --auto   replay with Auto palm rejection whatever the recording used
  *   --list   one line per contact
+ *   --chain  join 20s live slices back into the sessions they came from
  *
  * Exports fate(trace, opts) for other tools.
  * ============================================================ */
@@ -52,8 +55,9 @@ function fate(trace, opts) {
     for (id in ink) {
       c = cs[id];
       if (!c || ink[id].n < 3) continue;
-      c.painted = true;
-      if (ink[id].held) c.paintedHeld = true;
+      /* a line kept out of sight is not on the screen */
+      if (ink[id].held) c.held = true;
+      else c.painted = true;
     }
     for (k = 0; k < list.length; k++) {
       s = list[k];
@@ -98,8 +102,9 @@ function fate(trace, opts) {
           c.life = (c.upAt === null ? last : c.upAt) - c.t0;
           c.v = verdicts[id] || [];
           if (c.upAt === null) c.fate = 'open';             /* still down when the recording was cut */
-          else if (c.stroke && !c.gone) c.fate = c.lateBy > 300 || c.paintedHeld ? 'late' : 'kept';
+          else if (c.stroke && !c.gone) c.fate = c.lateBy > 300 || (c.held && !c.painted) ? 'late' : 'kept';
           else if (c.painted) c.fate = 'shown-removed';
+          else if (c.held) c.fate = 'hidden-dropped';
           else c.fate = 'never';
           c.why = (c.gone ? 'removed@' + c.gone + ' ' : '') + c.v.join(',');
           return c;
@@ -111,28 +116,60 @@ function fate(trace, opts) {
 }
 exports.fate = fate;
 
+/* Live recordings are 20s slices of one session: the ring is posted and
+   cleared, and the next slice carries on. Replayed one by one, each starts
+   knowing nothing - no line written, no hand down - and its first seconds
+   are judged unlike the iPad judged them. Slices posted within 30s of each
+   other are joined back into the session they came from. */
+function sessions(files) {
+  var out = [], cur = null;
+  files.forEach(function (f) {
+    var tr = JSON.parse(fs.readFileSync(f, 'utf8')), at = Date.parse(tr.at), end = 0, i, r;
+    for (i = 0; i < tr.samples.length; i++) { r = tr.samples[i]; if (typeof r[0] === 'number' && r[4] > end) end = r[4]; }
+    var start = at - end;
+    if (!cur || start - cur.end > 30000 || tr.palmLevel !== cur.tr.palmLevel) {
+      cur = { files: [], start: start, end: at, tr: { viewW: tr.viewW, viewH: tr.viewH, dpr: tr.dpr, palmLevel: tr.palmLevel,
+                                                     hand: tr.hand, samples: [] } };
+      out.push(cur);
+    }
+    var off = Math.max(start - cur.start, cur.tr.samples.length ? cur.last + 1 : 0);
+    for (i = 0; i < tr.samples.length; i++) {
+      r = tr.samples[i];
+      if (typeof r[0] !== 'number') continue;
+      r = r.slice(); r[4] += off; cur.tr.samples.push(r); cur.last = r[4];
+    }
+    cur.files.push(path.basename(f));
+    cur.end = at;
+  });
+  return out;
+}
+exports.sessions = sessions;
+
 if (require.main === module) {
-  var args = process.argv.slice(2), opts = {}, files = [], list = false;
+  var args = process.argv.slice(2), opts = {}, files = [], list = false, chain = false;
   for (var a = 0; a < args.length; a++) {
     if (args[a] === '--auto') opts.auto = true;
     else if (args[a] === '--html') opts.html = args[++a];
     else if (args[a] === '--list') list = true;
+    else if (args[a] === '--chain') chain = true;
     else files.push(args[a]);
   }
   var tot = {};
+  var jobs = chain ? sessions(files).map(function (s) { return { name: s.files[0] + ' +' + (s.files.length - 1), tr: s.tr }; })
+                   : files.map(function (f) { return { name: path.basename(f), tr: JSON.parse(fs.readFileSync(f, 'utf8')) }; });
   (function next(i) {
-    if (i >= files.length) { console.log('TOTAL ' + JSON.stringify(tot)); return; }
-    var f = files[i], tr = JSON.parse(fs.readFileSync(f, 'utf8'));
+    if (i >= jobs.length) { console.log('TOTAL ' + JSON.stringify(tot)); return; }
+    var f = jobs[i].name, tr = jobs[i].tr;
     fate(tr, opts).then(function (res) {
       var n = {};
       res.contacts.forEach(function (c) {
         n[c.fate] = (n[c.fate] || 0) + 1; tot[c.fate] = (tot[c.fate] || 0) + 1;
         if (list || c.fate === 'shown-removed' || c.fate === 'late')
           console.log('  #' + c.k + ' ' + c.fate + ' ' + c.why + '  ' + c.life + 'ms p' + Math.round(c.path) +
-                      ' @(' + c.pts[0][0] + ',' + c.pts[0][1] + ')' + (c.paintedHeld ? ' HELD-PAINTED' : '') +
+                      ' @(' + c.pts[0][0] + ',' + c.pts[0][1] + ')' + (c.held ? ' held' : '') +
                       (c.lateBy > 300 ? ' late ' + c.lateBy + 'ms' : '') + (c.cancel ? ' cancel' : ''));
       });
-      console.log(path.basename(f) + ' ' + JSON.stringify(n));
+      console.log(f + ' ' + JSON.stringify(n));
       next(i + 1);
     });
   })(0);

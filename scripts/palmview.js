@@ -9,6 +9,7 @@
  *   node scripts/shot.js file:///<abs path>/out.html out.png "" 1100 <height>
  *
  *   black   drawn and kept             red     drawn, then taken away
+ *   orange  kept out of sight, dropped  blue    still down when recording ended
  *   green   kept, but shown late       grey    never drawn (the hand)
  * ============================================================ */
 'use strict';
@@ -21,7 +22,7 @@ for (var a = 0; a < args.length; a++) {
   else if (!out) out = args[a];
   else files.push(args[a]);
 }
-var COL = { kept: '#000', late: '#0a0', 'shown-removed': '#e00', never: '#bbb', open: '#08f' };
+var COL = { kept: '#000', late: '#0a0', 'shown-removed': '#e00', 'hidden-dropped': '#f80', never: '#bbb', open: '#08f' };
 var html = ['<!doctype html><meta charset="utf-8"><body style="margin:0;font:12px sans-serif;background:#fff">'];
 
 (function next(i) {

@@ -1065,12 +1065,12 @@ test('Auto: a stroke written far below still lands once no pen comes above it', 
 
 /* recorded: the palm brushed low and lifted, and the pen only came back
    2.4s later - a fixed half-second wait had already drawn the brush */
-test('Auto: a palm brush the pen returns above 2s later is never drawn', function (done) {
+test('Auto: a palm brush the pen returns above 2s later is taken back', function (done) {
   var app = freshAtLevel(4), i;
   autoLine(app, 1, 200, 330);
   app.tick(400);
-  app.down(2, 520, 640);
-  for (i = 1; i <= 20; i++) { app.tick(16); app.moveTo(2, 520 + i * 3, 640 + i); }
+  app.down(2, 520, 640);                   /* a brush the size most recorded ones were, ~30px */
+  for (i = 1; i <= 9; i++) { app.tick(16); app.moveTo(2, 520 + i * 3, 640 + i); }
   app.tick(16); app.up(2);
   app.tick(2000);
   autoLine(app, 3, 330, 336);
@@ -1275,22 +1275,78 @@ test('Auto: writing started lower down the page shows without waiting', function
   done();
 });
 
-/* recorded on every Auto session: a touch kept out of sight was painted all
-   the same, segment by segment as it moved, and wiped at the next redraw -
-   palm marks flashing under the hand, two-finger gestures drawing a line
-   first, and a hidden pen stroke shown, gone, then back 2.5s later */
+/* Reported twice: a stroke started lower down the page was kept out of
+   sight - first it vanished and came back, then it showed late ("first
+   nothing appears, then suddenly"). Drawn at once now, every time. */
 function paints(app) { return app.els.noteCanvas.getContext('2d').__n.stroke || 0; }
-test('Auto: a touch kept out of sight is not painted while it moves', function (done) {
+test('Auto: a stroke started far below the last one shows as it is drawn, and stays', function (done) {
   var app = freshAtLevel(4), i, n0;
   autoLine(app, 1, 200, 200);
   app.tick(400);
   app.flushFrames();
-  app.down(2, 520, 600);                   /* far below the line: the hand, probably */
+  app.down(2, 520, 600);                   /* far below the line, right of the pen */
   n0 = paints(app);
   for (i = 1; i <= 12; i++) { app.tick(16); app.moveTo(2, 520 + i * 4, 600 + i); }
-  check('Auto: nothing painted for the hidden touch', paints(app) === n0, (paints(app) - n0) + ' segments painted');
+  check('Auto: painted as it moves', paints(app) - n0 >= 10, (paints(app) - n0) + ' segments painted');
   app.tick(16); app.up(2);
+  app.flushFrames();
+  check('Auto: ...and on the page the moment it lifts', app.strokes().length === 2, app.strokes().length + ' strokes');
   done();
+});
+/* drawing goes down the page and back up again */
+test('Auto: drawing a long line far below, then going back up, keeps both', function (done) {
+  var app = freshAtLevel(4), i;
+  autoLine(app, 1, 300, 200);
+  app.tick(500);
+  app.down(2, 420, 480);                   /* a long line 270px below, at a pen's pace */
+  for (i = 1; i <= 30; i++) { app.tick(16); app.moveTo(2, 420 + i * 4, 480 + (i % 5)); }
+  app.tick(16); app.up(2);
+  app.tick(400);
+  autoLine(app, 3, 360, 230);              /* back up, 0.4s later */
+  after(300, function () {
+    app.flushFrames();
+    check('Auto: all three strokes stay', app.strokes().length === 3, app.strokes().length + ' strokes');
+    done();
+  });
+});
+test('Auto: a stroke started below and left of the last is plain ink, not the hand', function (done) {
+  var app = freshAtLevel(4);
+  autoLine(app, 1, 500, 200);              /* the line ends near x 596 */
+  app.tick(500);
+  autoLine(app, 2, 150, 420);              /* a new line further down, on the left */
+  app.tick(300);
+  autoLine(app, 3, 260, 250);              /* back above it, a moment later: it stays */
+  after(300, function () {
+    app.flushFrames();
+    check('Auto: the stroke on the left stays', app.strokes().length === 3, app.strokes().length + ' strokes');
+    done();
+  });
+});
+/* a left hand with the setting left on Right: the hand is learned from where
+   it rests while the pen writes above it, and its brushes are then known */
+test('Auto: where the hand rests is learned - a left hand left on the Right setting', function (done) {
+  var app = freshAtLevel(4), k, i;
+  autoLine(app, 1, 500, 200);
+  for (k = 0; k < 14; k++) {               /* the left palm rests below-left as the pen writes */
+    app.tick(300);
+    app.down(10 + k, 300, 470);
+    app.tick(120);
+    app.down(40 + k, 520 + (k % 3) * 8, 202);
+    for (i = 1; i <= 8; i++) { app.tick(16); app.moveTo(40 + k, 520 + (k % 3) * 8 + i * 6, 202 + (i % 2)); }
+    app.tick(16); app.up(40 + k); app.up(10 + k);
+  }
+  app.tick(500);
+  app.down(90, 330, 520);                  /* a brush far below-left, as a left palm makes */
+  for (i = 1; i <= 5; i++) { app.tick(16); app.moveTo(90, 330 + i * 4, 520 + i); }
+  app.tick(16); app.up(90);
+  app.tick(300);
+  autoLine(app, 91, 520, 206);             /* the pen back on its line, above it */
+  after(300, function () {
+    app.flushFrames();
+    var low = app.strokes().filter(function (s) { return s.pts[0][1] > 400; }).length;
+    check('Auto: the left palm brush is taken back', low === 0, low + ' low strokes, ' + app.strokes().length + ' in all');
+    done();
+  });
 });
 test('Auto: the first finger of a two-finger gesture paints no line', function (done) {
   var app = freshAtLevel(4), i, n0;
