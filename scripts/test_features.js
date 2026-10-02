@@ -3288,6 +3288,58 @@ var mfxB = mfx.win.__mnMath.now();
 check('...and remembers it: the same shape is read the user\'s way from then on', mfxB && mfxB.txt === '13',
       JSON.stringify(mfxB && mfxB.txt));
 
+/* Not part of it: a mark that is no part of the sum, read as a symbol - one
+   further along the line, or a scribble (asked for). Fix leaves it out, and
+   the reader learns from it rather than needing telling every time. */
+function notPart(app, idx) {
+  app.els.mathFixBtn._fire('click', {});
+  app.els.mathFixRead.children[idx]._fire('click', {});
+  app.els.mathFixKeys.children.filter(function (k) { return k._lbl === 'key not'; })[0]._fire('click', {});
+}
+var mnFar = mLine([{ s: mB[1], gap: 60 }, { s: mA[6], gap: 6 }, { s: mA[7], gap: 18 }, { s: mA[2], gap: 18 }, { s: mA[4], gap: 18 }, { s: mA[5] }]);
+var mn1 = fresh();
+mn1.win.__mnMath.mine([]);
+mn1.loadInk(JSON.parse(JSON.stringify(mnFar)));
+var mn1A = mn1.win.__mnMath.now();
+check('a 2 written well before "10 + 2 =" is read into it: 212', mn1A && mn1A.txt === '212', JSON.stringify(mn1A && mn1A.txt));
+notPart(mn1, 0);
+check('Fix > the 2 > Not part of it: left out, the answer is 12 again', mn1.win.__mnMath.ans() && mn1.win.__mnMath.ans().txt === '12',
+      JSON.stringify(mn1.win.__mnMath.ans() && mn1.win.__mnMath.ans().txt));
+check('...the mark is remembered as no part of a sum, with the note',
+      mn1.win.__mnRec().strokes.filter(function (s) { return s.nm; }).length === 1);
+var mn1R = mn1.storage.getItem('mathnotes_reach');
+var mn2 = fresh();
+mn2.storage.setItem('mathnotes_reach', mn1R);
+mn2.loadInk(JSON.parse(JSON.stringify(mnFar)));
+var mn2A = mn2.win.__mnMath.now();
+check('...and the reader learned how far this writer\'s sums reach: the same line written again is 12',
+      +mn1R < 2.4 && mn2A && mn2A.txt === '12', 'reach ' + mn1R + ', read ' + JSON.stringify(mn2A && mn2A.txt));
+function mnZig() {                 /* a scribble as tall as the digits */
+  var pts = [], k;
+  for (k = 0; k <= 8; k++) pts.push([k * 4, (k % 2 ? 18 : -18) + (k % 4 === 0 ? 3 : 0), k * 12]);
+  return mBox([{ pts: pts }]);
+}
+var mn3 = fresh();
+mn3.win.__mnMath.mine([]);
+mn3.loadInk(mLine([{ s: mA[6], gap: 6 }, { s: mA[7], gap: 18 }, { s: mA[2], gap: 18 }, { s: mnZig(), gap: 18 }, { s: mA[4], gap: 18 }, { s: mA[5] }]));
+var mn3A = mn3.win.__mnMath.now();
+notPart(mn3, 3);
+check('a scribble read as a 4 (10 + 42) is left out with Not part of it: 12',
+      mn3A && mn3A.txt === '52' && mn3.win.__mnMath.ans() && mn3.win.__mnMath.ans().txt === '12',
+      JSON.stringify(mn3A && mn3A.txt) + ' -> ' + JSON.stringify(mn3.win.__mnMath.ans() && mn3.win.__mnMath.ans().txt));
+var mnG = mn3.storage.getItem('mathnotes_glyphs');
+var mn4 = fresh();
+mn4.storage.setItem('mathnotes_glyphs', mnG);
+mn4.loadInk(mLine([{ s: mA[6], gap: 6 }, { s: mA[7], gap: 18 }, { s: mA[2], gap: 18 }, { s: mA[4], gap: 18 }, { s: mnZig(), gap: 18 }, { s: mA[5] }]));
+var mn4A = mn4.win.__mnMath.now();
+check('...and its shape is learned as no symbol: the next one is left out by itself',
+      mn4A && mn4A.txt === '12', JSON.stringify(mn4A && mn4A.txt));
+var mn5 = fresh();
+mn5.storage.setItem('mathnotes_glyphs', mnG);
+mn5.loadInk(mLine([{ s: mA[6], gap: 18 }, { s: mnZig(), gap: 18 }, { s: mA[4], gap: 18 }, { s: mA[2], gap: 18 }, { s: mA[4], gap: 18 }, { s: mA[5] }]));
+check('...but never where leaving it out would run 1 and 2 together into 12: no answer, not a wrong one',
+      !mn5.win.__mnMath.now(), JSON.stringify(mn5.win.__mnMath.ans() && mn5.win.__mnMath.ans().txt));
+
 var mgo = scApp();
 onePlusOne(mgo);
 mgo.win.__mnMath.now();

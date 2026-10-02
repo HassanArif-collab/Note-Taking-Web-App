@@ -651,6 +651,7 @@ body.dark .cv-tile.on { box-shadow: 0 0 0 2px #232326, 0 0 0 4px #4DA3FF; }
   background: #EAF2FD; font-size: 18px; font-weight: 600; color: #1A73E8;
 }
 .mf-key:active { background: #1A73E8; color: #FFFFFF; }
+.mf-key.mf-not { width: auto; padding: 0 12px; font-size: 14px; color: #C5221F; background: #FCE8E6; }
 body.dark #mathBar, body.dark #mathFix { background: #232326; }
 body.dark .mf-chip { background: #2C2C30; color: #EDEDEF; }
 body.dark .mf-key { background: #1E2A3A; color: #6FB1FF; }
@@ -3683,6 +3684,7 @@ function serializeNote(n) {
   for (var i = 0; i < st.length; i++) {
     var s = st[i];
     var rec = { id: s.id, pen: s.pen, w: s.w, color: s.color, a: s.a, ord: s.ord, z: packPts(s.pts) };
+    if (s.nm) rec.nm = 1;          /* said in Fix to be no part of a sum */
     if (s.pen === PEN_TEXT) {
       rec.txt = s.txt || '';
       rec.sz = s.sz || 24;
@@ -11705,6 +11707,15 @@ var MATH_TOL = 2.4;         /* a $P distance past which a mark is not one this k
                                made from, matched at 1.6 at worst and the misreads sat at
                                0.9-1.7 - so this only turns away marks like nothing known */
 var GLYPH_KEY = 'mathnotes_glyphs';
+var REACH_KEY = 'mathnotes_reach';
+/* how far out from a sum, in symbol heights, writing still belongs to it:
+   2.4 to start with, and closer in for a writer who has said in Fix that a
+   mark that far out was no part of it (mathFixDrop) */
+function mathReach() {
+  var v = NaN;
+  try { v = parseFloat(localStorage.getItem(REACH_KEY)); } catch (e) {}
+  return v >= 0.8 && v < 2.4 ? v : 2.4;
+}
 var mathAns = null, mathTimer = null, mathSeen = {}, mathClouds = null;
 var mathDbg = '';           /* why the last reading stopped where it did - for Copy report */
 
@@ -12197,6 +12208,7 @@ function mathTokens(line, H, axis) {
     if (fr !== null) { toks.push({ c: '#', v: fr, sup: false, sy: sy }); base = sy; baseC = ')'; continue; }
     cls = mathClassify(sy, H);
     if (!cls || cls.d > MATH_TOL) return null;       /* something this cannot read */
+    if (cls.c === '~') { toks.push({ c: '~', sy: sy }); continue; }   /* like a mark taught as no symbol */
     /* a dot is a decimal point only down on the line; a stray one higher up
        - beside an =, above a digit - is a slip of the pen, and is left out */
     if (cls.c === '.' && (sy.y0 + sy.y1) / 2 < axis) continue;
@@ -12210,6 +12222,14 @@ function mathTokens(line, H, axis) {
          sy.y1 < (base.y0 + base.y1) / 2 + bh * 0.15 && sy.y0 < base.y0 + bh * 0.1;
     toks.push({ c: cls.c, sup: up, sy: sy, unsure: cls.p !== undefined && cls.p < 0.9 });
     if (!up) { base = sy; baseC = cls.c; }
+  }
+  /* a mark shaped like one the writer said was no part of a sum is left out
+     - unless the numbers either side of it would run together, and then it
+     is not a sum this can be sure of, rather than a wrong answer */
+  for (i = toks.length - 1; i >= 0; i--) {
+    if (toks[i].c !== '~') continue;
+    if (i > 0 && i < toks.length - 1 && /[0-9.)#]/.test(toks[i - 1].c) && /[0-9.(#]/.test(toks[i + 1].c)) return null;
+    toks.splice(i, 1);
   }
   return toks;
 }
@@ -12383,14 +12403,14 @@ function mathFmt(v) {
 /* Read the sum that ends at this "=": the strokes left of it on its line,
    as far back as they stay close together. */
 function mathRead(n, eq) {
-  var axis = (eq.y0 + eq.y1) / 2, H0 = Math.max((eq.x1 - eq.x0) * 1.25, 14), cand = [], i, s, b, m;
+  var axis = (eq.y0 + eq.y1) / 2, H0 = Math.max((eq.x1 - eq.x0) * 1.25, 14), cand = [], not = [], i, s, b, m;
   for (i = 0; i < n.strokes.length; i++) {
     s = n.strokes[i];
     if (s.pen >= PEN_TEXT || s.bg || eq.list.indexOf(s) >= 0 || !s.pts.length) continue;
     b = inkBox([s]);
     m = (b.y0 + b.y1) / 2;
     if (b.x1 > eq.x0 + 3 || m < axis - 1.7 * H0 || m > axis + 1.7 * H0) continue;
-    cand.push(s);
+    if (s.nm) not.push(s); else cand.push(s);
   }
   mathDbg = 'nothing left of the =';
   if (!cand.length) return null;
@@ -12406,14 +12426,19 @@ function mathRead(n, eq) {
   var big = [];
   for (k = 0; k < hs.length; k++) if (hs[k] >= hmax * 0.5) big.push(hs[k]);
   if (!big.length) return null;
-  var H = Math.max(tidyMedian(big), 10), line = [], edge = eq.x0;
+  var H = Math.max(tidyMedian(big), 10), line = [], edge = eq.x0, reach = mathReach();
+  /* a mark said to be no part of a sum is never read - but it is still ink
+     standing where it stands, so a gap it filled is not a gap */
+  for (k = 0; k < not.length; k++) { sy = inkBox([not[k]]); sy.nm = 1; syms.push(sy); }
+  if (not.length) syms.sort(function (p, r) { return p.x0 - r.x0; });
   for (k = syms.length - 1; k >= 0; k--) {
     sy = syms[k];
     m = (sy.y0 + sy.y1) / 2;
     if (m < axis - 1.15 * H || m > axis + 0.9 * H) continue;       /* another line's writing */
-    if (edge - sy.x1 > 2.4 * H) break;           /* a wide gap: further left is something else */
-    line.unshift(sy);
+    if (edge - sy.x1 > reach * H) break;         /* a wide gap: further left is something else */
+    sy.gap = (edge - sy.x1) / H;                 /* kept, for Fix to learn from */
     edge = Math.min(edge, sy.x0);
+    if (!sy.nm) line.unshift(sy);
   }
   mathDbg = 'H ' + Math.round(H) + ', ' + line.length + ' symbols on the line';
   if (!line.length) return null;
@@ -12525,8 +12550,19 @@ function mathBarPlace() {
   var ls = mathLines(a), last = ls[ls.length - 1], sp = docToScreen(a.eq.x0, last.y + a.h * 0.9);
   var bw = bar.offsetWidth || 260, x = Math.round(lim(sp.x - 10, 8, viewW - bw - 8)), y = Math.round(lim(sp.y, 62, viewH - 54));
   if (bar._x !== x || bar._y !== y) { bar.style.left = x + 'px'; bar.style.top = y + 'px'; bar._x = x; bar._y = y; }
-  var fx = byId('mathFix');
-  if (fx.className === 'on') { fx.style.left = x + 'px'; fx.style.top = (y + 50) + 'px'; }
+  var fx = byId('mathFix'), fh, fy;
+  if (fx.className === 'on') {
+    /* under the bar, or above the sum when the page has no room left below -
+       the last keys, Not part of it among them, were off the bottom of the
+       glass. Above the sum, not over it: the sum is what is being fixed */
+    fh = fx.offsetHeight || 0;
+    fy = y + 50;
+    if (fh && fy + fh > (window.innerHeight || 768) - 8) {
+      fy = docToScreen(a.eq.x0, a.axis - a.h * 1.3).y - fh - 6;
+      if (fy < 8) fy = Math.max(8, y - fh - 8);
+    }
+    fx.style.left = x + 'px'; fx.style.top = fy + 'px';
+  }
 }
 
 /* Keep: the answer, or the whole working, written into the note in the pen's
@@ -12594,8 +12630,15 @@ function mathFixPick(tk, chip) {
       keys.appendChild(b);
     })(MATH_KEYS.charAt(k));
   }
+  var no = document.createElement('button');
+  no.className = 'mf-key mf-not';
+  no.textContent = 'Not part of it';
+  no._lbl = 'key not';
+  no.addEventListener('click', function () { mathFixDrop(tk); });
+  keys.appendChild(no);
   keys.className = 'on';
   byId('mathFixHint').textContent = 'What is it?';
+  mathBarPlace();                  /* taller now: it may have to go over the bar */
 }
 function mathFixSet(tk, c) {
   var a = mathAns, n = activeNote();
@@ -12604,6 +12647,33 @@ function mathFixSet(tk, c) {
   mathShowRead(n, a.eq);
   if (mathAns) mathFixOpen();
   toast(mathAns ? 'Learned - it now reads ' + mathAns.txt : 'Learned - but it still is not a sum it can work out');
+}
+
+/* NOT PART OF IT. A mark that was no part of the sum - something further
+ * along the line, a stray touch of the pen, a scribble - read as a symbol
+ * (asked for: "how can we tell it we don't need it"). Its strokes are left
+ * out of every sum from then on, and the reader learns from it the way a
+ * correction teaches it a symbol, so the next writer is not stuck with the
+ * last one's habits:
+ *  - a mark at the far end that sat further out than any gap inside the sum
+ *    teaches how far this writer's sums reach - the reach is set between
+ *    the two, never past what the sum itself needed;
+ *  - any other teaches its shape as no symbol at all ('~'), recalled the way
+ *    a taught digit is - and only ever left out where that cannot run two
+ *    numbers together. */
+function mathFixDrop(tk) {
+  var a = mathAns, n = activeNote(), at = a ? a.toks.indexOf(tk) : -1, m = 0, i, g;
+  if (!a || !n || at < 0 || !tk.sy) return;
+  for (i = 0; i < tk.sy.list.length; i++) tk.sy.list[i].nm = 1;
+  for (i = 0; i < a.toks.length; i++) if (i !== at && a.toks[i].sy) m = Math.max(m, a.toks[i].sy.gap || 0);
+  g = tk.sy.gap || 0;
+  if (at === 0 && a.toks.length > 1 && g > 0.5 && g > m * 1.25) {
+    try { localStorage.setItem(REACH_KEY, String(Math.round(Math.max(m * 1.15, Math.min(mathReach(), (m + g) / 2)) * 100) / 100)); } catch (e) {}
+  } else mathLearn(tk.sy, '~');
+  saveSoon();
+  mathShowRead(n, a.eq);
+  if (mathAns) mathFixOpen();
+  toast(mathAns ? 'Left out - it now reads ' + mathAns.txt : 'Left out - that leaves nothing to work out');
 }
 
 /* ---- Teach my handwriting ----
