@@ -2268,6 +2268,40 @@ var snD = sn.strokes();
 check('Duplicate copies the sticky with its writing', snD.length === 2 && snD[1].kids.length === 1 && snD[1].id !== snD[0].id,
       snD.length + ' cards');
 
+/* an open sticky could not be moved: only the lasso moved one, and round an
+   open card that is a big loop (reported). Its top strip carries it now. */
+var sm = scApp();
+sm.els.insertBtn._fire('click', {}); sm.popPick('Sticky note'); sm.popPick('#FFF1A1');
+var smS = sm.strokes()[0], smX = smS.pts[0][0], smY = smS.pts[0][1];
+scPath(sm, 1, scWord(smX + 20, smY + 100 + TB));                 /* writing on it */
+scPath(sm, 2, [[smX + 100, smY + 14 + TB], [smX + 160, smY + 54 + TB], [smX + 220, smY + 94 + TB], [smX + 280, smY + 134 + TB]]);
+smS = sm.strokes();
+check('dragging an open sticky by its top strip moves it, writing and all',
+      smS.length === 1 && Math.abs(smS[0].pts[0][0] - (smX + 180)) < 2 && Math.abs(smS[0].pts[0][1] - (smY + 120)) < 2 &&
+      smS[0].kids.length === 1 && !smS[0].fold,
+      smS.length + ' marks, corner ' + Math.round(smS[0].pts[0][0] - smX) + ',' + Math.round(smS[0].pts[0][1] - smY) + ' along');
+check('...and leaves no selection behind with the pen in hand', sm.els.selBar.style.display !== 'block' && !sm.win.__mnSelBox(),
+      'bar ' + sm.els.selBar.style.display);
+sm.undo();
+check('one Undo puts it back', Math.abs(sm.strokes()[0].pts[0][0] - smX) < 1 && Math.abs(sm.strokes()[0].pts[0][1] - smY) < 1,
+      Math.round(sm.strokes()[0].pts[0][0]) + ',' + Math.round(sm.strokes()[0].pts[0][1]));
+scPath(sm, 3, [[smX + 120, smY + 200 + TB], [smX + 150, smY + 230 + TB], [smX + 180, smY + 260 + TB]]);
+check('writing lower down the card is still writing, not a drag', sm.strokes()[0].kids.length === 2 &&
+      Math.abs(sm.strokes()[0].pts[0][0] - smX) < 1, sm.strokes()[0].kids.length + ' on it');
+penTap(sm, 4, smX + 240 - 15, smY + 13 + TB);                    /* fold it */
+scPath(sm, 5, [[smX + 20, smY + 20 + TB], [smX + 60, smY + 60 + TB], [smX + 100, smY + 100 + TB]]);
+check('a folded sticky is carried by any of it', sm.strokes()[0].fold === 1 &&
+      Math.abs(sm.strokes()[0].pts[0][0] - (smX + 80)) < 2 && Math.abs(sm.strokes()[0].pts[0][1] - (smY + 80)) < 2,
+      'fold ' + sm.strokes()[0].fold + ', corner ' + Math.round(sm.strokes()[0].pts[0][0] - smX) + ',' + Math.round(sm.strokes()[0].pts[0][1] - smY) + ' along');
+var sl2 = scApp();
+sl2.els.insertBtn._fire('click', {}); sl2.popPick('Sticky note'); sl2.popPick('#CFE6FF');
+var sl2S = sl2.strokes()[0], sl2X = sl2S.pts[0][0], sl2Y = sl2S.pts[0][1];
+sl2.els.selectBtn._fire('click', {});
+scPath(sl2, 1, [[sl2X + 100, sl2Y + 14 + TB], [sl2X + 60, sl2Y + 74 + TB], [sl2X + 20, sl2Y + 134 + TB]]);
+check('the lasso in hand carries it by its strip too', Math.abs(sl2.strokes()[0].pts[0][0] - (sl2X - 80)) < 2 &&
+      Math.abs(sl2.strokes()[0].pts[0][1] - (sl2Y + 120)) < 2,
+      'corner ' + Math.round(sl2.strokes()[0].pts[0][0] - sl2X) + ',' + Math.round(sl2.strokes()[0].pts[0][1] - sl2Y) + ' along');
+
 /* ---------- sort pages ---------- */
 /* three pages, each with one mark at a known height and its own template */
 function srtApp() {

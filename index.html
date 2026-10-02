@@ -8157,6 +8157,8 @@ function beginTouch(touch, now, burst) {
       hideSelBar();
       return;
     }
+    var card0 = stickyGrab(pt.x, pt.y);
+    if (card0) { stickyDrag(card0, id, pt, touch, now); return; }
     touchStates[id] = {
       kind: 'lasso', id: id,
       sx: pt.x, sy: pt.y, x: pt.x, y: pt.y,
@@ -8205,6 +8207,8 @@ function beginTouch(touch, now, burst) {
     touchStates[id] = st;
     return;
   }
+  var card = gesture ? null : stickyGrab(pt.x, pt.y);
+  if (card) { stickyDrag(card, id, pt, touch, now); return; }
   st.viaZW = zw.on;
 
   if (gesture) st.state = 'palm';                       /* do not disturb a pan */
@@ -9277,7 +9281,14 @@ function endTouch(touch, now, cancelled) {
   }
   if (st.kind === 'selmove') {
     if (selDrag === st) selDrag = null;
+    if (st.card && !st.live) {          /* a tap: fold or open it, as before */
+      clearSelection();
+      if (!cancelled) stickyTap(st.sx, st.sy);
+      requestRender();
+      return;
+    }
     commitSelMove(st);
+    if (st.card && tool !== 'select') clearSelection();
     return;
   }
   if (st.kind === 'selscale') {
@@ -11308,6 +11319,31 @@ function stickyFold(s, fold) {
   stickyDirty(s);
   if (selection.indexOf(s) >= 0) { selBBox = selUnionBBox(); positionSelBar(); }
   saveSoon();
+}
+/* STICKIES MOVE BY HAND. Only the lasso could move one, and round an open
+   card that is a big loop to draw: "can't move it while it is big"
+   (reported). An open one is carried by its top strip, as Samsung's are,
+   a folded one by any of it - with any pen in hand or the lasso. A tap on
+   either still folds or opens it. The move is the lasso's own, so it draws,
+   commits and undoes as a lasso move does. */
+function stickyGrab(x, y) {
+  var n = activeNote(), hit = null, bar = Math.max(30, 30 / zoom), i, s, b;
+  if (!n || settings.reading) return null;
+  for (i = 0; i < n.strokes.length; i++) {
+    s = n.strokes[i];
+    if (s.pen !== PEN_STICKY || (hit && s.ord < hit.ord)) continue;
+    b = stickyBox(s);
+    if (x >= b.x && x <= b.x + b.w && y >= b.y - 6 && y <= b.y + (s.fold ? b.h : bar)) hit = s;
+  }
+  return hit;
+}
+function stickyDrag(s, id, pt, touch, now) {
+  clearSelection();
+  selection = [s];
+  selBBox = selUnionBBox();
+  touchStates[id] = { kind: 'selmove', id: id, sx: pt.x, sy: pt.y, dx: 0, dy: 0,
+                      cx: touch.clientX, cy: touch.clientY, t0: now, live: false, card: s };
+  selDrag = touchStates[id];
 }
 function addSticky(color) {
   var n = activeNote();
