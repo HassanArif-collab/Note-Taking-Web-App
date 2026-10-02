@@ -8657,6 +8657,9 @@ function moveTouch(touch, now) {
   var st = touchStates[touch.identifier];
   if (!st) return;
   holdMove(touch.identifier, touch.clientX, touch.clientY);
+  /* the pen that opened the pop-up only points now: an eraser carried on
+     wiping out whatever lay between it and the colour it was going to */
+  if (hold && hold.fired && hold.id === st.id) return;
   if (st.kind === 'zwsize') { zwResize(st, touch); return; }
   /* aiming only: kept out of the probe update below, which could ink it */
   if (st.kind === 'zwplace') { st.cx = touch.clientX; st.cy = touch.clientY; return; }
@@ -8665,7 +8668,7 @@ function moveTouch(touch, now) {
   if (st.kind === 'erase') {
     st.x = pt.x; st.y = pt.y;
     if (!st.live && dist(st.sx, st.sy, pt.x, pt.y) > 3) st.live = true;
-    if (st.live) eraseAt(pt.x, pt.y);
+    if (st.live) { eraseAt(pt.x, pt.y); toolAt = { y: pt.y, t: now }; }
     requestRender();
     return;
   }
@@ -9206,6 +9209,8 @@ function endTouch(touch, now, cancelled) {
       if (!cancelled && clip) showPasteBar(st.sx, st.sy);
       requestRender();
     } else {
+      for (var lp = 0, ly = -1e9; lp < st.path.length; lp++) ly = Math.max(ly, st.path[lp][1]);
+      toolAt = { y: ly, t: now };
       resolveSelection(st.path);
     }
     return;
@@ -16020,11 +16025,22 @@ function holdArm(id, now) {
   holdDisarm();
   var st = touchStates[id];
   if (!st || !settings.hold || settings.reading || gesture) return;
+  if (st.kind !== 'probe' && st.kind !== 'erase' && st.kind !== 'lasso') return;
   /* In Auto a resting palm is a still contact too, so only one on the line
      being written may open it - the palm lands well below that line */
-  if (settings.palmLevel === PALM_AUTO ? !handOnLine(st, now) : settings.palmLevel !== PALM_OFF) return;
-  if (st.kind !== 'probe' && st.kind !== 'erase' && st.kind !== 'lasso') return;
+  if (st.kind === 'probe' && (settings.palmLevel === PALM_AUTO ? !handOnLine(st, now) : settings.palmLevel !== PALM_OFF)) return;
+  /* the lasso and the eraser write no line, so that test always said no and
+     the pop-up never opened with them in hand (reported). Theirs is where
+     the pen last worked: the hand rests well below it */
+  if (st.kind !== 'probe' && settings.palmLevel !== PALM_OFF && holdLow(st, now)) return;
   hold = { id: id, t0: now, x: st.cx, y: st.cy, fired: false, timer: setTimeout(holdCheck, HOLD_MS + 20) };
+}
+/* the last place the pen worked with the lasso or the eraser, in page y */
+var toolAt = null;
+function holdLow(st, now) {
+  var w = lastInkPt;
+  if (toolAt && (!w || toolAt.t > w.t)) w = toolAt;
+  return !!w && now - w.t < HAND_ZONE_T && st.cy - docToScreen(0, w.y).y > HAND_ZONE_M;
 }
 function holdDisarm() {
   if (hold && hold.timer) clearTimeout(hold.timer);

@@ -1809,6 +1809,31 @@ var pm = scApp({ palmLevel: 2 });
 holdOpen(pm, 1, 500, 400);
 check('with palm rejection on, a still contact does not open it (a resting palm would)', pm.pen().pop === '', pm.pen().pop);
 
+/* the lasso and the eraser write no line, so in Auto the pop-up's "on the
+   line" test always said no and it never opened with them (reported) */
+['selectBtn', 'eraserBtn'].forEach(function (btn) {
+  var t = scApp({ palmLevel: 4 }), nm = btn === 'selectBtn' ? 'lasso' : 'eraser';
+  t.els[btn]._fire('click', {});
+  holdOpen(t, 1, 500, 400);
+  check('in Auto, holding still with the ' + nm + ' opens the pen pop-up', t.pen().pop === 'float', t.pen().pop);
+  t.up(1); t.tick(50); t.flushFrames();
+});
+var pa = scApp({ palmLevel: 4 });
+pa.els.eraserBtn._fire('click', {});
+scPath(pa, 1, [[400, 300], [440, 300], [480, 300]]);           /* a wipe up the page */
+holdOpen(pa, 2, 520, 600);
+check('...but not well below where the eraser just was: that is the hand resting', pa.pen().pop === '', pa.pen().pop);
+pa.up(2); pa.tick(50);
+var pw = scApp();
+scPath(pw, 1, [[300, 520], [340, 524], [380, 520], [420, 526]]);
+var pwN = pw.strokes().length;
+pw.els.eraserBtn._fire('click', {});
+holdOpen(pw, 2, 360, 470);
+slide(pw, 2, [[360, 490], [360, 515], [360, 536]]);            /* down through the writing, towards the pop-up's lasso */
+pw.up(2); pw.tick(50); pw.flushFrames();
+check('the eraser that opened the pop-up only points: what it passes over stays', pw.strokes().length === pwN,
+      (pwN - pw.strokes().length) + ' erased');
+
 var pe = scApp();
 holdOpen(pe, 1, 500, 400); pe.up(1); pe.tick(50);
 pe.els.ppErase._fire('click', {});
