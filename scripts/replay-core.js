@@ -86,6 +86,10 @@ function replay(trace, opts, done) {
     if (opts.onSample) opts.onSample(app, t, phase, id);
   }
   app.flushFrames();
+  /* time goes on after the last touch: a stroke the app is holding back
+     for a while (Auto's low strokes) is judged by its own timer, which reads
+     this clock - without this it never saw the time pass and never decided */
+  app.tick(opts.settleMs || 400);
 
   setTimeout(function () {
     app.flushFrames();

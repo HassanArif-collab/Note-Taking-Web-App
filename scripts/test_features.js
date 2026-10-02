@@ -2068,6 +2068,30 @@ check('Straighten levels a sloping line of handwriting instead of squaring its l
       'feet spread ' + Math.round(Math.max.apply(null, swB) - Math.min.apply(null, swB)) + ' -> ' +
       Math.round(Math.max.apply(null, swA) - Math.min.apply(null, swA)));
 
+/* With the lasso, two fingers that do not land together still scroll and
+   zoom - the second used to start a lasso of its own (reported: "in the
+   lasso the zoom does not work") */
+function lassoTwo(a, dx, dy, steps) {
+  var i;
+  a.els.selectBtn._fire('click', {});
+  a.down(51, 420, 380); a.tick(320); a.down(52, 560, 400);
+  for (i = 1; i <= steps; i++) {
+    a.tick(16);
+    a.moveTo(51, 420 - dx * i, 380 - dy * i);
+    a.moveTo(52, 560 + dx * i, 400 - dy * i);
+    a.flushFrames();
+  }
+  a.tick(16); a.up(51); a.up(52); a.tick(100); a.flushFrames();
+}
+var lt = scApp();
+scPath(lt, 1, scWord(300, 300));
+lassoTwo(lt, 0, 12, 20);
+check('Lasso: two fingers scroll the page even when the second lands late',
+      lt.geom().scrollY > 100 && lt.win.__mnSelBox() === null, 'scrollY ' + Math.round(lt.geom().scrollY) + ', selection ' + JSON.stringify(lt.win.__mnSelBox()));
+var lz = scApp();
+lassoTwo(lz, 2, 0, 40);
+check('...and spreading them zooms', lz.geom().zoom > 1.3, 'zoom ' + lz.geom().zoom.toFixed(2));
+
 /* the copy outlives the app: iOS restarts a home-screen app after a trip elsewhere */
 var kc = scApp();
 scPath(kc, 1, scWord(300, 400));
@@ -3062,6 +3086,27 @@ check('Keep writes the answer into the note, in a handwriting face, after the ='
       mk.els.mathBar.className === '', JSON.stringify(mkT.map(function (s) { return [s.txt, s.font, Math.round(s.pts[0][0])]; })));
 mk.undo();
 check('...and one undo takes it off again', mk.strokes().filter(function (s) { return s.pen === 5; }).length === 0);
+
+/* Keep tapped while the hand rests on the page: the palm is a second touch,
+   and the tap was refused for it (reported) */
+var mp = scApp();
+onePlusOne(mp);
+mp.win.__mnMath.now();
+function docTouch(a, type, changed, all) {
+  (a.doc._h[type] || []).forEach(function (fn) { fn({ changedTouches: changed, touches: all, target: changed[0].target, preventDefault: function () {} }); });
+}
+var mpBtn = mp.els.mathKeepA, mpPalm = { identifier: 90, clientX: 700, clientY: 600, target: mp.els.canvasWrap };
+mpBtn.tagName = 'BUTTON';
+mpBtn.click = function () { this._fire('click', {}); };
+mp.doc.elementFromPoint = function () { return mpBtn; };
+docTouch(mp, 'touchstart', [mpPalm], [mpPalm]);
+var mpTap = { identifier: 91, clientX: 480, clientY: 450, target: mpBtn };
+docTouch(mp, 'touchstart', [mpTap], [mpPalm, mpTap]);
+mp.tick(80);
+docTouch(mp, 'touchend', [mpTap], [mpPalm]);
+mp.flushFrames();
+check('Keep works with the hand resting on the page', mp.strokes().filter(function (s) { return s.pen === 5; }).length === 1,
+      mp.strokes().filter(function (s) { return s.pen === 5; }).length + ' answers kept');
 
 var mw2 = fresh();
 /* 2 squared + 2 squared = : two steps of working */

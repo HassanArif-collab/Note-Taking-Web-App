@@ -1214,6 +1214,67 @@ test('Auto: two fingers landing together still scroll', function (done) {
   });
 });
 
+/* fingers held at a slant: one lands well below the other, which Auto
+   took for the hand - so the page would not move (reported) */
+function autoTwo(app, a, b, lag, dx, dy, steps) {
+  var i;
+  app.down(1, a[0], a[1]); app.tick(lag); app.down(2, b[0], b[1]);
+  for (i = 1; i <= steps; i++) {
+    app.tick(16);
+    app.moveTo(1, a[0] - dx * i, a[1] - dy * i);
+    app.moveTo(2, b[0] + dx * i, b[1] - dy * i);
+    app.flushFrames();
+  }
+  app.tick(16); app.up(1); app.up(2);
+}
+test('Auto: two fingers at a slant scroll - the lower one landing second', function (done) {
+  var app = freshAtLevel(4);
+  autoTwo(app, [400, 380], [520, 560], 20, 0, 12, 20);
+  after(300, function () {
+    app.flushFrames();
+    check('Auto: slanted fingers scroll the page and draw nothing',
+          app.geom().scrollY > 100 && app.strokes().length === 0,
+          'scrollY ' + Math.round(app.geom().scrollY) + ', ' + app.strokes().length + ' strokes');
+    done();
+  });
+});
+test('Auto: two fingers at a slant scroll - the upper one landing second', function (done) {
+  var app = freshAtLevel(4);
+  autoTwo(app, [520, 560], [400, 380], 70, 0, 12, 20);
+  after(300, function () {
+    app.flushFrames();
+    check('Auto: ...whichever lands first',
+          app.geom().scrollY > 100 && app.strokes().length === 0,
+          'scrollY ' + Math.round(app.geom().scrollY) + ', ' + app.strokes().length + ' strokes');
+    done();
+  });
+});
+test('Auto: a slow pinch zooms', function (done) {
+  var app = freshAtLevel(4);
+  autoTwo(app, [440, 420], [580, 420], 15, 1, 0, 60);     /* 120px wider over a second */
+  after(300, function () {
+    app.flushFrames();
+    check('Auto: spreading the fingers slowly still zooms in, and draws nothing',
+          app.geom().zoom > 1.3 && app.strokes().length === 0,
+          'zoom ' + app.geom().zoom.toFixed(2) + ', ' + app.strokes().length + ' strokes');
+    done();
+  });
+});
+test('Auto: writing started lower down the page shows without waiting', function (done) {
+  var app = freshAtLevel(4);
+  autoLine(app, 1, 200, 200);
+  app.tick(400);
+  autoLine(app, 2, 200, 450);              /* far below the last line: kept out of sight... */
+  app.tick(200);
+  autoLine(app, 3, 320, 452);              /* ...until a second stroke is written beside it */
+  app.tick(50);
+  app.flushFrames();
+  var low = app.strokes().filter(function (s) { return s.pts[0][1] > 300; }).length;
+  check('Auto: a second stroke on the new line shows both at once, not 2.5s later',
+        app.strokes().length === 3 && low === 2, app.strokes().length + ' strokes, ' + low + ' low');
+  done();
+});
+
 (function run(i) {
   if (i >= tests.length) {
     console.log('\n' + pass + ' passed, ' + fail + ' failed');

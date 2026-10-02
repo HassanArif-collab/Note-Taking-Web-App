@@ -118,6 +118,18 @@ Build one at a time, copying how Samsung Notes does it.
   short words and blew one up into its neighbour; would need a sturdier
   measure first.
 
+## Fixed 2026-10-02 (reported from the iPad, measured on the recordings)
+- **Two-finger zoom and scroll** with the palm on Auto: fingers at a slant
+  were taken for the hand, and a pinch slower than 45px a quarter-second
+  never counted. Recorded Auto zooms: 4 of 7 worked, now 7 of 7
+  (`scripts/gesturecv.js`). With the lasso a second finger landing late
+  started a second lasso; now it scrolls or zooms once both move.
+- **Writing that vanished and came back**: on Auto, a word started lower down
+  the page was kept out of sight stroke by stroke for 2.5s each. Two real
+  strokes on one line now show the line at once.
+- **Keep (and every button) with the hand resting**: a tap was only a tap
+  when it was the only touch on the glass.
+
 ## Pen pop-up extras (seen in the videos)
 - ~~Favourite pens inside the pop-up, each with its own colour.~~ **Done** —
   the pop-up's star opens a grid of favourite pens saved whole (type, colour

@@ -8015,7 +8015,7 @@ function beginTouch(touch, now, burst) {
     touchStates[id] = {
       kind: 'texttap', id: id,
       sx: pt.x, sy: pt.y, x: pt.x, y: pt.y,
-      cx: touch.clientX, cy: touch.clientY,
+      cx: touch.clientX, cy: touch.clientY, csx: touch.clientX, csy: touch.clientY,
       t0: now, moved: 0
     };
     return;
@@ -8076,7 +8076,7 @@ function beginTouch(touch, now, burst) {
     touchStates[id] = {
       kind: 'lasso', id: id,
       sx: pt.x, sy: pt.y, x: pt.x, y: pt.y,
-      cx: touch.clientX, cy: touch.clientY,
+      cx: touch.clientX, cy: touch.clientY, csx: touch.clientX, csy: touch.clientY,
       t0: now, path: [[pt.x, pt.y]], active: false
     };
     lassoId = id;
@@ -8148,6 +8148,15 @@ function beginTouch(touch, now, burst) {
 
   touchStates[id] = st;
 
+  /* the one other touch, landed with this one: a possible pair of fingers */
+  var mates = [], mk;
+  for (mk in touchStates) {
+    if (touchStates.hasOwnProperty(mk) && mk !== String(id)) mates.push(touchStates[mk]);
+  }
+  if (mates.length === 1 && mates[0].kind === 'probe' && now - mates[0].t0 <= SC.GPAN_LAND) { st.mate = mates[0].id; mates[0].mate = id; }
+  /* a third touch: whatever pair was down is a hand, not two fingers */
+  for (mk = 0; mates.length >= 2 && mk < mates.length; mk++) mates[mk].crowded = true;
+
   /* A scroll or a pinch is two fingers by definition, so "was alone the
      whole time" is what separates a deliberate flick of the pen from a
      finger sliding during a gesture. Recorded once here rather than
@@ -8197,18 +8206,64 @@ function toolTwoFinger(touch, now) {
   other.kind = 'gesture';
   touchStates[touch.identifier] = { kind: 'gesture', id: touch.identifier,
                                     cx: touch.clientX, cy: touch.clientY, t0: now };
-  var d = dist(other.cx, other.cy, touch.clientX, touch.clientY);
+  toolGesture(other, touchStates[touch.identifier], 'auto', now);
+  return true;
+}
+function toolGesture(a, b, kind, now) {
+  var d = dist(a.cx, a.cy, b.cx, b.cy);
   gesture = {
-    lastCx: (other.cx + touch.clientX) / 2, lastCy: (other.cy + touch.clientY) / 2,
+    lastCx: (a.cx + b.cx) / 2, lastCy: (a.cy + b.cy) / 2,
     lastD: d, baseD: d, lastT: now, sumD: 0, sumC: 0,
-    kind: 'auto', wide: false, vx: 0, vy: 0, fromHand: false, key: null
+    kind: kind, wide: false, vx: 0, vy: 0, fromHand: false, key: null
   };
+  /* a zoom recognised by its spread zooms from where the fingers started */
+  if (kind === 'pinch') { gesture.zd0 = dist(a.csx, a.csy, b.csx, b.csy); gesture.zd = d; gesture.z0 = zoom; }
   gesture.key = gestureMemberKey();
   hideSelBar();
   hidePasteBar();
   traceGesture('engage', 2, Math.round(d), now);
   requestRender();
-  return true;
+}
+/* ...AND FINGERS THAT LAND APART, ONCE THEY MOVE LIKE A GESTURE. Fingers
+   do not always land within GPAN_LAND of each other: put one down, then
+   the other, and with the lasso the second simply started a lasso of its
+   own, so the page would not scroll or zoom at all. Two lassos travelling
+   the same way (a scroll), or apart or together (a zoom), are fingers - a
+   hand resting while the lasso is drawn barely moves (0-6px recorded), so
+   it never passes. Only contacts that have done nothing yet that cannot
+   be dropped: a lasso loop and a text tap. */
+function toolPairGesture(now) {
+  if (gesture || (tool !== 'select' && tool !== 'text')) return;
+  var list = [], k;
+  for (k in touchStates) { if (touchStates.hasOwnProperty(k)) list.push(touchStates[k]); }
+  if (list.length !== 2) return;
+  var a = list[0], b = list[1];
+  if ((a.kind !== 'lasso' && a.kind !== 'texttap') || (b.kind !== 'lasso' && b.kind !== 'texttap')) return;
+  var kind = pairMotion(a, b);
+  if (!kind) return;
+  if (lassoId === a.id || lassoId === b.id) lassoId = null;
+  a.kind = b.kind = 'gesture';
+  toolGesture(a, b, kind, now);
+}
+/* how a pair of contacts is moving: 'pan' both the same way about as far,
+   in straight lines (a lasso loop, with the hand gliding along, is not),
+   'pinch' apart or together, null not yet like either */
+function pairMotion(a, b) {
+  var ax = a.cx - a.csx, ay = a.cy - a.csy, bx = b.cx - b.csx, by = b.cy - b.csy;
+  var la = Math.sqrt(ax * ax + ay * ay), lb = Math.sqrt(bx * bx + by * by);
+  if (la < SC.GPAN_MIN || lb < SC.GPAN_MIN) return null;
+  var spread = Math.abs(dist(a.cx, a.cy, b.cx, b.cy) - dist(a.csx, a.csy, b.csx, b.csy));
+  if (spread >= SC.PINCH_DELTA && spread >= (la + lb) * 0.5) return 'pinch';
+  if ((ax * bx + ay * by) / (la * lb) >= SC.GPAN_COS && Math.max(la, lb) <= SC.GPAN_RATIO * Math.min(la, lb) &&
+      la >= SC.GPAN_STRAIGHT * travelled(a) && lb >= SC.GPAN_STRAIGHT * travelled(b)) return 'pan';
+  return null;
+}
+/* how far a lasso or a text tap has travelled, in screen px */
+function travelled(o) {
+  var t = 0, i, p = o.path;
+  if (!p) return (o.moved || 0) * zoom;
+  for (i = 1; i < p.length; i++) t += dist(p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]);
+  return t * zoom;
 }
 
 /* GLOVE MODE: A LINE THAT FLASHED AND VANISHED.
@@ -8328,9 +8383,29 @@ function handPalm(o, now) {
    the pen. Nothing either way for HAND_PEND_MAX, and it is shown. The timer
    is for the device; the check at every touch is what a replay sees. */
 function handDefer(st, s, now) {
-  var lp = s.pts[s.pts.length - 1];
-  handPend.push({ st: st, s: s, y: strokeMaxY(s), lx: lp[0], ly: lp[1], t: now });
+  var lp = s.pts[s.pts.length - 1], p = { st: st, s: s, y: strokeMaxY(s), lx: lp[0], ly: lp[1], t: now }, line = [], i, q;
+  handPend.push(p);
   setTimeout(function () { handPendCheck(null, Date.now()); }, HAND_PEND_MAX + 20);
+  /* TWO REAL STROKES ON THE SAME LOW LINE ARE WRITING. Each new stroke was
+     measured against the line written before - which the hidden ones never
+     became - so starting lower down the page, a whole word stayed out of
+     sight and came back stroke by stroke, 2.5s late each: recorded on every
+     sum of the maths session. Two strokes that travelled (20px+, not hops)
+     at one height, with nothing landing above them meanwhile (that drops
+     them as the hand), are the pen: the line is shown, and becomes the line.
+     Replayed over every Auto recording, no palm was shown by this. */
+  if (st.pathLen < 20) return;
+  for (i = 0; i < handPend.length; i++) {
+    q = handPend[i];
+    if (q.st.pathLen >= 20 && Math.abs(docToScreen(0, q.y).y - docToScreen(0, p.y).y) < HAND_ZONE_M) line.push(q);
+  }
+  if (line.length < 2) return;
+  for (i = 0; i < line.length; i++) {
+    handPend.splice(handPend.indexOf(line[i]), 1);
+    traceVerdict('line', line[i].st.id, now);
+    line[i].st.unsure = false;        /* vouched for: not to be taken back as the hand later */
+    commitInk(line[i].st, line[i].s, line[i].t);
+  }
 }
 function handPendCheck(st, now) {
   var keep = [], i, p;
@@ -9224,6 +9299,17 @@ function engageGesture(ids, now, pairDist, kind, bothMoving, fromD) {
   hidePendingDot();
 }
 
+/* A pair of touches that landed together is two fingers once both have
+   stayed down MATE_MS with nothing else touching meanwhile. A hand landing
+   is rarely two points: more sprout from it within that time (recorded:
+   palms sliding 50-150px in pairs zoomed the page when this waited for
+   nothing). Fingers stay two. Recognised late, the gesture still catches
+   up with everything the fingers did from the start. */
+var MATE_MS = 300;
+function mateOk(o) {
+  var m = o.mate !== undefined ? touchStates[o.mate] : null;
+  return !!m && !o.crowded && !m.crowded && Date.now() - Math.max(o.t0, m.t0) >= MATE_MS;
+}
 /* Contacts that could join a gesture: down, not already drawing. */
 function nonInkProbes() {
   var out = [], k, o;
@@ -9237,7 +9323,13 @@ function nonInkProbes() {
        "two contacts exist, therefore zoom" - which cancelled 19 strokes in
        a pen-and-palm recording for 2 gestures the user actually made. */
     if (o.state === 'ink' && !inkFirst()) continue;
-    if (o.hpalm) continue;              /* Auto's palm is never half of a gesture */
+    /* Auto's palm is never half of a gesture - unless it landed together with
+       the one other touch (o.mate): two fingers with the hand turned put one
+       well below the other, and Auto took the lower for the hand. Every tilted
+       scroll and pinch recorded in Auto was refused that way. Being let in
+       here only makes them candidates; the tests that follow still need both
+       to move like a gesture, and a resting hand does not move. */
+    if (o.hpalm && !mateOk(o)) continue;
     out.push(o);
   }
   return out;
@@ -9283,7 +9375,10 @@ function tryGlovePan(now) {
      fingers and thumbs sit level (8-124px apart vertically, mostly). An
      infinite page needs sideways scrolling, so it is allowed from a level
      pair. Once started, the page follows the fingers any way. */
-  if (Math.abs(ay + by) < Math.abs(ax + bx)) {
+  /* (In Auto the hand is found by where it lands, so a pen with a palm
+     below it never reaches here as a pair - and fingers held at a slant
+     scroll sideways too.) */
+  if (Math.abs(ay + by) < Math.abs(ax + bx) && settings.palmLevel !== PALM_AUTO) {
     var sx = Math.abs(a.csx - b.csx), sy = Math.abs(a.csy - b.csy);
     if (sy > SC.GPAN_LEVEL || sy > sx) return false;
   }
@@ -9325,14 +9420,22 @@ function tryPinch(now) {
   var same = pinchTrack &&
     ((pinchTrack.a === a.id && pinchTrack.b === b.id) ||
      (pinchTrack.a === b.id && pinchTrack.b === a.id));
-  /* re-baseline a stale pair, so the test asks "did the separation change
+  if (!same) { pinchTrack = { a: a.id, b: b.id, d0: d, at: now, dStart: d }; return false; }
+  /* re-baseline a stale window, so the test asks "did the separation change
      by 45px in the last PINCH_WINDOW", not "ever" */
-  if (same && now - pinchTrack.at > SC.PINCH_WINDOW) same = false;
-  if (!same) { pinchTrack = { a: a.id, b: b.id, d0: d, at: now }; return false; }
+  if (now - pinchTrack.at > SC.PINCH_WINDOW) { pinchTrack.d0 = d; pinchTrack.at = now; }
 
   /* flickering contacts never qualify */
   if (now - a.t0 < SC.PINCH_MIN_AGE || now - b.t0 < SC.PINCH_MIN_AGE) return false;
-  if (Math.abs(d - pinchTrack.d0) < SC.PINCH_DELTA) return false;
+  /* BOTH FINGERS MOVING APART OR TOGETHER is a pinch however slowly it is
+     made. The window above is for the anchored pinch - one finger planted -
+     which a pen writing away from a resting hand also looks like. With both
+     travelling it cannot be that: a resting palm moves 0-6px (recorded).
+     Recorded in Auto, 12 of 14 zooms were refused because the fingers spread
+     slower than 45px a quarter-second - one took four and a half seconds. */
+  var la = dist(a.csx, a.csy, a.cx, a.cy), lb = dist(b.csx, b.csy, b.cx, b.cy), spread = Math.abs(d - pinchTrack.dStart);
+  var opened = la >= SC.PINCH_BOTH && lb >= SC.PINCH_BOTH && spread >= SC.PINCH_DELTA && spread >= (la + lb) * 0.5;
+  if (!opened && Math.abs(d - pinchTrack.d0) < SC.PINCH_DELTA) return false;
 
   discardAllActiveInk(now);
   /* This is the OTHER pinch detector - the one that outranks a stroke
@@ -9346,9 +9449,8 @@ function tryPinch(now) {
      refused as too wide: 28 recorded attempts, 457 to 893px apart, none of
      them zoomed. Both thumbs had moved 17px or more in every one; in the
      pen-and-palm pairs the rule exists for, the palm had moved 0 to 6. */
-  var both = dist(a.csx, a.csy, a.cx, a.cy) >= SC.PINCH_BOTH &&
-             dist(b.csx, b.csy, b.cx, b.cy) >= SC.PINCH_BOTH;
-  engageGesture([a.id, b.id], now, d, 'pinch', both, pinchTrack.d0);
+  var both = la >= SC.PINCH_BOTH && lb >= SC.PINCH_BOTH;
+  engageGesture([a.id, b.id], now, d, 'pinch', both, opened ? pinchTrack.dStart : pinchTrack.d0);
   pinchTrack = null;
   return true;
 }
@@ -13746,6 +13848,7 @@ function onTouchMove(e) {
   }
   rigidGroupCheck(now);
   detectGesture(now);
+  toolPairGesture(now);
   /* Applied once a frame, in render, not once per event. iOS sends a move
      for one finger at a time in 38% of events during a two-finger gesture,
      so per event the gap was measured with one finger moved and the other
@@ -13815,15 +13918,27 @@ function buttonOf(el) {
   }
   return null;
 }
+/* A tap on a button is a tap with the hand resting on the page, too - it
+   is just another touch. Asking for the ONLY touch on the glass meant that
+   writing with the palm down, Keep under a maths answer (and every other
+   button) did nothing at all, since iOS sends no click while two touches
+   are down either (reported: "the keep option doesn't work"). So the tap
+   is followed by its own touch, and other fingers come and go around it. */
 document.addEventListener('touchstart', function (e) {
-  var b = e.touches.length === 1 ? buttonOf(e.target) : null;
-  var t = e.changedTouches[0];
-  fastTap = b ? { b: b, x: t.clientX, y: t.clientY, t: Date.now() } : null;
+  var i, t, b;
+  for (i = 0; i < e.changedTouches.length; i++) {
+    t = e.changedTouches[i];
+    b = buttonOf(t.target || e.target);
+    if (b) fastTap = { b: b, id: t.identifier, x: t.clientX, y: t.clientY, t: Date.now() };
+  }
 }, false);
 document.addEventListener('touchend', function (e) {
-  var ft = fastTap, t = e.changedTouches[0];
+  var ft = fastTap, t = null, i;
+  if (!ft) return;
+  for (i = 0; i < e.changedTouches.length; i++) if (e.changedTouches[i].identifier === ft.id) t = e.changedTouches[i];
+  if (!t) return;                   /* another finger lifted - the hand, say */
   fastTap = null;
-  if (!ft || !t || Date.now() - ft.t > 700) return;
+  if (Date.now() - ft.t > 700) return;
   if (Math.abs(t.clientX - ft.x) > 10 || Math.abs(t.clientY - ft.y) > 10) return;
   if (buttonOf(document.elementFromPoint(t.clientX, t.clientY)) !== ft.b) return;
   e.preventDefault();

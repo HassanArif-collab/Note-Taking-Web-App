@@ -75,8 +75,11 @@ thickness, with 24 colours to choose from.
 
 ### Gestures
 
-- **Two fingers** — pinch to zoom (60%–260%), drag to scroll. Works in Glove
-  mode too: two fingers landing together and moving up or down scroll.
+- **Two fingers** — pinch to zoom (60%–260%), drag to scroll, with the pen,
+  the lasso or the hand. Fingers held at a slant work as well as fingers
+  side by side, a slow pinch zooms as surely as a quick one, and the second
+  finger does not have to land at the same moment as the first. Works in
+  Glove and Auto too, with your hand resting on the glass.
 - **Two-finger tap** — undo. The fastest way to remove a stray palm mark.
 - **Three-finger tap** — redo, the other side of the same gesture. Fingers
   that moved are a drag, not a tap, so it never fires by accident.
@@ -451,13 +454,15 @@ dependencies.
 
 ```
 node scripts/check_es5.js     # Safari 9 gate - run before every push
-node scripts/test_palm.js     # palm-rejection behaviour (60 assertions)
+node scripts/test_palm.js     # palm-rejection behaviour (80 assertions)
 node scripts/test_recorder.js # recorder, pinch-zoom, drills (46 assertions)
 node scripts/test_backup.js   # storage and backup (20 assertions)
 node scripts/test_features.js # pages, tools, pen pop-up, sidebar (240 assertions)
 node scripts/test_tidy.js     # writing replayed from real traces (7 assertions)
 node scripts/serve.js         # serve the app to the iPad, collect recordings
 node scripts/score.js         # replay every recording, print a scoreboard
+node scripts/gesturecv.js     # every recorded two-finger scroll/zoom: did it work?
+node scripts/neatcv.js        # does Neaten make the reference lines neater?
 node scripts/train.js         # refit the pen/palm scorer to traces/
 node scripts/train.js --dry   # ...report only, change nothing
 node scripts/replay.js FILE   # replay one recording, contact by contact
