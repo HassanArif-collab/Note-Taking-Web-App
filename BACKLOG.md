@@ -130,6 +130,21 @@ Build one at a time, copying how Samsung Notes does it.
 - **Keep (and every button) with the hand resting**: a tap was only a tap
   when it was the only touch on the glass.
 
+## Fixed and built 2026-10-02, afternoon (reported from the iPad)
+- **Pen pop-up with the lasso or eraser**: in Auto the hold had to be on the
+  line being written, which a lasso or eraser never is, so it never opened.
+  An eraser that opened it also kept erasing on its way to a colour.
+- **Zoom in the corner**: always shows the zoom; − and + step it, the number
+  goes back to 100%.
+- **Zoom window**: the strip showed the big writing only after the pen
+  lifted, then redrew every stroke near the box (305 a frame on a full page);
+  it draws under the pen now from a cached picture (3.3ms -> 0.1ms a frame).
+  Two fingers on the page above pinch and scroll it.
+- **Sticky notes**: an open one is dragged by its top strip, a folded one by
+  any of it.
+- **Maths Fix → Not part of it**: leaves a stray or far-off mark out, and
+  learns the writer's reach or the shape as no symbol.
+
 ## Pen pop-up extras (seen in the videos)
 - ~~Favourite pens inside the pop-up, each with its own colour.~~ **Done** —
   the pop-up's star opens a grid of favourite pens saved whole (type, colour

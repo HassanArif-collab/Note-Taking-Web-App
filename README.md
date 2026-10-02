@@ -21,7 +21,8 @@ thickness, with 24 colours to choose from.
 - **Three favourite pens** sit in the toolbar, each holding pen, colour and
   width together. Tap one to write with it; tap the one you hold to change it.
 - **Pen pop-up** — hold the pen still for a moment (Glove mode, or Auto on
-  the line you are writing) and a disc opens at the nib, like Samsung's S Pen
+  the line you are writing — or anywhere near your work with the lasso or
+  the eraser in hand) and a disc opens at the nib, like Samsung's S Pen
   button: the pen in the middle, its colour on the right, its width on the
   left, eraser and lasso below, and — while it floats — a star and a panel
   icon above. **Keep the pen down and slide**: onto the colour and a ring of
@@ -79,7 +80,11 @@ thickness, with 24 colours to choose from.
   the lasso or the hand. Fingers held at a slant work as well as fingers
   side by side, a slow pinch zooms as surely as a quick one, and the second
   finger does not have to land at the same moment as the first. Works in
-  Glove and Auto too, with your hand resting on the glass.
+  Glove and Auto too, with your hand resting on the glass, and on the page
+  above the zoom window's strip while it is open.
+- **Zoom in the corner** — the bottom corner of the page always shows how far
+  it is zoomed. **−** and **+** step it (60, 75, 100, 125, 150, 200, 260%),
+  tap the number for 100%.
 - **Two-finger tap** — undo. The fastest way to remove a stray palm mark.
 - **Three-finger tap** — redo, the other side of the same gesture. Fingers
   that moved are a drag, not a tap, so it never fires by accident.
@@ -128,8 +133,10 @@ choice.
 it — the writing belongs to the sticky, so it moves, copies and deletes with
 it. **Tap its corner button** to fold it down to a small square and hide
 what is written (quiz yourself: the question on the page, the answer under
-the fold); tap the square to open it. The eraser takes writing off a sticky
-but never the sticky itself; the lasso moves, resizes and recolours it.
+the fold); tap the square to open it. **Drag an open sticky by its top strip**
+to move it (a folded one by any of it), with the pen or the lasso. The eraser
+takes writing off a sticky but never the sticky itself; the lasso also
+resizes and recolours it.
 
 ### Maths answers
 
@@ -138,7 +145,10 @@ just after the equals sign and stays there (Samsung's "Turn on math"). When
 the sum takes more than one step, the working shows too. Under it:
 **Keep** writes it into the note in a handwriting face - the full working
 or just the answer - **Fix** lets you pick the right symbol when one was
-misread, and **×** closes it. It reads digits, + − × ÷ /, brackets, decimal
+misread, or say **Not part of it** for a mark that was never part of the sum
+(something further along the line, a stray touch, a scribble) - and **×**
+closes it. A mark left out stays out, and the reader learns from it: how far
+your sums reach, or that a shape is no symbol at all. It reads digits, + − × ÷ /, brackets, decimal
 points, small raised powers and fractions written one over the other, and
 works the sum out in the usual order. Letters mean algebra, and algebra
 gets no answer rather than a wrong one. The reader is a small network
@@ -238,7 +248,9 @@ the right; at the end of the line it drops to the start of the next ruled
 line, and after the last line onto the next page (making one if needed). The
 buttons on the strip do the same by hand: **‹** back, **›** forward, **↵** new
 line, **✕** close. To put the box somewhere else, **tap the page above** —
-while the strip is open the page is for aiming, not writing.
+while the strip is open the page is for aiming, not writing. Two fingers on
+the page above still zoom and scroll it, as do − and + in the corner. What
+you write shows big in the strip as you write it.
 
 **Drag the round handle on the box's corner** to change the zoom: a smaller
 box makes your writing land smaller, a bigger one closer to its real size
