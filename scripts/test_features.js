@@ -549,6 +549,41 @@ check('the box advances once writing reaches its right edge',
 
 /* with the strip open the page above aims rather than writes - it is the
    only way to start a new line without leaving the strip */
+/* A full page made writing in the strip crawl: every frame drew every
+   stroke near the box again, magnified (reported "the slowest"). The ink
+   already there is a picture now; a frame draws only what is being written. */
+function zwFull() {
+  var list = [], r, q, k, pts;
+  for (r = 0; r < 12; r++) for (q = 0; q < 14; q++) {
+    pts = [];
+    for (k = 0; k < 12; k++) pts.push([30 + q * 50 + k * 2, 90 + r * 32 + 8 * Math.sin(k), k * 8]);
+    list.push({ id: 'f' + r + '_' + q, pen: 0, w: 2, color: '#000000', a: 1, ord: r * 14 + q + 1, pts: pts });
+  }
+  var a = H.load({ quiet: true, dpr: 2, viewW: 768, viewH: 826,
+    seed: { mathnotes_v4: JSON.stringify({ v: 4,
+      notebooks: [{ id: 'nb1', title: 'T', color: '#0381FE', notes: ['n1'] }],
+      notes: { n1: { id: 'n1', title: 'T', cr: 1, mod: 1, scroll: 0, strokes: list } },
+      cur: { nb: 0, note: 'n1' }, set: { palmLevel: 0, hand: 0 } }) } });
+  a.flushFrames();
+  a.clickMenu('Zoom window');
+  a.flushFrames();
+  return a;
+}
+var zf = zwFull(), zfg = zf.zw(), zfc = zf.els.noteCanvas._ctx.__n, zfL, zfC;
+zfL = zfc.save || 0;               /* every stroke drawn is one save() */
+zf.down(40, 100, zfg.top + 120 + WRAPTOP);
+zf.tick(16); zf.moveTo(40, 130, zfg.top + 124 + WRAPTOP); zf.flushFrames();
+zfL = (zfc.save || 0) - zfL;
+check('the pen landing in the strip draws a few strokes, not every stroke near the box',
+      zfL > 0 && zfL < 12, zfL + ' strokes drawn, the page holds 168');
+zfC = zfc.clip || 0;
+zf.tick(16); zf.moveTo(40, 160, zfg.top + 128 + WRAPTOP); zf.flushFrames();
+check('...and the writing shows in the strip as the pen moves, not only once it lifts',
+      (zfc.clip || 0) - zfC >= 1, ((zfc.clip || 0) - zfC) + ' drawn into the strip');
+zf.up(40); zf.tick(200); zf.flushFrames();
+var zfN = zf.strokes().length;
+check('...and the stroke written lands on the page as before', zfN === 169, zfN + ' strokes');
+
 /* the zoom in the corner sits above the strip, not under it */
 check('the zoom readout moves up above the strip while it is open',
       za.els.zoomCtl.style.bottom === (12 + (826 - zg.top)) + 'px', za.els.zoomCtl.style.bottom + ', strip ' + (826 - zg.top));
@@ -595,6 +630,22 @@ var zp = scApp();
 gsPair(zp, 20, function (i) { return [450 - i * 6, 420]; }, function (i) { return [560 + i * 6, 420]; }, 20);
 check('a pinch shows in the corner too', zp.els.zoomPct.textContent === Math.round(zp.geom().zoom * 100) + '%' && zp.geom().zoom > 1.1,
       zp.els.zoomPct.textContent + ' at zoom ' + zp.geom().zoom.toFixed(2));
+
+/* two fingers on the page above the strip zoom and scroll it, as anywhere
+   else - they only aimed the box, so the page could not be zoomed with the
+   zoom window up (reported) */
+var zg1 = zwApp(), zg1b = zg1.zw();
+gsPair(zg1, 40, function (i) { return [330 - i * 6, 260 + WRAPTOP]; }, function (i) { return [440 + i * 6, 260 + WRAPTOP]; }, 20);
+check('with the zoom window open, spreading two fingers on the page zooms it', zg1.geom().zoom > 1.15,
+      'zoom ' + zg1.geom().zoom.toFixed(2));
+check('...and does not throw the box at where the fingers were', Math.abs(zg1.zw().x - zg1b.x) < 1 && Math.abs(zg1.zw().y - zg1b.y) < 1,
+      Math.round(zg1b.x) + ',' + Math.round(zg1b.y) + ' -> ' + Math.round(zg1.zw().x) + ',' + Math.round(zg1.zw().y));
+var zg2 = zwApp();
+zg2.els.zoomIn._fire('click', {}); zg2.tick(250); zg2.flushFrames();    /* room to scroll across */
+var zg2x = zg2.geom().scrollX;
+gsPair(zg2, 40, function (i) { return [380 - i * 10, 250 + WRAPTOP]; }, function (i) { return [480 - i * 10, 250 + WRAPTOP]; }, 18);
+check('...and two fingers moving together scroll it', zg2.geom().scrollX > zg2x + 60,
+      'scrollX ' + Math.round(zg2x) + ' -> ' + Math.round(zg2.geom().scrollX));
 
 /* Samsung's pad: arrows on the strip, a new line, and the end of the line */
 function zwPress(a, id) { a.els[id]._fire('click', {}); a.tick(300); a.flushFrames(); }

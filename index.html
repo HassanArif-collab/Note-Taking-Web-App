@@ -4353,19 +4353,21 @@ function paintStrokeIntoTiles(s) {
       renderStrokeFull(tc, s);
     }
   }
+  zwInkAdd(s);
   return true;
 }
 
 /* every tile in rows y0..y1, across the whole width */
 function invalidateRange(y0, y1) {
   var i0 = Math.floor(y0 / TILE_H), i1 = Math.floor(y1 / TILE_H), k, row;
+  zwInk.ok = false;
   for (k in tiles) {
     if (!tiles.hasOwnProperty(k)) continue;
     row = parseInt(k, 10);
     if (row >= i0 && row <= i1) delete tiles[k];
   }
 }
-function invalidateAll() { tiles = {}; tileOrder = []; }
+function invalidateAll() { tiles = {}; tileOrder = []; zwInk.ok = false; }
 
 function sortedStrokesForBand(y0, y1, x0, x1) {
   var list = [], n = activeNote();
@@ -4798,13 +4800,15 @@ function render() {
      edges. */
   ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -dpr * zoom * scrollX, -dpr * zoom * scrollY);
   var P = PAPERS[settings.paperColor] || PAPERS[0];
+  /* what the zoom window's strip covers is not painted twice */
+  var vh = (viewH - (zw.on ? zwGeom().h : 0)) / zoom;
   if (!isEndless() || scrollY < 0) {
     ctx.fillStyle = P.desk;
-    ctx.fillRect(scrollX - 8, scrollY - 8, viewW / zoom + 16, viewH / zoom + 16);
+    ctx.fillRect(scrollX - 8, scrollY - 8, viewW / zoom + 16, vh + 16);
   }
-  drawPaperPages(ctx, scrollY - 8, scrollY + viewH / zoom + 8, scrollX - 8, scrollX + viewW / zoom + 8);
+  drawPaperPages(ctx, scrollY - 8, scrollY + vh + 8, scrollX - 8, scrollX + viewW / zoom + 8);
   var i0 = Math.floor(scrollY / TILE_H);
-  var i1 = Math.floor((scrollY + viewH / zoom) / TILE_H);
+  var i1 = Math.floor((scrollY + vh) / TILE_H);
   var j0 = Math.floor(scrollX / TILE_W);
   var j1 = Math.floor((scrollX + viewW / zoom) / TILE_W);
   var i, j, t;
@@ -5023,6 +5027,60 @@ function zwToggle() {
   if (c) c.addEventListener('click', function () { if (zw.on) zwToggle(); });
 })();
 
+/* THE STRIP KEEPS ITS OWN INK. It drew every stroke near the box afresh on
+ * every frame - each one magnified, and the whole width of the page rather
+ * than the box - so the more a page held, the slower writing in the strip
+ * became: "the zoom window is the slowest" (reported). Measured on a full
+ * page, 305 strokes a frame. Now the settled ink is drawn once into a
+ * canvas of the strip's own, and a frame is the paper, that canvas and the
+ * stroke being written. It is drawn again when the box moves or zooms, or
+ * when the ink under it changes - which it hears the same three ways the
+ * page's tiles do: invalidateRange, invalidateAll, and a new stroke
+ * painted straight in (zwInkAdd). Strokes rather than the tiles scaled up:
+ * a tile is one device pixel per page pixel, and magnified it would be
+ * soft - which rather defeats a magnifier. */
+var zwInk = { cv: null, key: '', ok: false, x: 0, y: 0, mag: 1 };
+function zwInkSet(c, g) {
+  c.setTransform(dpr * g.mag, 0, 0, dpr * g.mag, -dpr * zw.x * g.mag, -dpr * zw.y * g.mag);
+}
+function zwInkKey(g) { return g.w + ',' + g.h + ',' + dpr + ',' + curNoteId; }
+function zwInkHere(g) { return zwInk.ok && zwInk.key === zwInkKey(g) && zwInk.x === zw.x && zwInk.y === zw.y && zwInk.mag === g.mag; }
+/* While the box glides on, or its corner is being dragged, the ink it had
+   slides and scales with it rather than being drawn again every frame;
+   once it comes to rest it is drawn once where it stopped. */
+function zwMoving() {
+  if (zwAnim) return true;
+  for (var k in touchStates) if (touchStates.hasOwnProperty(k) && touchStates[k].kind === 'zwsize') return true;
+  return false;
+}
+function zwInkCanvas(g) {
+  if (zwInkHere(g) || (zwInk.ok && zwInk.key === zwInkKey(g) && zwMoving())) return zwInk;
+  var cv = zwInk.cv || (zwInk.cv = document.createElement('canvas'));
+  var W = Math.round(g.w * dpr), Hh = Math.round(g.h * dpr), c, band, j;
+  if (cv.width !== W) cv.width = W;
+  if (cv.height !== Hh) cv.height = Hh;
+  c = cv.getContext('2d');
+  if (!c) return null;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, W, Hh);
+  zwInkSet(c, g);
+  band = sortedStrokesForBand(zw.y - 4, zw.y + g.bh + 4, zw.x - 4, zw.x + g.bw + 4);
+  for (j = 0; j < band.length; j++) renderStrokeFull(c, band[j]);
+  zwInk.key = zwInkKey(g);
+  zwInk.x = zw.x; zwInk.y = zw.y; zwInk.mag = g.mag;
+  zwInk.ok = true;
+  return zwInk;
+}
+/* a stroke just written goes straight onto it, as it does onto the tiles -
+   unless the box has moved since it was drawn, and then it is drawn again */
+function zwInkAdd(s) {
+  if (!zw.on || !zwInk.ok) return;
+  var g = zwGeom(), c = zwInk.cv.getContext('2d');
+  if (!c || !zwInkHere(g)) { zwInk.ok = false; return; }
+  zwInkSet(c, g);
+  renderStrokeFull(c, s);
+}
+
 function drawZoomWindow(c) {
   var g = zwGeom();
   zwClamp();
@@ -5054,14 +5112,17 @@ function drawZoomWindow(c) {
   c.setTransform(dpr * g.mag, 0, 0, dpr * g.mag,
                  dpr * (0 - zw.x * g.mag),
                  dpr * (g.top - zw.y * g.mag));
-  drawPaperPages(c, zw.y - 4, zw.y + g.bh + 4);
-  /* strokes are drawn rather than the tiles scaled up: a tile is only one
-     device pixel per document pixel, and magnified it would be visibly
-     soft - which rather defeats a magnifier */
-  var band = sortedStrokesForBand(zw.y - 4, zw.y + g.bh + 4), j;
-  for (j = 0; j < band.length; j++) renderStrokeFull(c, band[j]);
+  drawPaperPages(c, zw.y - 4, zw.y + g.bh + 4, zw.x - 4, zw.x + g.bw + 4);
+  var ink = zwInkCanvas(g), j, k;
+  if (ink) {
+    k = g.mag / ink.mag;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.drawImage(ink.cv, Math.round(dpr * g.mag * (ink.x - zw.x)), Math.round(g.top * dpr + dpr * g.mag * (ink.y - zw.y)),
+                ink.cv.width * k, ink.cv.height * k);
+    c.setTransform(dpr * g.mag, 0, 0, dpr * g.mag, dpr * (0 - zw.x * g.mag), dpr * (g.top - zw.y * g.mag));
+  }
   for (j in inkNow) {
-    if (inkNow.hasOwnProperty(j)) renderStrokeFull(c, inkNow[j].stroke);
+    if (inkNow.hasOwnProperty(j) && !inkNow[j].held) renderStrokeFull(c, inkNow[j].stroke);
   }
   c.restore();
 
@@ -8251,14 +8312,18 @@ function toolGesture(a, b, kind, now) {
    the same way (a scroll), or apart or together (a zoom), are fingers - a
    hand resting while the lasso is drawn barely moves (0-6px recorded), so
    it never passes. Only contacts that have done nothing yet that cannot
-   be dropped: a lasso loop and a text tap. */
+   be dropped: a lasso loop, a text tap - and, with the zoom window open, a
+   touch on the page above the strip, which only aims the box when it lifts:
+   two of those were two boxes aimed, and the page could not be zoomed or
+   scrolled at all while the strip was up (reported). */
+function pairable(o) { return o.kind === 'lasso' || o.kind === 'texttap' || o.kind === 'zwplace'; }
 function toolPairGesture(now) {
-  if (gesture || (tool !== 'select' && tool !== 'text')) return;
+  if (gesture || (tool !== 'select' && tool !== 'text' && !zw.on)) return;
   var list = [], k;
   for (k in touchStates) { if (touchStates.hasOwnProperty(k)) list.push(touchStates[k]); }
   if (list.length !== 2) return;
   var a = list[0], b = list[1];
-  if ((a.kind !== 'lasso' && a.kind !== 'texttap') || (b.kind !== 'lasso' && b.kind !== 'texttap')) return;
+  if (!pairable(a) || !pairable(b)) return;
   var kind = pairMotion(a, b);
   if (!kind) return;
   if (lassoId === a.id || lassoId === b.id) lassoId = null;
@@ -8936,6 +9001,19 @@ function appendInk(st, pt, now, touch) {
     ctx.lineCap = penCap(s.pen);
     ctx.lineJoin = 'round';
     drawSmoothSeg(ctx, s, k - 1);
+    /* ...and magnified in the zoom window's strip, where the pen actually
+       is. Only the page got it, and the strip is redrawn only when a whole
+       frame is, so the big writing under the pen showed nothing until the
+       pen lifted - the zoom window "the slowest" (reported) */
+    if (zw.on) {
+      var g = zwGeom();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.beginPath();
+      ctx.rect(0, g.top * dpr, g.w * dpr, g.h * dpr);
+      ctx.clip();
+      ctx.setTransform(dpr * g.mag, 0, 0, dpr * g.mag, -dpr * zw.x * g.mag, dpr * (g.top - zw.y * g.mag));
+      drawSmoothSeg(ctx, s, k - 1);
+    }
     ctx.restore();
   }
 
