@@ -2724,6 +2724,264 @@ var STORAGE_KEY_V4 = 'mathnotes_v4';
 var STORAGE_KEY_V2 = 'mathnotes_v2';
 var STORAGE_KEY_V1 = 'mathnotes_v1';
 
+/* ============================================================
+ * THE BIG STORE - room past Safari's 5MB
+ *
+ * localStorage is the only store Safari 9 lets a page write at once, and
+ * it stops at 5MB. A few PDF pages and a few dozen pages of maths filled
+ * it, and the iPad said MathNotes was full with gigabytes free.
+ *
+ * iOS 9 has one other store: the WebSQL database. In a home-screen app
+ * (iOS 9.3.2 and later) it grows as far as it needs without a 50MB
+ * ceiling and without asking; in Safari itself it asks once to go up to
+ * 50MB. Its quota is its own, apart from localStorage's. IndexedDB is
+ * missing from home-screen apps on iOS 9, so it is no use here.
+ *
+ * So every note lives in the database. localStorage keeps the small index
+ * (the folders, which notes there are, the settings) and, for a moment,
+ * a copy of each note as it is saved: the database writes in the
+ * background, and if iOS closes the app before a write lands, the copy is
+ * still there to be found on the next start. The copy is removed as soon
+ * as the database has the note - and the room it took comes back.
+ *
+ * Each stored note carries a save number, "sv", first in its record. On
+ * starting, the newer of the two copies of a note wins, wherever it is,
+ * so neither store can ever roll a note back. Notes saved by an older
+ * version have no number; they move into the database on the first start.
+ *
+ * Without the database (a desktop browser, a refusal, Private Browsing)
+ * nothing changes: everything stays in localStorage, as it always did.
+ * ============================================================ */
+var BIG_ASK = 50 * 1024 * 1024;   /* asked for up front: Safari asks before a
+                                     site goes past 5MB, and some versions
+                                     only ever ask the once */
+var BIG_WAIT = 12000;             /* ms: a database that never answers */
+var JOURNAL_MAX = 900000;         /* characters: a note larger than this goes
+                                     to the database alone - copying it into
+                                     localStorage as well would only crowd
+                                     out the index */
+var big = {
+  on: false,        /* the database is open and in use this session */
+  failed: false,    /* there is one, but it could not be used this time */
+  db: null,
+  rows: null,       /* while starting only: key -> { sv, v } as stored */
+  size: {},         /* key -> characters the database holds for it */
+  q: {}, qn: 0,     /* writes waiting: key -> { sv, v } or { del: 1 } */
+  busy: null,       /* the batch being written */
+  idle: [],         /* waiting for every write to land */
+  bad: false,       /* a write failed and localStorage has no copy of it */
+  badKeys: {},      /* ...which ones */
+  fails: 0,         /* failed batches in a row: the retries space out */
+  err: '',
+  moving: 0         /* notes still to move out of localStorage */
+};
+var lsSv = {};      /* key -> save number of the copy localStorage holds */
+var goneIds = {};   /* deleted for good, still to be taken out of the database */
+var lastSv = 0;
+var dataReady = false;   /* the notes are loaded: until then nothing is saved,
+                            or an empty collection would be written over them */
+
+function nextSv() {
+  var t = Date.now();
+  lastSv = t > lastSv ? t : lastSv + 1;
+  return lastSv;
+}
+function seenSv(sv) { if (sv > lastSv) lastSv = sv; }
+function svOf(raw) {
+  var m = typeof raw === 'string' ? /^\{"sv":(\d+),/.exec(raw) : null;
+  return m ? +m[1] : 0;
+}
+/* a note as stored: its save number first, where svOf can read it
+   without parsing the whole record */
+function noteJson(n, sv) {
+  return '{"sv":' + sv + ',' + JSON.stringify(noteRecord(n)).slice(1);
+}
+
+/* Open the database and read everything in it, then cb(rows) - or
+   cb(null) when there is no database to use, and the app goes on with
+   localStorage alone. */
+function bigOpen(cb) {
+  var od = window.openDatabase, db = null, done = false, timer = null, got = null;
+  function finish(rows) {
+    if (done) return;
+    done = true;
+    if (timer) clearTimeout(timer);
+    cb(rows);
+  }
+  if (typeof od !== 'function') { cb(null); return; }
+  try { db = od('mathnotes', '', 'MathNotes', BIG_ASK); } catch (e) { db = null; }
+  /* refused the size: take the default, which still grows */
+  if (!db) { try { db = od('mathnotes', '', 'MathNotes', 4 * 1024 * 1024); } catch (e2) { db = null; } }
+  if (!db) { big.failed = true; big.err = 'would not open'; cb(null); return; }
+  timer = setTimeout(function () { big.failed = true; big.err = 'did not answer'; finish(null); }, BIG_WAIT);
+  try {
+    db.transaction(function (tx) {
+      tx.executeSql('CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, sv INTEGER, v TEXT)');
+      tx.executeSql('SELECT k, sv, v FROM kv', [], function (t2, rs) {
+        var rows = {}, i, r;
+        for (i = 0; i < rs.rows.length; i++) {
+          r = rs.rows.item(i);
+          if (r && typeof r.v === 'string') rows[r.k] = { sv: +r.sv || 0, v: r.v };
+        }
+        got = rows;
+      });
+    }, function (err) {
+      big.failed = true;
+      big.err = (err && err.message) || 'error';
+      finish(null);
+    }, function () {
+      if (done) return;   /* too late: this session went on without it */
+      big.db = db;
+      big.on = true;
+      finish(got || {});
+    });
+  } catch (e3) { big.failed = true; big.err = 'error'; finish(null); }
+}
+
+/* safe: localStorage holds this very content as well (the copy just
+   written, or - move - a note only moving house, whose copy there is current) */
+function bigPut(key, sv, v, safe, move) {
+  if (!big.q.hasOwnProperty(key)) big.qn++;
+  big.q[key] = { sv: sv, v: v, safe: !!safe, move: !!move };
+}
+function bigDel(key) {
+  if (!big.q.hasOwnProperty(key)) big.qn++;
+  big.q[key] = { del: 1 };
+}
+/* write everything waiting, in one transaction - one at a time, and what
+   is queued while it runs goes in the next */
+function bigFlush() {
+  if (!big.on || big.busy || !big.qn) return;
+  var batch = big.q;
+  big.q = {}; big.qn = 0;
+  big.busy = batch;
+  try {
+    big.db.transaction(function (tx) {
+      var k, w;
+      for (k in batch) {
+        if (!batch.hasOwnProperty(k)) continue;
+        w = batch[k];
+        if (w.del) tx.executeSql('DELETE FROM kv WHERE k = ?', [k]);
+        else tx.executeSql('INSERT OR REPLACE INTO kv (k, sv, v) VALUES (?, ?, ?)', [k, w.sv, w.v]);
+      }
+    }, function (err) { bigFailed(batch, err); }, function () { bigWritten(batch); });
+  } catch (e) { bigFailed(batch, e); }
+}
+function bigWritten(batch) {
+  var k, w, freed = 0;
+  big.busy = null;
+  for (k in batch) {
+    if (!batch.hasOwnProperty(k)) continue;
+    w = batch[k];
+    if (w.del) {
+      delete big.size[k];
+      if (k.indexOf(NOTE_KEY) === 0) delete goneIds[k.slice(NOTE_KEY.length)];
+      continue;
+    }
+    big.size[k] = w.v.length;
+    delete big.badKeys[k];
+    /* the database has it now: localStorage's copy - this save or an
+       older one - is not needed, and its room comes back */
+    if (lsSv.hasOwnProperty(k) && lsSv[k] <= w.sv) {
+      try { localStorage.removeItem(k); freed++; } catch (e) {}
+      delete lsSv[k];
+    }
+  }
+  big.fails = 0;
+  if (big.bad && !anyKey(big.badKeys)) {
+    big.bad = false;
+    if (!saveFull) savedAgain();
+  }
+  if (big.moving && !lsNotesLeft()) {
+    big.moving = 0;
+    toast('Your notes moved into the iPad\'s database - the 5 MB limit is gone');
+  }
+  if (big.qn) bigFlush();
+  else bigIdleNow();
+  /* a save refused for want of room in localStorage can go through now -
+     and if nothing came free, it is time to say so */
+  if (saveFull) {
+    if (freed) doSaveNow();
+    else tellNotSaved();
+  }
+}
+function bigFailed(batch, err) {
+  var k, w, id;
+  big.busy = null;
+  big.fails++;
+  big.err = (err && err.message) || String(err || 'error');
+  for (k in batch) {
+    if (!batch.hasOwnProperty(k)) continue;
+    w = batch[k];
+    if (big.q.hasOwnProperty(k)) continue;          /* a newer write is waiting */
+    if (w.del) { bigDel(k); continue; }             /* the removal is tried again */
+    if (k.indexOf(NOTE_KEY) !== 0) continue;
+    id = k.slice(NOTE_KEY.length);
+    /* written again with the next save - a note that was only moving
+       house still is, its copy in localStorage untouched */
+    if (w.move) { if (!dirtyNotes[id]) dirtyNotes[id] = 2; }
+    else markDirty(id);
+    if (!w.safe) big.badKeys[k] = 1;                /* nothing else holds this one */
+  }
+  bigIdleNow();
+  if (anyKey(big.badKeys)) {
+    big.bad = true;
+    tellNotSaved();
+  }
+  /* the next save tries again; if nothing else brings one, this does -
+     sooner at first, then less often, while the database keeps refusing */
+  if (!saveTimer) saveTimer = setTimeout(saveTick, Math.min(15000 * Math.pow(2, big.fails - 1), 300000));
+}
+function anyKey(o) {
+  var k;
+  for (k in o) if (o.hasOwnProperty(k)) return true;
+  return false;
+}
+/* cb once every write has landed (or failed), or after ms at the most */
+function bigWhenIdle(cb, ms) {
+  var fired = false;
+  function go() { if (!fired) { fired = true; cb(); } }
+  if (!big.on || (!big.busy && !big.qn)) { go(); return; }
+  big.idle.push(go);
+  setTimeout(go, ms || 4000);
+  bigFlush();
+}
+function bigIdleNow() {
+  if (big.busy || big.qn) return;
+  var w = big.idle, i;
+  big.idle = [];
+  for (i = 0; i < w.length; i++) w[i]();
+}
+/* notes whose only copy is still in localStorage */
+function lsNotesLeft() {
+  var k;
+  for (k in lsSv) if (lsSv.hasOwnProperty(k) && k.indexOf(NOTE_KEY) === 0 && !big.size.hasOwnProperty(k)) return true;
+  return false;
+}
+
+/* The newest readable copy of one note, from whichever store has it.
+ * Returns { rec, ls } - ls when the copy taken is localStorage's - or null. */
+function readNote(key) {
+  var ls = null, b = big.rows && big.rows.hasOwnProperty(key) ? big.rows[key] : null, c = [], i, rec;
+  try { ls = localStorage.getItem(key); } catch (e) { ls = null; }
+  if (ls !== null) { lsSv[key] = svOf(ls); seenSv(lsSv[key]); c.push({ raw: ls, sv: lsSv[key], ls: true }); }
+  if (b) { big.size[key] = b.v.length; seenSv(b.sv); c.unshift({ raw: b.v, sv: b.sv, ls: false }); }
+  /* newest first; a tie is the same save, and the database's copy is kept */
+  if (c.length === 2 && c[1].sv > c[0].sv) c.reverse();
+  for (i = 0; i < c.length; i++) {
+    try { rec = JSON.parse(c[i].raw); } catch (e2) { rec = null; }
+    if (!rec || !rec.id) continue;
+    delete rec.sv;
+    /* the database's copy is the newer: localStorage's older one goes */
+    if (!c[i].ls && ls !== null && lsSv[key] <= c[i].sv) {
+      try { localStorage.removeItem(key); } catch (e3) {}
+      delete lsSv[key];
+    }
+    return { rec: rec, ls: c[i].ls, raw: c[i].raw };
+  }
+  return null;
+}
+
 /* Med used to be a bare "moved 6px, so it is ink" gate - no suspicion,
    no veto, no arbitration. It read as partial protection while giving
    essentially none, which is worse than offering nothing, so it is
@@ -3452,22 +3710,29 @@ function loadV5() {
     if (raw) idx = JSON.parse(raw);
   } catch (e) { idx = null; }
   if (!idx || !idx.noteIds) return null;
+  /* notes deleted for good whose removal the database has not taken yet */
+  if (idx.gone && idx.gone.length) {
+    for (i = 0; i < idx.gone.length; i++) goneIds[idx.gone[i]] = 1;
+  }
 
-  var out = { notebooks: idx.notebooks || [], notes: {}, cur: idx.cur, set: idx.set, lost: 0, loose: [] };
+  var out = { notebooks: idx.notebooks || [], notes: {}, cur: idx.cur, set: idx.set, lost: 0, loose: [], move: [] };
   for (i = 0; i < idx.noteIds.length; i++) {
-    var id = idx.noteIds[i], rec = null, r = null;
-    try {
-      r = localStorage.getItem(NOTE_KEY + id);
-      if (r) rec = JSON.parse(r);
-    } catch (e) { rec = null; }
-    if (rec && rec.id) {
-      out.notes[id] = deserializeNote(rec);
+    var id = idx.noteIds[i], got = readNote(NOTE_KEY + id);
+    if (got) {
+      out.notes[id] = deserializeNote(got.rec);
       /* still in the old, three-times-larger form: rewrite it compact */
-      if (r.indexOf('"pts":') >= 0) out.loose.push(id);
+      if (got.raw.indexOf('"pts":') >= 0) out.loose.push(id);
+      /* only in localStorage, and there is a database to move it into */
+      else if (got.ls && big.on) out.move.push(id);
     } else lost++;
   }
   out.lost = lost;
-  if (lost) showWarning(lost + ' note(s) could not be read and were skipped.');
+  if (lost) {
+    showWarning(big.failed
+      ? lost + ' note(s) could not be opened this time - the iPad\'s notes database did not answer. ' +
+        'Nothing has been deleted: close MathNotes and open it again.'
+      : lost + ' note(s) could not be read and were skipped.');
+  }
   if (unreadStrokes) showWarning(unreadStrokes + ' stroke(s) were damaged and could not be read.');
   return out;
 }
@@ -3496,6 +3761,7 @@ function loadAll() {
     notes = {};
     notes[nid] = { id: nid, title: 'Untitled', cr: Date.now(), mod: Date.now(), scroll: 0, strokes: [] };
     curNotebook = 0; curNoteId = nid;
+    bigRecover();
     return;
   }
   notebooks = data.notebooks || [];
@@ -3523,8 +3789,55 @@ function loadAll() {
     for (var li = 0; li < data.loose.length; li++) markDirty(data.loose[li]);
     looseNotes = data.loose.length;
   }
+  /* notes that are only in localStorage go into the database with the
+     first save - marked 2: localStorage's copy is already current, so
+     it is not written there again, only removed once the database has it */
+  if (data.move && data.move.length) {
+    for (var mi = 0; mi < data.move.length; mi++) {
+      if (!dirtyNotes[data.move[mi]]) dirtyNotes[data.move[mi]] = 2;
+    }
+    big.moving = data.move.length;
+    looseNotes += data.move.length;
+  }
+  bigRecover();
 }
 var looseNotes = 0;
+
+/* Notes the database holds that the index does not list. The index lives
+   in localStorage; if it was lost, or a new note's entry never got in
+   because localStorage was full, the notes themselves are still in the
+   database - they are put back in the first folder rather than left
+   where no one can see them. A note deleted for good is taken out. */
+function bigRecover() {
+  var k, id, rec, back = [], listed = {}, i, j;
+  if (!big.on || !big.rows) return;
+  for (i = 0; i < notebooks.length; i++) {
+    for (j = 0; j < notebooks[i].notes.length; j++) listed[notebooks[i].notes[j]] = 1;
+  }
+  for (id in goneIds) {
+    if (goneIds.hasOwnProperty(id) && !big.rows.hasOwnProperty(NOTE_KEY + id)) delete goneIds[id];
+  }
+  for (k in big.rows) {
+    if (!big.rows.hasOwnProperty(k) || k.indexOf(NOTE_KEY) !== 0) continue;
+    id = k.slice(NOTE_KEY.length);
+    /* in the index, it is alive whatever was once said of it (a note
+       deleted and then restored from a backup); listed but unreadable,
+       it is left exactly as it is */
+    if (notes[id] || listed[id]) { delete goneIds[id]; continue; }
+    if (goneIds[id]) { bigDel(k); continue; }
+    try { rec = JSON.parse(big.rows[k].v); } catch (e) { rec = null; }
+    if (!rec || !rec.id) continue;
+    delete rec.sv;
+    big.size[k] = big.rows[k].v.length;
+    notes[id] = deserializeNote(rec);
+    back.push(id);
+  }
+  if (!back.length) return;
+  if (!notebooks.length) notebooks.push({ id: genId(), title: 'My Notes', color: NB_COLORS[0], notes: [] });
+  for (i = 0; i < back.length; i++) notebooks[0].notes.push(back[i]);
+  big.recovered = back.length;
+  looseNotes++;           /* the index is written again soon, with them in it */
+}
 /* the notes still stored the old way are rewritten a few seconds after
    starting - at once, rather than whenever each is next written in, because
    a full iPad needs the room back now */
@@ -3756,7 +4069,8 @@ function noteRecord(n) {
 
 /* notes whose key needs rewriting */
 var dirtyNotes = {};
-function markDirty(id) { if (id) dirtyNotes[id] = 1; }
+/* a note being written is not deleted, whatever was once said of its id */
+function markDirty(id) { if (id) { dirtyNotes[id] = 1; delete goneIds[id]; } }
 
 /* every key in the store, whoever wrote it: all of it counts against the room */
 function storeKeys() {
@@ -3770,11 +4084,21 @@ function storeKeys() {
   } catch (e) {}
   return out;
 }
-function storageBytes() {
+/* localStorage's own use, in characters - what its 5MB is measured against */
+function lsChars() {
   var total = 0, ks = storeKeys(), i;
   try {
     for (i = 0; i < ks.length; i++) total += (localStorage.getItem(ks[i]) || '').length + ks[i].length;
   } catch (e) { return 0; }
+  return total;
+}
+/* everything MathNotes keeps, in both stores; a note that is in both for
+   the moment is counted once */
+function storageBytes() {
+  var total = lsChars(), k;
+  for (k in big.size) {
+    if (big.size.hasOwnProperty(k) && !lsSv.hasOwnProperty(k)) total += big.size[k] + k.length;
+  }
   return total;
 }
 /* sizes as the iPad reports them: two bytes a character */
@@ -3782,32 +4106,42 @@ function mb(chars) { return (Math.round(chars * 2 / 100000) / 10).toFixed(1) + '
 /* where the room has gone: handwriting, pictures and PDF pages, the trash,
    copies left behind by older versions of the app, and anything else */
 function storageReport() {
-  var r = { ink: 0, pics: 0, trash: 0, trashN: 0, old: 0, other: 0, total: 0 }, ks = storeKeys(), i, k, c, n, pic, j;
+  var r = { ink: 0, pics: 0, trash: 0, trashN: 0, old: 0, other: 0, total: 0, big: big.on }, ks = storeKeys(), i, k, c;
   for (i = 0; i < ks.length; i++) {
     k = ks[i];
     try { c = (localStorage.getItem(k) || '').length + k.length; } catch (e) { c = 0; }
-    r.total += c;
-    if (k.indexOf(NOTE_KEY) === 0) {
-      n = notes[k.slice(NOTE_KEY.length)];
-      if (n && n.trash) { r.trash += c; r.trashN++; continue; }
-      pic = 0;
-      if (n) for (j = 0; j < n.strokes.length; j++) if (n.strokes[j].pen === PEN_IMG && n.strokes[j].src) pic += n.strokes[j].src.length;
-      pic = Math.min(pic, c);
-      r.pics += pic;
-      r.ink += c - pic;
-    } else if (k === STORAGE_KEY_V4 || k === STORAGE_KEY_V2 || k === STORAGE_KEY_V1) r.old += c;
-    else r.other += c;
+    tallyKey(r, k, c);
   }
-  r.free = Math.max(0, QUOTA_CHARS - r.total);
+  for (k in big.size) {
+    if (big.size.hasOwnProperty(k) && !lsSv.hasOwnProperty(k)) tallyKey(r, k, big.size[k] + k.length);
+  }
+  /* the database has no fixed allowance to count down from */
+  r.free = big.on ? -1 : Math.max(0, QUOTA_CHARS - r.total);
   return r;
+}
+function tallyKey(r, k, c) {
+  var n, pic = 0, j;
+  r.total += c;
+  if (k.indexOf(NOTE_KEY) === 0) {
+    n = notes[k.slice(NOTE_KEY.length)];
+    if (n && n.trash) { r.trash += c; r.trashN++; return; }
+    if (n) for (j = 0; j < n.strokes.length; j++) if (n.strokes[j].pen === PEN_IMG && n.strokes[j].src) pic += n.strokes[j].src.length;
+    pic = Math.min(pic, c);
+    r.pics += pic;
+    r.ink += c - pic;
+  } else if (k === STORAGE_KEY_V4 || k === STORAGE_KEY_V2 || k === STORAGE_KEY_V1) r.old += c;
+  else r.other += c;
 }
 
 var quotaWarned = 0, quotaAt = 0;
 function checkQuota() {
+  /* with the database, localStorage only holds the index and a passing
+     copy or two: there is no 5MB to run out of */
+  if (big.on) return;
   /* reading the whole store costs something on an iPad 3: not every save */
   if (Date.now() - quotaAt < 20000) return;
   quotaAt = Date.now();
-  var pct = storageBytes() / QUOTA_CHARS;
+  var pct = lsChars() / QUOTA_CHARS;
   if (pct > 0.9 && quotaWarned < 2) {
     quotaWarned = 2;
     showWarning('MathNotes has used ' + Math.round(pct * 100) + '% of its space on this iPad. ' +
@@ -3823,49 +4157,92 @@ function checkQuota() {
  * after it was lost even once room had been made. Now whatever could not be
  * written stays marked, every later save tries again, and the first one
  * that gets through says so. */
-var saveFull = false, fullToldAt = 0;
+var saveFull = false, fullToldAt = 0, notSavedTold = false;
+/* said when the latest writing is held nowhere but in memory */
+function tellNotSaved() {
+  notSavedTold = true;
+  if (Date.now() - fullToldAt <= 60000) return;
+  fullToldAt = Date.now();
+  showWarning(big.on
+    ? 'The iPad would not save your latest writing, so it is NOT saved yet. If the iPad itself is nearly full, ' +
+      'free some space on it (Settings > General > Storage & iCloud Usage) - MathNotes keeps trying and saves by itself.'
+    : 'The iPad has no more room for MathNotes, so your latest writing is NOT saved yet. ' +
+      'Empty the trash or delete a note you no longer need (Settings > Storage) - it saves again by itself.');
+}
 function doSaveNow() {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-  if (!storageOk) return;
+  /* before the notes have loaded there is nothing to save - and saving
+     the empty collection would write it over the real one */
+  if (!storageOk || !dataReady) return;
   lastSaveAt = Date.now();
-  var ids = [], i, j, k;
+  var ids = [], gone = [], i, j, k, n, sv, json, idx;
   for (i = 0; i < notebooks.length; i++) {
     for (j = 0; j < notebooks[i].notes.length; j++) ids.push(notebooks[i].notes[j]);
   }
+  for (k in goneIds) if (goneIds.hasOwnProperty(k)) gone.push(k);
   try {
     /* each dirty note first, so a failure part-way leaves the index
        pointing at notes that are still whole - and each is unmarked only
        once it is written, so a failure keeps the rest for the next try */
     for (k in dirtyNotes) {
       if (!dirtyNotes.hasOwnProperty(k)) continue;
-      var n = notes[k];
-      if (n) localStorage.setItem(NOTE_KEY + k, JSON.stringify(noteRecord(n)));
+      n = notes[k];
+      if (n) {
+        sv = nextSv();
+        json = noteJson(n, sv);
+        if (!big.on) localStorage.setItem(NOTE_KEY + k, json);
+        else {
+          /* the database writes it in a moment; until it has, localStorage
+             keeps a copy, so a closed app loses nothing. 2: localStorage's
+             copy is current already. A refusal costs nothing here - the
+             note is going to the database either way. */
+          var copied = dirtyNotes[k] === 2;
+          if (!copied && json.length <= JOURNAL_MAX) {
+            try { localStorage.setItem(NOTE_KEY + k, json); lsSv[NOTE_KEY + k] = sv; copied = true; } catch (eJ) {}
+          }
+          bigPut(NOTE_KEY + k, sv, json, copied, dirtyNotes[k] === 2);
+        }
+      }
       delete dirtyNotes[k];
     }
-    localStorage.setItem(STORAGE_KEY_V5, JSON.stringify({
-      v: 5, notebooks: notebooks, noteIds: ids,
-      cur: { nb: curNotebook, note: curNoteId }, set: settings
-    }));
+    idx = { v: 5, notebooks: notebooks, noteIds: ids, cur: { nb: curNotebook, note: curNoteId }, set: settings };
+    if (gone.length) idx.gone = gone;
+    localStorage.setItem(STORAGE_KEY_V5, JSON.stringify(idx));
   } catch (e) {
     saveFull = true;
-    if (Date.now() - fullToldAt > 60000) {
-      fullToldAt = Date.now();
-      showWarning('The iPad has no more room for MathNotes, so your latest writing is NOT saved yet. ' +
-                  'Empty the trash or delete a note you no longer need (Settings > Storage) - it saves again by itself.');
-    }
+    bigFlush();
+    /* notes still moving out of localStorage free room as they land, and
+       bring this save round again (bigWritten) - no alarm before then */
+    if (!big.busy) tellNotSaved();
     return;
   }
+  bigFlush();
   if (saveFull) {
     saveFull = false;
-    warningEl.style.display = 'none';
-    toast('Saved - there is room again');
+    if (!big.bad) savedAgain();
   }
   checkQuota();
 }
+/* everything is held somewhere again: take the warning down - and if the
+   user was told it was not saved, tell them it is */
+function savedAgain() {
+  if (!notSavedTold && big.on) return;
+  notSavedTold = false;
+  warningEl.style.display = 'none';
+  toast(big.on ? 'Saved - your latest writing is safe' : 'Saved - there is room again');
+}
 
 function dropNoteKey(id) {
-  try { localStorage.removeItem(NOTE_KEY + id); } catch (e) {}
+  var key = NOTE_KEY + id;
+  try { localStorage.removeItem(key); } catch (e) {}
+  delete lsSv[key];
   delete dirtyNotes[id];
+  /* out of the database too - and remembered in the index until it is,
+     so a copy left there is not taken for a lost note and put back */
+  if (big.on || big.failed) {
+    goneIds[id] = 1;
+    if (big.on) bigDel(key);
+  }
 }
 /* Writing the note out means JSON.stringify of every stroke followed by a
  * SYNCHRONOUS localStorage write - the main thread does nothing else
@@ -14014,7 +14391,11 @@ window.__mnMath = { now: function () { if (mathTimer) clearTimeout(mathTimer); m
 window.__mnSorted = function () { var o = [], i; for (i = 0; sorter && i < sorter.order.length; i++) o.push(sorter.order[i].src); return o; };
 window.__mnSortLift = function () { if (sorter && sorter.drag) { clearTimeout(sorter.drag.timer); srtLift(sorter.drag); } };
 window.__mnPack = { pack: packPts, unpack: unpackPts, report: storageReport, quota: QUOTA_CHARS,
-                    ok: function () { return storageOk; }, full: function () { return saveFull; } };
+                    ok: function () { return storageOk; }, full: function () { return saveFull || big.bad; },
+                    big: function () { return { on: big.on, failed: big.failed, busy: !!big.busy, queued: big.qn,
+                                                bad: big.bad, moving: big.moving, gone: Object.keys(goneIds).length }; },
+                    idle: bigWhenIdle, ready: function () { return dataReady; } };
+window.__mnUpd = { ask: function () { updAsk(); }, back: function () { updBack(); }, build: function () { return APP_BUILD; } };
 window.__mnPages = function () {
   return { strip: stripOn, total: pageCount(), cur: currentPage(),
            cells: byId('stripList').children.length,
@@ -15360,6 +15741,9 @@ function dlgAccept() {
   o.done(v, dlgColor);
 }
 
+/* opened from its home-screen icon rather than in Safari */
+function isHomeApp() { try { return !!navigator.standalone; } catch (e) { return false; } }
+
 /* ---- where the room has gone ---- */
 function openStorage() {
   var r = storageReport(), lines = [];
@@ -15369,9 +15753,17 @@ function openStorage() {
   if (r.old) lines.push('Left over from older versions: ' + mb(r.old));
   if (r.other > 20000) lines.push('Other: ' + mb(r.other));
   lines.push('');
-  lines.push('Free: ' + mb(r.free) + ' of ' + mb(QUOTA_CHARS) +
-             (saveFull ? ' - FULL: your latest writing is waiting to be saved.' : ''));
-  if (r.pics > r.ink) lines.push('Pictures and PDF pages take the most room - a note of them you no longer need frees the most.');
+  if (r.big) {
+    lines.push('In all: ' + mb(r.total) + ', kept in the iPad\'s notes database' +
+               (isHomeApp() ? ', which grows as you need it - the old 5 MB limit is gone.'
+                            : '. Safari lets it grow to 50 MB, and asks you first.'));
+    if (saveFull || big.bad) lines.push('Your latest writing is waiting to be saved.');
+  } else {
+    lines.push('Free: ' + mb(r.free) + ' of ' + mb(QUOTA_CHARS) +
+               (saveFull ? ' - FULL: your latest writing is waiting to be saved.' : ''));
+    if (big.failed) lines.push('The iPad\'s notes database, which has far more room, did not open this time - close MathNotes and open it again.');
+    if (r.pics > r.ink) lines.push('Pictures and PDF pages take the most room - a note of them you no longer need frees the most.');
+  }
   var trashIds = [];
   if (r.trash) {
     var all = allNoteIds(), i;
@@ -15560,11 +15952,11 @@ function pdfPaint() {
   if (!pdfS) return;
   var n = pdfPicked().length, N = pdfS.doc.numPages;
   /* a page as a JPEG in text is about 190,000 characters */
-  var free = Math.max(0, QUOTA_CHARS - storageBytes()), need = n * 190000;
+  var free = big.on ? Infinity : Math.max(0, QUOTA_CHARS - storageBytes()), need = n * 190000;
   byId('pdfSub').textContent = (N === 1 ? '1 page' : N + ' pages') + '  ·  tap the pages to bring in';
   byId('pdfAll').textContent = n === N ? 'Select none' : 'Select all';
   var sz = byId('pdfSize');
-  sz.textContent = n ? 'About ' + mb(need) + ' of ' + mb(free) + ' free' : 'No pages chosen';
+  sz.textContent = n ? 'About ' + mb(need) + (big.on ? '' : ' of ' + mb(free) + ' free') : 'No pages chosen';
   sz.className = need > free ? 'bad' : '';
   var go = byId('pdfGo');
   go.textContent = n ? (n === 1 ? 'Import 1 page' : 'Import ' + n + ' pages') : 'Import';
@@ -15647,7 +16039,7 @@ function pdfGo() {
     for (k = 0; k < out.length; k++) need += out[k].url.length;
     pdfSheetClose();
     if (!out.length) { toast('Those pages could not be read'); return; }
-    var free = QUOTA_CHARS - storageBytes();
+    var free = big.on ? Infinity : QUOTA_CHARS - storageBytes();
     if (need > free) {
       dlgOpen({ title: 'Not enough room', ok: 'OK', cancel: 'Close',
         msg: 'Those pages need ' + mb(need) + ' but only ' + mb(Math.max(0, free)) + ' is free on this iPad. ' +
@@ -17351,7 +17743,7 @@ var SET_SECTIONS = [
       v: function () { var n = activeNote(), d = n && coverDesign(n.cover); return d ? d.n : 'None'; },
       act: function () { if (curNoteId) openCover('note', curNoteId); } },
     { lbl: 'Storage', hint: 'How much room your notes take on this iPad', leave: true, global: true,
-      v: function () { return mb(storageBytes()) + ' of ' + mb(QUOTA_CHARS); }, act: openStorage },
+      v: function () { return big.on ? mb(storageBytes()) + ' used' : mb(storageBytes()) + ' of ' + mb(QUOTA_CHARS); }, act: openStorage },
     { lbl: 'Backup and restore', hint: 'Copy every note, or put one back', leave: true, global: true,
       v: function () { return countNotes() + ' notes'; }, act: openBackup },
     { lbl: 'Paste', hint: 'Put back what was copied', edit: true, leave: true,
@@ -17394,8 +17786,17 @@ var SET_SECTIONS = [
       act: function () { window.alert(capsReport()); } }
   ] },
   { name: 'About', rows: [
+    { lbl: 'Check for updates', hint: 'Get the newest MathNotes - your notes stay just as they are', leave: true,
+      v: function () { return updShort(); }, act: updAsk },
     { lbl: 'About', hint: 'Version and how the app works', leave: true,
-      act: function () { window.alert('MathNotes v5.1 (S-Class 5)\n\nSamsung-notes style handwriting for iPad 3.\nWorks offline. Notes are saved in this browser.\n\nHand tool: finger scrolls, pen writes.\nTwo-finger pinch zooms. Lasso tool selects ink.\nDrag the corner handle or tap - / + to resize\nthe selection. Double-tap with the hand tool\nresets zoom.'); } }
+      act: function () {
+        window.alert('MathNotes v5.1 (S-Class 5)\n' +
+          'Version ' + updShort() + (updDate() ? ', ' + updDate() : '') + '\n' +
+          (isHomeApp() ? 'Opened from the home screen' : 'Opened in Safari') +
+          (window.location && window.location.host ? ' (' + window.location.host + ')' : '') + '\n' +
+          'Notes kept in ' + (big.on ? 'the iPad\'s notes database - no 5 MB limit' : 'Safari\'s storage (5 MB)') +
+          '\n\nSamsung-notes style handwriting for iPad 3.\nWorks offline. Notes are saved on this iPad.\n\nHand tool: finger scrolls, pen writes.\nTwo-finger pinch zooms. Lasso tool selects ink.\nDrag the corner handle or tap - / + to resize\nthe selection. Double-tap with the hand tool\nresets zoom.');
+      } }
   ] }
 ];
 
@@ -17922,34 +18323,176 @@ byId('backupImportBtn').addEventListener('click', doImport);
  * works with no connection at all - the notes were always on the iPad, it
  * was only the app itself that had to come over the network. With a
  * connection, each start quietly checks for a newer version and fetches it
- * in the background; a bar then offers to restart into it. Waiting loses
- * nothing - the next start uses it anyway. */
+ * in the background; a bar then offers to restart into it.
+ *
+ * A HOME-SCREEN APP IS HARDLY EVER STARTED AFRESH. Pressing its icon
+ * brings back the page iOS kept, exactly as it was, and the application
+ * cache only looks for a new version when the page loads - so "the next
+ * start uses it" could be weeks away. Safari, reloaded now and then, had
+ * the new version while the home-screen app on the same iPad stayed days
+ * behind it. So the app looks again each time it comes back to the front
+ * and every half hour while it is open, and a new version that came down
+ * while it was away is put in place the moment it comes back, before
+ * anything new is written. Settings > Check for updates looks at once, and
+ * says which version this is - so the two copies can be compared. */
+/* written by scripts/stamp_offline.js - the version of the files below */
+var APP_BUILD = 'ba207a829994b747', APP_DATE = '2026-10-06';
+var UPD_GAP = 10 * 60 * 1000;      /* coming back: look at most this often */
+var UPD_EVERY = 30 * 60 * 1000;    /* ...and this often while it stays open */
+var upd = { at: 0, ask: false, tries: 0, state: '' };
 function initOffline() {
   var ac = window.applicationCache;
   if (!ac || !ac.addEventListener) return;
   ac.addEventListener('cached', function () {
     toast('Saved on this iPad - MathNotes now works without the internet');
   }, false);
-  ac.addEventListener('updateready', offerUpdate, false);
+  ac.addEventListener('checking', function () { updEvent('checking'); }, false);
+  ac.addEventListener('downloading', function () { updEvent('downloading'); }, false);
+  ac.addEventListener('noupdate', function () { updEvent('noupdate'); }, false);
+  ac.addEventListener('error', function () { updEvent('error'); }, false);
+  ac.addEventListener('obsolete', function () { updEvent('obsolete'); }, false);
+  ac.addEventListener('updateready', function () { updEvent('updateready'); }, false);
   if (ac.status === ac.UPDATEREADY) offerUpdate();
-  window.addEventListener('online', function () {
-    try { ac.update(); } catch (e) {}
-  }, false);
+  window.addEventListener('online', function () { updCheck(true); }, false);
   window.addEventListener('offline', function () {
     toast('No internet - everything still works, your notes are on this iPad');
   }, false);
+  if (document.addEventListener) {
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) updBack(); }, false);
+  }
+  window.addEventListener('pageshow', function (e) { if (e && e.persisted) updBack(); }, false);
+  setInterval(function () { if (!document.hidden) updCheck(false); }, UPD_EVERY);
+}
+function updShort() { return APP_BUILD ? APP_BUILD.slice(0, 7) : 'unknown'; }
+function updDate() {
+  var m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(APP_DATE || '');
+  return m ? +m[3] + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+m[2] - 1] + ' ' + m[1] : '';
+}
+/* ask the application cache to look for a new version; false when it will not */
+function updCheck(force) {
+  var ac = window.applicationCache, now = Date.now();
+  if (!ac || typeof ac.update !== 'function') return false;
+  if (!force && upd.at && now - upd.at < UPD_GAP) return false;
+  upd.at = now;
+  try { ac.update(); return true; } catch (e) { return false; }
+}
+/* nothing half done that a reload would lose */
+function updQuiet() {
+  return !liveTouchCount() && !textEdit && !(pdfS && pdfS.busy) && !split.on && !drillNow;
+}
+/* back at the front after being away */
+function updBack() {
+  var ac = window.applicationCache;
+  if (!ac) return;
+  if (ac.status === ac.UPDATEREADY) {
+    if (dataReady && updQuiet()) applyUpdate(); else offerUpdate();
+    return;
+  }
+  updCheck(false);
+}
+function updEvent(what) {
+  upd.state = what;
+  if (what === 'updateready') {
+    if (upd.ask) { upd.ask = false; applyUpdate(); }
+    else offerUpdate();
+    return;
+  }
+  if (!upd.ask || what === 'checking') return;
+  if (what === 'downloading') { toast('Downloading the new version...'); return; }
+  upd.ask = false;
+  if (what === 'noupdate') updVerify();
+  else if (what === 'error') toast('Could not reach the internet to look for a new version - try again on Wi-Fi');
 }
 function offerUpdate() { byId('updBar').className = 'on'; }
-byId('updGo').addEventListener('click', function () {
+/* save, wait for the database to have it all, then reload into the new version */
+function applyUpdate() {
+  byId('updBar').className = '';
   doSaveNow();
-  try { if (window.applicationCache) window.applicationCache.swapCache(); } catch (e) {}
-  if (window.location && window.location.reload) window.location.reload();
-});
+  bigWhenIdle(function () {
+    try { localStorage.setItem('mathnotes_updated', '1'); } catch (e) {}
+    try { if (window.applicationCache) window.applicationCache.swapCache(); } catch (e2) {}
+    if (window.location && window.location.reload) window.location.reload();
+  }, 4000);
+}
+byId('updGo').addEventListener('click', applyUpdate);
 byId('updLater').addEventListener('click', function () { byId('updBar').className = ''; });
 
+/* Settings > Check for updates */
+function updAsk() {
+  var ac = window.applicationCache;
+  if (ac && ac.status === ac.UPDATEREADY) { applyUpdate(); return; }
+  upd.ask = true;
+  upd.tries = 0;
+  toast('Looking for a newer version...');
+  /* not kept offline (or not yet): the page came straight off the internet */
+  if (!updCheck(true)) { upd.ask = false; updVerify(); }
+}
+/* the application cache says there is nothing newer - ask the internet
+   itself, past every cache, which version it has */
+function updVerify() {
+  updServerVersion(function (v) {
+    if (!v || v === APP_BUILD) {
+      toast(v ? 'You have the newest version (' + updShort() + ')' : 'This is version ' + updShort());
+      return;
+    }
+    /* a newer one exists and the cache did not see it: fetch the manifest
+       once past any stale copy the iPad holds of it, and look again */
+    if (upd.tries++ < 1) {
+      updRefreshManifest(function () { upd.ask = true; if (!updCheck(true)) { upd.ask = false; updStuck(v); } });
+      return;
+    }
+    updStuck(v);
+  });
+}
+function updServerVersion(cb) {
+  var x, done = false;
+  function fin(v) { if (!done) { done = true; cb(v); } }
+  try { x = new XMLHttpRequest(); x.open('GET', 'mathnotes.appcache?v=' + Date.now(), true); }
+  catch (e) { fin(''); return; }
+  x.onreadystatechange = function () {
+    if (x.readyState !== 4) return;
+    var m = x.status === 200 ? /# version ([0-9a-f]+)/.exec(x.responseText || '') : null;
+    fin(m ? m[1] : '');
+  };
+  try { x.send(null); } catch (e2) { fin(''); }
+}
+function updRefreshManifest(cb) {
+  var x, done = false;
+  function fin() { if (!done) { done = true; cb(); } }
+  try {
+    x = new XMLHttpRequest();
+    x.open('GET', 'mathnotes.appcache', true);
+    x.setRequestHeader('Cache-Control', 'no-cache');
+    x.setRequestHeader('Pragma', 'no-cache');
+  } catch (e) { fin(); return; }
+  x.onreadystatechange = function () { if (x.readyState === 4) fin(); };
+  try { x.send(null); } catch (e2) { fin(); }
+}
+function updStuck(v) {
+  dlgOpen({ title: 'A newer version is waiting',
+    msg: 'The internet has MathNotes ' + v.slice(0, 7) + ', this copy is ' + updShort() + ', and the iPad has not swapped it in yet.\n\n' +
+         'Close MathNotes completely - press the Home button twice and swipe MathNotes up - and open it again with Wi-Fi on. ' +
+         'Wait half a minute for the blue "new version" bar.\n\n' +
+         'Your notes stay where they are: closing and opening MathNotes never deletes them. Only do not delete the icon.',
+    ok: 'OK', cancel: 'Close', done: function () {} });
+}
+
 /* ---------- boot ---------- */
+/* The notes come first - from the database, which answers in its own
+   time - and nothing is drawn or saved until they are in. */
 function init() {
+  var slow = setTimeout(function () { if (!dataReady) toast('Opening your notes...'); }, 800);
+  bigOpen(function (rows) {
+    clearTimeout(slow);
+    big.rows = rows;
+    boot();
+  });
+}
+function boot() {
   loadAll();
+  dataReady = true;
+  big.rows = null;          /* read: the stored copies are not needed again */
+  bigFlush();               /* removals found waiting (bigRecover) go now */
   purgeTrash();
   if (curNoteId && notes[curNoteId] && notes[curNoteId].trash) curNoteId = null;
   compactSoon();
@@ -17976,6 +18519,17 @@ function init() {
   if (curNoteId && notes[curNoteId]) openNote(curNoteId);
   else { showView('home'); renderHome(); }
   resizeView();
+  if (big.recovered) {
+    toast(big.recovered === 1 ? '1 note was found in the database and put back in ' + notebooks[0].title
+                              : big.recovered + ' notes were found in the database and put back in ' + notebooks[0].title);
+  }
+  /* just restarted into a new version: say so, once */
+  try {
+    if (localStorage.getItem('mathnotes_updated')) {
+      localStorage.removeItem('mathnotes_updated');
+      toast('MathNotes is up to date - version ' + updShort());
+    }
+  } catch (e) {}
 }
 
 init();

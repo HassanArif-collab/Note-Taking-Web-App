@@ -281,20 +281,39 @@ on the iPad; now the app is too. PDF import works offline as well.
 
 When you are online it checks for a newer version by itself and downloads it
 in the background; a bar at the top then says **A new version is ready —
-Restart**. Tap Later and the next start uses it anyway.
+Restart**. Tap Later and it is put in place the next time you come back to
+the app.
+
+The home-screen icon used to fall behind Safari: iOS keeps a home-screen app
+as it was and brings it back from where it stopped, so "the next start"
+could be days away. Now it looks for a new version **every time it comes
+back to the front** (and every half hour while open), and a version that
+came down while you were away is put in place as you come back.
+**Settings → Check for updates** looks at once and shows which version you
+have — compare it between the icon and Safari. If the icon still will not
+take a new version, close it completely (press Home twice, swipe MathNotes
+up) and open it again with Wi-Fi on. **Never delete the icon to fix it** —
+your notes live inside it.
 
 ### Storage — the room on the iPad
 
-Safari gives a web app **about 5 MB** (2.6 million characters) and that is the
-whole allowance for every note. **Settings → Storage** shows how much is used
-and by what: handwriting, pictures and PDF pages, the trash, and copies left
-behind by older versions of the app (those are cleared automatically). A page
-of handwriting takes a few kilobytes; a PDF page or photo about 0.4 MB, so
-pictures are what fill it.
+Your notes are kept in the iPad's own notes database (WebSQL). Opened from
+the **home-screen icon** it grows as far as you need — the old 5 MB ceiling is
+gone. Opened in **Safari**, Safari lets it grow to 50 MB and asks you once.
+
+The first start of this version moves every note there by itself, from the
+5 MB store older versions used (a message says when it is done); nothing to
+copy or paste. If the database ever cannot be opened, MathNotes carries on
+with the 5 MB store and says so — nothing is deleted.
+
+**Settings → Storage** shows how much is used and by what: handwriting,
+pictures and PDF pages, the trash, and copies left behind by older versions
+of the app (those are cleared automatically). A page of handwriting takes a
+few kilobytes; a PDF page or photo about 0.4 MB.
 
 If the iPad refuses to save, a message says your latest writing is **not saved
-yet**. Nothing is thrown away: empty the trash (the Storage screen has the
-button) or delete a note you no longer need, and it saves again by itself.
+yet**. Nothing is thrown away: MathNotes keeps trying and saves by itself as
+soon as there is room (free space on the iPad, or empty the trash).
 Handwriting is stored compactly — about a third of the room it used to take.
 
 ### Backing up — do this
@@ -469,6 +488,7 @@ node scripts/check_es5.js     # Safari 9 gate - run before every push
 node scripts/test_palm.js     # palm-rejection behaviour (80 assertions)
 node scripts/test_recorder.js # recorder, pinch-zoom, drills (46 assertions)
 node scripts/test_backup.js   # storage and backup (20 assertions)
+node scripts/test_bigstore.js # the notes in the iPad's database (48 assertions, ~13s)
 node scripts/test_features.js # pages, tools, pen pop-up, sidebar (240 assertions)
 node scripts/test_tidy.js     # writing replayed from real traces (7 assertions)
 node scripts/serve.js         # serve the app to the iPad, collect recordings
@@ -524,16 +544,32 @@ changes. So after changing `index.html` or anything in `lib/`:
 
     node scripts/stamp_offline.js
 
-and commit the manifest with the change. `test_features.js` fails if you
-forget. Never delete the manifest: a missing one tells every iPad to throw its
-offline copy away.
+and commit the manifest with the change. It also writes the same version into
+`index.html` (`APP_BUILD`, `APP_DATE`), which **Settings → Check for updates**
+shows and compares with the manifest on the internet. `test_features.js` fails
+if you forget. Never delete the manifest: a missing one tells every iPad to
+throw its offline copy away.
+
+### Where the notes are kept
+
+Notes live in a WebSQL database (`openDatabase`, table `kv`): from iOS 9.3.2 a
+home-screen app's database has no 50MB ceiling and never asks, Safari asks once
+for 50MB, and the quota is separate from localStorage's 5MB. IndexedDB is not
+an option: home-screen apps on iOS 9 do not have it. localStorage keeps the
+index (`mathnotes_v5`) and, until the database's write lands, a copy of each
+note just saved — so a write lost when iOS closes the app is not a note lost.
+Every stored note starts `{"sv":N,` — a save number; on starting, the newer of
+the two copies wins. Without WebSQL everything stays in localStorage, as before.
+See THE BIG STORE in `index.html`; `test_bigstore.js` drives it against a
+stand-in database that can be closed mid-write, refuse, or never answer.
 
 ### Safari 9 rules
 
 ES5 only. No `let`/`const`, arrow functions, template literals, classes,
 `for...of`, Promises, `fetch`, Pointer Events, CSS Grid, CSS custom properties,
 flex `gap`, `clamp()`, the `download` attribute, `Array.includes`,
-`Object.assign`. Touch Events, Canvas 2D and `localStorage` (in try/catch) only.
+`Object.assign`. Touch Events, Canvas 2D, `localStorage` (in try/catch) and
+WebSQL (callbacks, no Promises) only.
 
 **A single unsupported token is a silent white screen on the iPad**, with no
 error anyone can see. `check_es5.js` is not optional.

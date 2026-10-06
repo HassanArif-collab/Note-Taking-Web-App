@@ -145,6 +145,14 @@ Build one at a time, copying how Samsung Notes does it.
 - **Maths Fix → Not part of it**: leaves a stray or far-off mark out, and
   learns the writer's reach or the shape as no symbol.
 
+## Fixed 2026-10-06 (reported: "storage is full at 5MB", "the home-screen icon has none of the new features")
+- **No more 5 MB ceiling**: notes move into the iPad's WebSQL database on the
+  first start, by themselves - unlimited from the home-screen icon (iOS 9.3.2+),
+  50 MB in Safari. localStorage keeps only the index and a passing copy.
+- **The home-screen icon stays current**: it looks for a new version each time
+  it comes back to the front, puts a downloaded one in place as it comes back,
+  and Settings > Check for updates shows the version and gets past a stale cache.
+
 ## Pen pop-up extras (seen in the videos)
 - ~~Favourite pens inside the pop-up, each with its own colour.~~ **Done** —
   the pop-up's star opens a grid of favourite pens saved whole (type, colour

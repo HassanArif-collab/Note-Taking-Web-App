@@ -3497,6 +3497,74 @@ check('...and once there is room it saves again, with nothing lost',
   check('...and when a newer version has come down it offers to restart into it',
         of.els.updBar.className === 'on', of.els.updBar.className);
 })();
+/* A home-screen app is hardly ever started afresh - its icon brings back the
+   page iOS kept - so looking for a new version only when the page loads left
+   it days behind Safari on the same iPad. It looks each time it comes back. */
+(function () {
+  var h = {}, ups = 0, swaps = 0, ac = {
+    status: 1, UPDATEREADY: 4,
+    addEventListener: function (t, fn) { h[t] = fn; },
+    update: function () { ups++; }, swapCache: function () { swaps++; }
+  };
+  var bk = H.load({ quiet: true, win: { applicationCache: ac } });
+  bk.flushFrames();
+  function front() { var hs = bk.doc._h.visibilitychange || [], i; for (i = 0; i < hs.length; i++) hs[i]({}); }
+  front();
+  check('coming back to the front, the app looks for a new version', ups === 1, ups + ' looks');
+  bk.tick(60000); front();
+  check('...not every time it comes back - at most every ten minutes', ups === 1, ups + ' looks');
+  bk.tick(10 * 60000); front();
+  check('...and again once they have passed', ups === 2, ups + ' looks');
+  ac.status = 4; front();
+  check('a new version that came down while it was away is put in place as it comes back',
+        swaps === 1 && bk.storage.getItem('mathnotes_updated') === '1', swaps + ' swaps');
+})();
+/* Settings > Check for updates: says which version this is, and when the
+   cache will not see a newer one the internet has, gets past it or says how */
+(function () {
+  var h = {}, ups = 0, swaps = 0, ac = {
+    status: 1, UPDATEREADY: 4,
+    addEventListener: function (t, fn) { h[t] = fn; },
+    update: function () { ups++; }, swapCache: function () { swaps++; }
+  };
+  var ck = H.load({ quiet: true, win: { applicationCache: ac } });
+  ck.flushFrames();
+  var build = ck.win.__mnUpd.build(), served = build, sent = [];
+  check('the app knows its own version', /^[0-9a-f]{16}$/.test(build), build);
+  /* the internet answers with the version this test says it has */
+  function Net() {}
+  Net.prototype.open = function (m, u) { this.url = u; this.hd = {}; };
+  Net.prototype.setRequestHeader = function (k, v) { this.hd[k] = v; };
+  Net.prototype.send = function () {
+    sent.push({ url: this.url, hd: this.hd });
+    this.readyState = 4; this.status = 200;
+    this.responseText = 'CACHE MANIFEST\n# version ' + served + '\n';
+    if (this.onreadystatechange) this.onreadystatechange();
+  };
+  ck.sandbox.XMLHttpRequest = Net;
+  ck.clickMenu('Check for updates');
+  check('Check for updates has the cache look at once', ups === 1, ups + ' looks');
+  h.noupdate();
+  check('...told there is nothing newer, it asks the internet itself, past every cache',
+        sent.length === 1 && /^mathnotes\.appcache\?v=\d+$/.test(sent[0].url), JSON.stringify(sent));
+  check('...and says this is the newest version', String(ck.els.toast.textContent).indexOf('newest version') >= 0,
+        String(ck.els.toast.textContent));
+  served = 'ffffffffffffffff';
+  ck.clickMenu('Check for updates'); h.noupdate();
+  check('a newer version the cache did not see: the manifest is fetched again past any stale copy, and the cache looks again',
+        sent.length === 3 && sent[2].url === 'mathnotes.appcache' && sent[2].hd['Cache-Control'] === 'no-cache' && ups === 3,
+        sent.length + ' requests, ' + ups + ' looks');
+  h.noupdate();
+  check('...and if the iPad still keeps the old one, it says what to do - without deleting anything',
+        String(ck.els.dlgTitle.textContent).indexOf('newer version') >= 0 &&
+        String(ck.els.dlgMsg.textContent).indexOf('swipe MathNotes up') >= 0 &&
+        String(ck.els.dlgMsg.textContent).indexOf('do not delete the icon') >= 0, String(ck.els.dlgTitle.textContent));
+  ck.clickMenu('Check for updates'); h.downloading(); h.updateready();
+  check('found and downloaded when asked for, it is put in place at once', swaps === 1, swaps + ' swaps');
+  ck.clickMenu('Check for updates'); h.error();
+  check('no connection: it says so', String(ck.els.toast.textContent).indexOf('Could not reach the internet') >= 0,
+        String(ck.els.toast.textContent));
+})();
 (function () {
   var cp = require('child_process'), path = require('path'), out = '';
   try { out = cp.execSync('node "' + path.join(__dirname, 'stamp_offline.js') + '" --check').toString(); }
