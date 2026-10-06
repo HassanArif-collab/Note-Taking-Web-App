@@ -316,16 +316,22 @@ yet**. Nothing is thrown away: MathNotes keeps trying and saves by itself as
 soon as there is room (free space on the iPad, or empty the trash).
 Handwriting is stored compactly — about a third of the room it used to take.
 
-### Backing up — do this
+### Backing up and putting notes back
 
-**Menu → Backup and restore → Copy my notes**, then paste the block into an email
-to yourself, or Apple Notes, or Drive. Anywhere outside this browser.
+Putting notes back is never done by pasting: an iPad 3 cannot hold a big
+backup in a text box (it froze and shut down). Instead, on the PC:
 
-iOS can clear a web app's storage without warning and the app cannot stop it. A
-backup makes that a non-event. To restore — on this iPad or any other device —
-open the same panel, paste the block in, and tap **Restore**. It merges by note,
-so running it twice is safe.
+    node scripts/lock_backup.js "the backup or the email you saved"
 
+checks the backup is whole (an email's raw source is fine), locks it into
+`restore/<id>.txt` and prints a **restore code**. Push it; then on the iPad,
+**Settings → Backup and restore**, type the code, **Restore**. The notes come
+down from the app's own site and go straight into the iPad's database. The
+file is encrypted (ChaCha20, key from the code by PBKDF2) — without the code
+it is noise, so it can sit on the public site; a wrong code finds nothing.
+
+**Copy my notes** still makes a copy by hand (slow with many notes) until
+automatic backup replaces it.
 
 ### Settings (the ⋮ menu)
 

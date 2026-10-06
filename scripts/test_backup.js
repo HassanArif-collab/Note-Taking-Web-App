@@ -131,5 +131,47 @@ check('a v4 collection is migrated, not lost',
 check('migration rewrites it into per-note keys',
       !!migrated.note('old1'));
 
-console.log('\n' + pass + ' passed, ' + fail + ' failed');
-process.exit(fail ? 1 : 0);
+/* ---------- restore with a code ----------
+ * A pasted backup froze an iPad 3. Notes now come back from the site,
+ * locked by scripts/lock_backup.js on the PC (Node's crypto) and opened by
+ * the app's own SHA-256 / PBKDF2 / ChaCha20 - which must agree exactly. */
+var crypto = require('crypto'), bk = fresh().win.__mnBackup;
+var msg = bk.utf8('h\u00e9llo \ud83d\ude29 ' + new Array(300).join('xy'));
+check('the app\'s SHA-256 agrees with Node\'s',
+      bk.hex(bk.sha256(msg)) === crypto.createHash('sha256').update(Buffer.from(msg)).digest('hex'));
+check('...its PBKDF2 too',
+      bk.hex(bk.pbkdf2(bk.utf8('K7Q2M9XA'), bk.utf8('salt'), 1000)) ===
+      crypto.pbkdf2Sync('K7Q2M9XA', 'salt', 1000, 32, 'sha256').toString('hex'));
+var ck = crypto.randomBytes(32), cn = crypto.randomBytes(12), cp = crypto.randomBytes(1000);
+var ce = new Uint8Array(crypto.createCipheriv('chacha20', ck, Buffer.concat([Buffer.alloc(4), cn])).update(cp));
+bk.chacha(new Uint8Array(ck), new Uint8Array(cn), ce);
+check('...and its ChaCha20', Buffer.from(ce).equals(cp));
+
+/* lock a backup the way lock_backup.js does, and put it back through the panel */
+function lockFor(code, packTxt) {
+  var id = crypto.createHash('sha256').update('mathnotes-restore-file:' + code).digest('hex').slice(0, 32);
+  var key = crypto.pbkdf2Sync(code, 'mathnotes-restore-key:' + id, 10000, 32, 'sha256'), nonce = crypto.randomBytes(12);
+  var c = crypto.createCipheriv('chacha20', key, Buffer.concat([Buffer.alloc(4), nonce])).update(Buffer.from(packTxt, 'utf8'));
+  var files = {};
+  files['restore/' + id + '.txt'] = 'MATHNOTES-LOCKED 1\n' + nonce.toString('hex') + '\n' + c.toString('base64') + '\n';
+  return files;
+}
+var lsrc = fresh();
+write(lsrc, 3);
+var lockedFiles = lockFor('K7Q2M9XA4HTDWP3FR8EN', lsrc.exportBackup()), lwant = lsrc.allStrokes().length;
+var ldst = fresh();
+ldst.restoreWithCode('k7q2-m9xa-4htd-wp3f-r8en', lockedFiles, function (said, a) {
+  check('restore with a code: typed in any case, with dashes, the notes come back',
+        a.allStrokes().length === lwant && String(a.els.toast.textContent).indexOf('Your notes are back') === 0,
+        a.allStrokes().length + ' of ' + lwant + ' strokes; ' + a.els.toast.textContent);
+  check('...replacing the empty note a first start makes, not sitting beside it',
+        a.state().noteIds.length === 1, a.state().noteIds.length + ' notes');
+  fresh().restoreWithCode('K7Q2M9XA4HTDWP3FR8EM', lockedFiles, function (said2) {
+    check('a wrong code finds nothing, and says so', said2.indexOf('No notes are waiting under that code') === 0, said2);
+    fresh().restoreWithCode('hello', lockedFiles, function (said3) {
+      check('...and something that is not a code is told what one looks like', said3.indexOf('20 letters and numbers') >= 0, said3);
+      console.log('\n' + pass + ' passed, ' + fail + ' failed');
+      process.exit(fail ? 1 : 0);
+    });
+  });
+});

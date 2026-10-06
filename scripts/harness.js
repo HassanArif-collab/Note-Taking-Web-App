@@ -310,14 +310,41 @@ App.prototype.exportBackup = function () {
   return this.els.backupText.value;
 };
 
-/* returns {ok:true} when the restore was applied, or the message the
- * panel showed the user when it was refused */
+/* returns {ok:true} when the restore was applied, or the message the app
+ * gave when it was refused. There is no pasting a backup back in any more
+ * (an iPad 3 cannot hold a big one in a text box); this is the check and
+ * merge a restore with a code runs once the notes are unlocked. */
 App.prototype.importBackup = function (txt) {
+  var r = this.win.__mnBackup.restore(txt);
+  this.flushFrames();
+  return typeof r === 'string' ? r : { ok: true };
+};
+
+/* Restore with a code, through the panel, the way a finger does it.
+ * `files` maps a site path (restore/<id>.txt) to its contents; anything
+ * else answers 404. Calls back with what the panel says at the end. */
+App.prototype.restoreWithCode = function (code, files, cb) {
+  var app = this;
+  function Site() {}
+  Site.prototype.open = function (m, u) { this.url = String(u).replace(/\?.*$/, ''); };
+  Site.prototype.setRequestHeader = function () {};
+  Site.prototype.send = function () {
+    var x = this;
+    setTimeout(function () {
+      x.readyState = 4;
+      x.status = Object.prototype.hasOwnProperty.call(files, x.url) ? 200 : 404;
+      x.responseText = x.status === 200 ? files[x.url] : 'Not Found';
+      if (x.onreadystatechange) x.onreadystatechange();
+    }, 1);
+  };
+  this.sandbox.XMLHttpRequest = Site;
   this.clickMenu('Backup and restore');
-  this.els.backupText.value = txt;
-  this.els.backupImportBtn._fire('click', {});
-  if (String(this.els.backupOverlay.className).indexOf('on') < 0) return { ok: true };
-  return this.els.backupInfo.textContent;
+  this.els.restoreCode.value = code;
+  this.els.restoreGoBtn._fire('click', {});
+  (function wait(n) {
+    if (!app.els.restoreGoBtn.disabled || n > 1000) { app.flushFrames(); cb(String(app.els.backupInfo.textContent), app); return; }
+    setTimeout(function () { wait(n + 1); }, 10);
+  })(0);
 };
 
 /* Requests the app attempted through XMLHttpRequest. */
