@@ -3561,9 +3561,14 @@ check('...and once there is room it saves again, with nothing lost',
         String(ck.els.dlgMsg.textContent).indexOf('do not delete the icon') >= 0, String(ck.els.dlgTitle.textContent));
   ck.clickMenu('Check for updates'); h.downloading(); h.updateready();
   check('found and downloaded when asked for, it is put in place at once', swaps === 1, swaps + ' swaps');
+  served = build;
   ck.clickMenu('Check for updates'); h.error();
-  check('no connection: it says so', String(ck.els.toast.textContent).indexOf('Could not reach the internet') >= 0,
-        String(ck.els.toast.textContent));
+  check('the cache\'s check failing is not taken for no Wi-Fi: the site says this is the newest, and so does the app',
+        String(ck.els.toast.textContent).indexOf('newest version') >= 0, String(ck.els.toast.textContent));
+  Net.prototype.send = function () { this.readyState = 4; this.status = 0; this.responseText = ''; if (this.onreadystatechange) this.onreadystatechange(); };
+  ck.clickMenu('Check for updates'); h.error();
+  check('...and when the site cannot be reached either, it says so - and what to try',
+        String(ck.els.toast.textContent).indexOf('could not reach its website') >= 0, String(ck.els.toast.textContent));
 })();
 (function () {
   var cp = require('child_process'), path = require('path'), out = '';

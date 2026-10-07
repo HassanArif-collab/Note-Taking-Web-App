@@ -18787,7 +18787,7 @@ byId('restoreGoBtn').addEventListener('click', doCodeRestore);
  * anything new is written. Settings > Check for updates looks at once, and
  * says which version this is - so the two copies can be compared. */
 /* written by scripts/stamp_offline.js - the version of the files below */
-var APP_BUILD = 'f36b76175c67a00f', APP_DATE = '2026-10-07';
+var APP_BUILD = 'd063159d6720aaf9', APP_DATE = '2026-10-07';
 var UPD_GAP = 10 * 60 * 1000;      /* coming back: look at most this often */
 var UPD_EVERY = 30 * 60 * 1000;    /* ...and this often while it stays open */
 var upd = { at: 0, ask: false, tries: 0, state: '' };
@@ -18806,7 +18806,11 @@ function initOffline() {
   if (ac.status === ac.UPDATEREADY) offerUpdate();
   window.addEventListener('online', function () { updCheck(true); }, false);
   window.addEventListener('offline', function () {
-    toast('No internet - everything still works, your notes are on this iPad');
+    /* a home-screen app waking up is told "offline" for a moment, Wi-Fi or
+       not - only a loss that lasts is worth a word */
+    setTimeout(function () {
+      if (navigator.onLine === false) toast('No internet - everything still works, your notes are on this iPad');
+    }, 5000);
   }, false);
   if (document.addEventListener) {
     document.addEventListener('visibilitychange', function () { if (!document.hidden) updBack(); }, false);
@@ -18852,7 +18856,15 @@ function updEvent(what) {
   if (what === 'downloading') { toast('Downloading the new version...'); return; }
   upd.ask = false;
   if (what === 'noupdate') updVerify();
-  else if (what === 'error') toast('Could not reach the internet to look for a new version - try again on Wi-Fi');
+  else if (what === 'error') {
+    /* the cache's own check failed - which on a home-screen app is no proof
+       there is no Wi-Fi. Ask the site itself before saying anything. */
+    updServerVersion(function (v) {
+      if (!v) toast('MathNotes could not reach its website just now - check the Wi-Fi, or close MathNotes completely and open it again');
+      else if (v === APP_BUILD) toast('You have the newest version (' + updShort() + ')');
+      else updStuck(v);
+    });
+  }
 }
 function offerUpdate() { byId('updBar').className = 'on'; }
 /* save, wait for the database to have it all, then reload into the new version */
