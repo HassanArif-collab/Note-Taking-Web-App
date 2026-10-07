@@ -1817,6 +1817,18 @@ check('eraser tool: two fingers scroll, and rub nothing out',
       le.geom().scrollY > 150 && le.strokes().length === le0,
       'scrollY ' + Math.round(le.geom().scrollY) + ', ' + (le0 - le.strokes().length) + ' erased');
 
+/* small writing keeps its size: the smoothing that trails the pen while it
+   draws is done again both ways once it lifts, so a small slow loop is not
+   shrunk and its end is where the pen came off (measured: 93% -> 100%) */
+var zs = scApp(), zsP = [], zsK;
+for (zsK = 0; zsK <= 30; zsK++) zsP.push([400 + 8 * Math.cos(zsK / 30 * 5.5), 400 + 8 * Math.sin(zsK / 30 * 5.5)]);
+scPath(zs, 1, zsP);
+var zsS = zs.strokes()[0], zsQ = zsS ? zsS.pts : [], zsX0 = 1e9, zsX1 = -1e9;
+zsQ.forEach(function (q) { zsX0 = Math.min(zsX0, q[0]); zsX1 = Math.max(zsX1, q[0]); });
+var zsE = zsQ.length ? Math.hypot(zsQ[zsQ.length - 1][0] - zsP[30][0], zsQ[zsQ.length - 1][1] - (zsP[30][1] - 56)) : 99;
+check('a small slow loop keeps its size and ends where the pen lifted',
+      zsX1 - zsX0 > 15.2 && zsE < 0.5, 'width ' + (zsX1 - zsX0).toFixed(1) + ' of 16, end off by ' + zsE.toFixed(1));
+
 /* ---------- pen pop-up: hold the pen still (Samsung's S Pen button) ---------- */
 function holdOpen(a, id, x, y) { a.down(id, x, y); a.tick(650); a.win.__mnHold(); a.flushFrames(); }
 function discDrag(a, x0, y0, x1, y1) {
