@@ -21,6 +21,13 @@
  *
  *   node scripts/lock_backup.js BACKUP_FILE        lock it, print the code
  *   node scripts/lock_backup.js --check CODE       open restore/<id>.txt again
+ *
+ * Automatic backup to Google Drive (scripts/drive_backup.gs): the web
+ * app's address is the key to the backups, so it reaches the iPad locked
+ * under the restore code too - typing the code there switches it on.
+ *
+ *   node scripts/lock_backup.js --ping URL              does the web app answer?
+ *   node scripts/lock_backup.js --drive URL --code CODE lock the address
  * ============================================================ */
 'use strict';
 var fs = require('fs');
@@ -50,6 +57,29 @@ function chacha(key, nonce, data) {
   return Buffer.concat([c.update(data), c.final()]);
 }
 function pretty(code) { return code.match(/.{4}/g).join('-'); }
+function driveFileId(code) {
+  return crypto.createHash('sha256').update('mathnotes-drive-file:' + code, 'utf8').digest('hex').slice(0, 32);
+}
+function lockInto(code, id, text) {
+  var nonce = crypto.randomBytes(12), out = chacha(keyFor(code, id), nonce, Buffer.from(text, 'utf8'));
+  fs.mkdirSync(path.join(ROOT, 'restore'), { recursive: true });
+  fs.writeFileSync(path.join(ROOT, 'restore', id + '.txt'), 'MATHNOTES-LOCKED 1\n' + nonce.toString('hex') + '\n' + out.toString('base64') + '\n');
+}
+/* GET, following Google's redirect, then cb(status, body) */
+function fetchText(url, cb, hops) {
+  require('https').get(url, function (res) {
+    var body = '';
+    if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && (hops || 0) < 5) {
+      res.resume();
+      fetchText(new URL(res.headers.location, url).toString(), cb, (hops || 0) + 1);
+      return;
+    }
+    res.setEncoding('utf8');
+    res.on('data', function (d) { body += d; });
+    res.on('end', function () { cb(res.statusCode, body); });
+  }).on('error', function (e) { cb(0, String(e.message)); });
+}
+var DRIVE_URL = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/;
 
 /* ---------- finding the backup in what was kept ---------- */
 function qpDecode(s) {
@@ -121,6 +151,29 @@ function summary(txt) {
 
 /* ---------- main ---------- */
 var args = process.argv.slice(2);
+if (args[0] === '--ping' || args[0] === '--drive') {
+  var url = String(args[1] || '').trim();
+  if (!DRIVE_URL.test(url)) {
+    console.log('FAIL: that is not a web app address - it looks like https://script.google.com/macros/s/.../exec');
+    process.exit(1);
+  }
+  if (args[0] === '--ping') {
+    fetchText(url + '?what=last', function (st, body) {
+      var r = null;
+      try { r = JSON.parse(body); } catch (e) { r = null; }
+      if (st === 200 && r && r.ok) { console.log('OK: the web app answers' + (r.at ? ' - newest copy ' + r.at : ' - no copy in Drive yet')); process.exit(0); }
+      console.log('FAIL: the web app did not answer as MathNotes (' + st + '). In the deployment, Who has access must be: Anyone.');
+      process.exit(1);
+    });
+  } else {
+    var dc = norm(args[args.indexOf('--code') + 1]);
+    if (args.indexOf('--code') < 0 || !/^[0-9A-HJKMNP-TV-Z]{20}$/.test(dc)) { console.log('FAIL: give the restore code: --code XXXX-XXXX-XXXX-XXXX-XXXX'); process.exit(1); }
+    lockInto(dc, driveFileId(dc), JSON.stringify({ mathnotes_drive: 1, u: url }));
+    console.log('OK: the backup address is locked into restore/' + driveFileId(dc) + '.txt under ' + pretty(dc));
+    process.exit(0);
+  }
+  return;
+}
 if (args[0] === '--check') {
   var code = norm(args[1]), id = fileId(code), f = path.join(ROOT, 'restore', id + '.txt');
   if (!fs.existsSync(f)) { console.log('FAIL: no restore/' + id + '.txt for that code'); process.exit(1); }
@@ -142,10 +195,8 @@ if (!pack) {
 }
 var bytes = crypto.randomBytes(20), c = '', j;
 for (j = 0; j < 20; j++) c += ABC.charAt(bytes[j] & 31);
-var fid = fileId(c), nonce = crypto.randomBytes(12);
-var out = chacha(keyFor(c, fid), nonce, Buffer.from(pack, 'utf8'));
-fs.mkdirSync(path.join(ROOT, 'restore'), { recursive: true });
-fs.writeFileSync(path.join(ROOT, 'restore', fid + '.txt'), 'MATHNOTES-LOCKED 1\n' + nonce.toString('hex') + '\n' + out.toString('base64') + '\n');
+var fid = fileId(c);
+lockInto(c, fid, pack);
 console.log('Backup found and whole: ' + summary(pack) + ' (made ' + JSON.parse(pack).at + ')');
 console.log('Locked into restore/' + fid + '.txt');
 console.log('');

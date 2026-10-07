@@ -330,8 +330,22 @@ down from the app's own site and go straight into the iPad's database. The
 file is encrypted (ChaCha20, key from the code by PBKDF2) — without the code
 it is noise, so it can sit on the public site; a wrong code finds nothing.
 
-**Copy my notes** still makes a copy by hand (slow with many notes) until
-automatic backup replaces it.
+**Automatic backup to Google Drive.** `scripts/drive_backup.gs` is a small
+Google Apps Script web app that keeps the notes in your own Drive (folder
+"MathNotes backups": the newest, and one a day for 30 days). Deploy it once
+(Execute as: Me, Who has access: Anyone), then
+
+    node scripts/lock_backup.js --ping "WEB APP URL"
+    node scripts/lock_backup.js --drive "WEB APP URL" --code YOUR-RESTORE-CODE
+
+and push `restore/`. Typing the restore code on the iPad then switches it on:
+a copy goes to Drive a little while after each change (**Settings → Automatic
+backup** shows when), and a fresh iPad given the code takes the newest copy
+from Drive. iOS 9 may not read a reply that comes through Google's redirect,
+so the copy goes as a plain POST and its arrival is read back through a
+`<script>` tag (JSONP).
+
+**Copy my notes** still makes a copy by hand (slow with many notes).
 
 ### Settings (the ⋮ menu)
 

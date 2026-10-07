@@ -4240,6 +4240,7 @@ function doSaveNow() {
     if (!big.bad) savedAgain();
   }
   checkQuota();
+  driveSoon();
 }
 /* everything is held somewhere again: take the warning down - and if the
    user was told it was not saved, tell them it is */
@@ -13364,7 +13365,9 @@ function backupSum(txt) {
   return h;
 }
 
-function buildBackup() {
+function buildBackup() { return backupPack().txt; }
+/* the backup, with its time and checksum beside it: { at, sum, txt } */
+function backupPack() {
   var out = { notebooks: notebooks, notes: {}, set: settings }, i, j;
   for (i = 0; i < notebooks.length; i++) {
     for (j = 0; j < notebooks[i].notes.length; j++) {
@@ -13372,11 +13375,8 @@ function buildBackup() {
       if (n) out.notes[n.id] = noteRecord(n);
     }
   }
-  var body = JSON.stringify(out);
-  return JSON.stringify({
-    mathnotes: 1, at: new Date().toISOString(),
-    sum: backupSum(body), body: body
-  });
+  var body = JSON.stringify(out), at = new Date().toISOString(), sum = backupSum(body);
+  return { at: at, sum: sum, txt: JSON.stringify({ mathnotes: 1, at: at, sum: sum, body: body }) };
 }
 
 function countNotes() {
@@ -13612,36 +13612,222 @@ function unlockText(code, id, file) {
   } catch (e) { return null; }
   return txt;
 }
-/* fetch the notes waiting under a code and put them back; say(msg) while it
-   works, done(result) at the end - { added, replaced } or a message */
-function restoreFromCode(typed, say, done) {
-  var code = codeNorm(typed), id, x;
-  if (!codeOk(code)) { done('A restore code is 20 letters and numbers, like K7Q2-M9XA-4HTD-WP3F-R8EN.'); return; }
-  id = lockFileId(code);
-  say('Downloading your notes...');
+/* one locked file from the site: cb(text) unlocked, cb(null) when there is
+   none under this code, cb(false, message) when it cannot be had */
+function getLocked(code, id, cb) {
+  var x;
   try { x = new XMLHttpRequest(); x.open('GET', 'restore/' + id + '.txt?t=' + Date.now(), true); }
-  catch (e) { done('Could not start the download.'); return; }
+  catch (e) { cb(false, 'Could not start the download.'); return; }
   x.onreadystatechange = function () {
     if (x.readyState !== 4) return;
-    if (x.status === 404) {
-      done('No notes are waiting under that code. Check it - or if they were only just put on the site, wait a few minutes and try again.');
-      return;
-    }
+    if (x.status === 404) { cb(null); return; }
     if (x.status !== 200) {
-      done(x.status ? 'The site answered ' + x.status + ' - try again in a minute.' : 'No internet - connect to Wi-Fi and try again.');
+      cb(false, x.status ? 'The site answered ' + x.status + ' - try again in a minute.' : 'No internet - connect to Wi-Fi and try again.');
       return;
     }
     var file = x.responseText;
-    say('Unlocking your notes...');
     /* a moment for the message to show: the unlocking holds the page */
     setTimeout(function () {
-      var txt = unlockText(code, id, file), r;
-      if (txt === null) { done('That code does not unlock these notes - check it and try again.'); return; }
-      say('Putting your notes back...');
-      setTimeout(function () { r = restoreBackup(txt); done(r); }, 30);
+      var txt = unlockText(code, id, file);
+      if (txt === null) cb(false, 'That code does not unlock these notes - check it and try again.');
+      else cb(txt);
     }, 30);
   };
-  try { x.send(null); } catch (e2) { done('No internet - connect to Wi-Fi and try again.'); }
+  try { x.send(null); } catch (e2) { cb(false, 'No internet - connect to Wi-Fi and try again.'); }
+}
+/* Everything a code holds, put back; say(msg) while it works, done(result)
+   at the end - { added, replaced, drive, from } or a message. A code can
+   carry the automatic-backup link as well as notes: the link is taken
+   first, and a fresh iPad then takes the newest copy in Google Drive. */
+function restoreFromCode(typed, say, done) {
+  var code = codeNorm(typed);
+  if (!codeOk(code)) { done('A restore code is 20 letters and numbers, like K7Q2-M9XA-4HTD-WP3F-R8EN.'); return; }
+  say('Looking for your notes...');
+  getLocked(code, driveFileId(code), function (cfg, err) {
+    var link = null, on;
+    if (cfg === false) { done(err); return; }
+    try { link = cfg ? JSON.parse(cfg) : null; } catch (e) { link = null; }
+    on = !!(link && link.mathnotes_drive === 1 && /^https:\/\/script\.google\.com\//.test(link.u || ''));
+    if (on) driveSet(link.u);
+    if (on && blankDevice()) {
+      driveRestore(say, function (r) {
+        if (r && typeof r === 'object') { r.drive = true; r.from = 'drive'; done(r); }
+        else fromSite(true);                  /* nothing in Drive yet */
+      });
+      return;
+    }
+    /* notes on this iPad already: they are the newest - only switch it on */
+    if (on) { done({ added: 0, replaced: 0, drive: true, only: true }); return; }
+    fromSite(false);
+  });
+  function fromSite(on) {
+    say('Downloading your notes...');
+    getLocked(code, lockFileId(code), function (txt, err) {
+      if (txt === false) { done(err); return; }
+      if (txt === null) {
+        if (on) { done({ added: 0, replaced: 0, drive: true, only: true }); return; }
+        done('No notes are waiting under that code. Check it - or if they were only just put on the site, wait a few minutes and try again.');
+        return;
+      }
+      say('Putting your notes back...');
+      setTimeout(function () {
+        var r = restoreBackup(txt);
+        if (r && typeof r === 'object') { r.drive = on; r.from = 'site'; }
+        done(r);
+      }, 30);
+    });
+  }
+}
+
+/* ============================================================
+ * AUTOMATIC BACKUP - to the user's own Google Drive
+ *
+ * A copy that lives only on the iPad goes when the icon goes, or when iOS
+ * clears the site's data - and copying one out by hand froze an iPad 3.
+ * So a while after each change, the whole collection is sent to a small
+ * Google Apps Script web app in the user's own Google account
+ * (scripts/drive_backup.gs), which keeps it in Drive: the newest, and one
+ * a day for thirty days.
+ *
+ * iOS 9 is particular about what it can reach. GitHub's API failed on
+ * this iPad, and an Apps Script reply always comes through a redirect to
+ * another site, which Safari 9 may refuse to let a page read. So the copy
+ * is sent as a plain POST - the script stores it whether or not the iPad
+ * may read the reply - and whether it arrived is read back through a
+ * <script> tag (JSONP), which no cross-site rule stops. A restore comes
+ * down the same way.
+ *
+ * The web app's address is the key to the backups. It reaches the iPad
+ * the way the notes did - locked on the site under the restore code
+ * (scripts/lock_backup.js --drive) - so nothing long is typed on the iPad.
+ * ============================================================ */
+var DRIVE_KEY = 'mathnotes_drive';
+var DRIVE_WAIT = 90 * 1000;          /* after a change, before a copy goes */
+var DRIVE_GAP = 10 * 60 * 1000;      /* ...and no more often than this */
+var drive = { u: '', at: '', sum: 0, state: '', timer: null, busy: false, last: 0, n: 0 };
+
+function driveFileId(code) { return hexOf(sha256(utf8Bytes('mathnotes-drive-file:' + code))).slice(0, 32); }
+function driveLoad() {
+  var c = null;
+  try { c = JSON.parse(localStorage.getItem(DRIVE_KEY) || 'null'); } catch (e) { c = null; }
+  if (c && c.u) { drive.u = c.u; drive.at = c.at || ''; drive.sum = c.sum || 0; }
+}
+function driveKeep() {
+  try { localStorage.setItem(DRIVE_KEY, JSON.stringify({ u: drive.u, at: drive.at, sum: drive.sum })); } catch (e) {}
+}
+function driveSet(u) {
+  drive.u = u; drive.at = ''; drive.sum = 0; drive.state = '';
+  driveKeep();
+}
+/* read what the web app says, through a <script> tag: cb(value) or cb(null) */
+function jsonp(url, cb, ms) {
+  var name = 'mnDrive' + (++drive.n) + 'x' + Date.now(), s = document.createElement('script'), done = false, timer;
+  function fin(v) {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    window[name] = function () {};          /* a late answer lands harmlessly */
+    try { if (s.parentNode) s.parentNode.removeChild(s); } catch (e) {}
+    cb(v);
+  }
+  window[name] = function (v) { fin(v === undefined ? null : v); };
+  s.onerror = function () { fin(null); };
+  timer = setTimeout(function () { fin(null); }, ms || 30000);
+  s.src = url + (url.indexOf('?') < 0 ? '?' : '&') + 'cb=' + name + '&t=' + Date.now();
+  document.body.appendChild(s);
+}
+/* the newest copy Drive holds: cb({ ok, at, size }) or cb(null) */
+function drivePing(cb) {
+  if (!drive.u) { cb(null); return; }
+  jsonp(drive.u + '?what=last', function (v) {
+    var r = null;
+    try { r = typeof v === 'string' ? JSON.parse(v) : null; } catch (e) { r = null; }
+    cb(r && r.ok ? r : null);
+  }, 30000);
+}
+/* after a save: a copy goes a while later, not with every stroke */
+function driveSoon() {
+  if (!drive.u || drive.timer) return;
+  drive.timer = setTimeout(driveTick, Math.max(DRIVE_WAIT, drive.last + DRIVE_GAP - Date.now()));
+}
+function driveTick() {
+  drive.timer = null;
+  /* building the copy holds the page for a moment: never under the pen */
+  if (liveTouchCount() || gesture) { drive.timer = setTimeout(driveTick, 5000); return; }
+  driveSend(false);
+}
+/* send a copy now; done(true) once Drive is seen to hold it */
+function driveSend(asked, done) {
+  var pk, x;
+  function fin(ok) { if (done) done(ok); }
+  if (!drive.u || drive.busy || !dataReady) { fin(false); return; }
+  try { pk = backupPack(); } catch (e) { fin(false); return; }
+  if (!asked && pk.sum === drive.sum) { fin(true); return; }   /* nothing new since the last copy */
+  drive.busy = true;
+  drive.last = Date.now();
+  drive.state = 'sending';
+  function check() {
+    setTimeout(function () {
+      drivePing(function (r) {
+        drive.busy = false;
+        if (r && r.at === pk.at) {
+          drive.at = pk.at; drive.sum = pk.sum; drive.state = 'ok';
+          driveKeep();
+          fin(true);
+        } else { drive.state = 'fail'; fin(false); }
+      });
+    }, 1500);
+  }
+  try {
+    x = new XMLHttpRequest();
+    x.open('POST', drive.u, true);
+    x.setRequestHeader('Content-Type', 'text/plain;charset=utf-8');
+    /* the reply may be closed to the page; whether it arrived is read back */
+    x.onreadystatechange = function () { if (x.readyState === 4) check(); };
+    x.send(pk.txt);
+  } catch (e2) { drive.busy = false; drive.state = 'fail'; fin(false); }
+}
+/* the newest copy in Drive, put back: done({ added, replaced }), or a message */
+function driveRestore(say, done) {
+  say('Bringing your newest backup down from Google Drive...');
+  jsonp(drive.u + '?what=latest', function (v) {
+    if (v === '') { done('Google Drive has no backup yet.'); return; }
+    if (typeof v !== 'string') { done('Could not reach Google Drive.'); return; }
+    say('Putting your notes back...');
+    setTimeout(function () { done(restoreBackup(v)); }, 30);
+  }, 180000);
+}
+function driveWhen(iso) {
+  var d = new Date(iso), now = new Date(), hm;
+  if (isNaN(d.getTime())) return '';
+  hm = (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes();
+  return d.toDateString() === now.toDateString() ? hm : fmtDate(d.getTime()) + ' ' + hm;
+}
+function driveStatus() {
+  if (!drive.u) return 'Off';
+  if (drive.state === 'sending') return 'Saving...';
+  if (drive.state === 'fail') return 'Not reaching Drive';
+  return drive.at ? 'Saved ' + driveWhen(drive.at) : 'On';
+}
+/* Settings > Automatic backup */
+function driveRow() {
+  if (!drive.u) {
+    dlgOpen({ title: 'Automatic backup', ok: 'OK', cancel: 'Close', done: function () {},
+      msg: 'Off. Once the Google Drive backup is set up on the computer, type your restore code in ' +
+           'Settings > Backup and restore and it switches on by itself.' });
+    return;
+  }
+  dlgOpen({ title: 'Automatic backup', ok: 'Back up now', cancel: 'Close',
+    msg: (drive.state === 'fail' ? 'The last copy did not reach Google Drive. MathNotes tries again after your next change.\n\n' :
+          drive.at ? 'The newest copy went to your Google Drive at ' + driveWhen(drive.at) + '.\n\n' : '') +
+         'A copy goes to Google Drive a little while after you write, and Drive keeps one a day for 30 days.',
+    done: function () {
+      toast('Backing up...');
+      driveSend(true, function (ok) {
+        toast(ok ? 'Backed up to Google Drive' : 'Could not reach Google Drive - check the Wi-Fi and try again');
+        buildSettings();
+      });
+    } });
 }
 
 /* ---------- backup panel ---------- */
@@ -13663,11 +13849,24 @@ function doCodeRestore() {
     btn.disabled = false;
     if (typeof r === 'string') { backupInfo.textContent = r; return; }
     backupOverlay.className = 'overlay';
-    /* the restored notes are not the one open, so go to the list -
-       otherwise a successful restore looks like a blank page */
-    showView('home');
-    renderHome();
-    toast('Your notes are back: ' + r.added + ' added' + (r.replaced ? ', ' + r.replaced + ' updated' : ''));
+    if (!r.only) {
+      /* the restored notes are not the one open, so go to the list -
+         otherwise a successful restore looks like a blank page */
+      showView('home');
+      renderHome();
+    }
+    toast(r.only ? 'Automatic backup is on - sending the first copy to Google Drive...'
+                 : 'Your notes are back' + (r.from === 'drive' ? ' from Google Drive' : '') + ': ' + r.added + ' added' +
+                   (r.replaced ? ', ' + r.replaced + ' updated' : '') + (r.drive ? '. Automatic backup is on.' : ''));
+    /* the first copy is the test: can this iPad reach Google Drive at all? */
+    if (r.drive) {
+      setTimeout(function () {
+        driveSend(true, function (ok) {
+          if (ok) toast('Automatic backup works - a copy is in your Google Drive');
+          else showWarning('Automatic backup could not reach Google Drive from this iPad. Your notes are safe on the iPad - tell Claude it said this.');
+        });
+      }, 4500);
+    }
   });
 }
 
@@ -14593,6 +14792,8 @@ window.__mnPen = function () {
 window.__mnSave = function () { saveTick(); };
 window.__mnRec = function () { return noteRecord(activeNote()); };
 window.__mnUnpackRec = unpackRec;
+window.__mnDrive = { state: function () { return { u: drive.u, at: drive.at, state: drive.state, busy: drive.busy, timer: !!drive.timer }; },
+                     send: driveSend, ping: drivePing, fileId: driveFileId, tick: driveTick };
 window.__mnBackup = { build: buildBackup, restore: restoreBackup, code: restoreFromCode, unlock: unlockText,
                       id: lockFileId, norm: codeNorm, sha256: sha256, pbkdf2: pbkdf2, chacha: chachaXor,
                       utf8: utf8Bytes, text: utf8Text, hex: hexOf };
@@ -17992,7 +18193,9 @@ var SET_SECTIONS = [
       act: function () { if (curNoteId) openCover('note', curNoteId); } },
     { lbl: 'Storage', hint: 'How much room your notes take on this iPad', leave: true, global: true,
       v: function () { return big.on ? mb(storageBytes()) + ' used' : mb(storageBytes()) + ' of ' + mb(QUOTA_CHARS); }, act: openStorage },
-    { lbl: 'Backup and restore', hint: 'Copy every note, or put one back', leave: true, global: true,
+    { lbl: 'Automatic backup', hint: 'A copy in your Google Drive a little while after you write', leave: true, global: true,
+      v: function () { return driveStatus(); }, act: driveRow },
+    { lbl: 'Backup and restore', hint: 'Put notes back with a restore code', leave: true, global: true,
       v: function () { return countNotes() + ' notes'; }, act: openBackup },
     { lbl: 'Paste', hint: 'Put back what was copied', edit: true, leave: true,
       v: function () { return clip ? (clip.items.length === 1 ? '1 item' : clip.items.length + ' items') : ''; },
@@ -18584,7 +18787,7 @@ byId('restoreGoBtn').addEventListener('click', doCodeRestore);
  * anything new is written. Settings > Check for updates looks at once, and
  * says which version this is - so the two copies can be compared. */
 /* written by scripts/stamp_offline.js - the version of the files below */
-var APP_BUILD = '4d38c5430734e095', APP_DATE = '2026-10-06';
+var APP_BUILD = 'f36b76175c67a00f', APP_DATE = '2026-10-07';
 var UPD_GAP = 10 * 60 * 1000;      /* coming back: look at most this often */
 var UPD_EVERY = 30 * 60 * 1000;    /* ...and this often while it stays open */
 var upd = { at: 0, ask: false, tries: 0, state: '' };
@@ -18738,6 +18941,7 @@ function init() {
 }
 function boot() {
   loadAll();
+  driveLoad();
   dataReady = true;
   big.rows = null;          /* read: the stored copies are not needed again */
   bigFlush();               /* removals found waiting (bigRecover) go now */

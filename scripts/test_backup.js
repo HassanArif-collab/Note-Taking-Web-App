@@ -131,6 +131,96 @@ check('a v4 collection is migrated, not lost',
 check('migration rewrites it into per-note keys',
       !!migrated.note('old1'));
 
+/* ---------- automatic backup to Google Drive ----------
+ * A stand-in for the Apps Script web app: a POST is kept (its reply closed
+ * to the page, as an iOS 9 redirect may be), and what Drive holds is read
+ * back through a <script> tag - the way the app must on an iPad 3. */
+function Google() { this.latest = ''; this.at = ''; this.posts = 0; this.down = false; }
+function wire(app, files, g) {
+  function Net() {}
+  Net.prototype.open = function (m, u) { this.m = m; this.url = String(u).replace(/\?.*$/, ''); };
+  Net.prototype.setRequestHeader = function () {};
+  Net.prototype.send = function (body) {
+    var x = this;
+    setTimeout(function () {
+      x.readyState = 4;
+      if (x.m === 'POST') {
+        if (!g.down) { g.posts++; g.latest = body; g.at = JSON.parse(body).at; }
+        x.status = 0;
+      } else {
+        x.status = Object.prototype.hasOwnProperty.call(files, x.url) ? 200 : 404;
+        x.responseText = x.status === 200 ? files[x.url] : 'Not Found';
+      }
+      if (x.onreadystatechange) x.onreadystatechange();
+    }, 1);
+  };
+  app.sandbox.XMLHttpRequest = Net;
+  var add = app.doc.body.appendChild;
+  app.doc.body.appendChild = function (el) {
+    var src = String(el.src || ''), cb = /[?&]cb=([\w$]+)/.exec(src), what = /[?&]what=(\w+)/.exec(src);
+    if (el.tagName === 'script' && cb) {
+      setTimeout(function () {
+        if (g.down) { if (el.onerror) el.onerror(); return; }
+        app.win[cb[1]](what && what[1] === 'latest' ? g.latest : JSON.stringify({ ok: 1, at: g.at, size: g.latest.length }));
+      }, 1);
+    }
+    return add.call(this, el);
+  };
+}
+function codeIn(app, code, cb) {
+  app.clickMenu('Backup and restore');
+  app.els.restoreCode.value = code;
+  app.els.restoreGoBtn._fire('click', {});
+  (function wait(n) {
+    if (!app.els.restoreGoBtn.disabled || n > 1000) { app.flushFrames(); cb(String(app.els.toast.textContent)); return; }
+    setTimeout(function () { wait(n + 1); }, 10);
+  })(0);
+}
+function driveTests() {
+  var DURL = 'https://script.google.com/macros/s/AKfyTEST-0123_abc/exec', DCODE = 'K7Q2M9XA4HTDWP3FR8EN';
+  var g = new Google(), src = fresh();
+  write(src, 4);
+  var files = lockFor(DCODE, src.exportBackup()), want = src.allStrokes().length;
+  files['restore/' + idFor('drive', DCODE) + '.txt'] = lockText(DCODE, idFor('drive', DCODE), JSON.stringify({ mathnotes_drive: 1, u: DURL }));
+  var a = fresh();
+  wire(a, files, g);
+  codeIn(a, 'k7q2 m9xa 4htd wp3f r8en', function (said) {
+    check('the code switches automatic backup on, and a fresh iPad gets its notes (Drive still empty: from the site)',
+          a.allStrokes().length === want && said.indexOf('Automatic backup is on') >= 0 && a.win.__mnDrive.state().u === DURL,
+          a.allStrokes().length + ' strokes; ' + said);
+    setTimeout(function () {
+      check('...and the first copy, sent at once, is the test: Drive holds it, read back through a script tag',
+            g.posts === 1 && a.win.__mnDrive.state().state === 'ok' && String(a.els.toast.textContent).indexOf('Automatic backup works') === 0,
+            g.posts + ' posts, ' + a.win.__mnDrive.state().state + ', ' + a.els.toast.textContent);
+      a.els.fabNew._fire('click', {}); a.flushFrames();     /* a new note, written in */
+      write(a, 1);
+      a.state();
+      check('a change starts the clock for the next copy', a.win.__mnDrive.state().timer === true);
+      a.win.__mnDrive.tick();
+      setTimeout(function () {
+        check('...which goes when the time comes, with the new writing in it',
+              g.posts === 2 && JSON.parse(JSON.parse(g.latest).body).notes && a.win.__mnDrive.state().state === 'ok',
+              g.posts + ' posts');
+        var b = fresh();
+        wire(b, files, g);
+        codeIn(b, DCODE, function (said2) {
+          check('a new iPad (or a new icon) given the code takes the newest copy from Google Drive',
+                b.allStrokes().length === want + 1 && said2.indexOf('from Google Drive') >= 0, b.allStrokes().length + ' strokes; ' + said2);
+          g.down = true;
+          var hold = setTimeout(function () {}, 60000);    /* the app's own timers do not keep node running */
+          b.win.__mnDrive.send(true, function (ok) {
+            clearTimeout(hold);
+            check('Drive out of reach: the copy is not counted as made, and Settings says so',
+                  ok === false && b.win.__mnDrive.state().state === 'fail', String(b.win.__mnDrive.state().state));
+            console.log('\n' + pass + ' passed, ' + fail + ' failed');
+            process.exit(fail ? 1 : 0);
+          });
+        });
+      }, 2500);
+    }, 7000);
+  });
+}
+
 /* ---------- restore with a code ----------
  * A pasted backup froze an iPad 3. Notes now come back from the site,
  * locked by scripts/lock_backup.js on the PC (Node's crypto) and opened by
@@ -148,12 +238,15 @@ bk.chacha(new Uint8Array(ck), new Uint8Array(cn), ce);
 check('...and its ChaCha20', Buffer.from(ce).equals(cp));
 
 /* lock a backup the way lock_backup.js does, and put it back through the panel */
-function lockFor(code, packTxt) {
-  var id = crypto.createHash('sha256').update('mathnotes-restore-file:' + code).digest('hex').slice(0, 32);
+function lockText(code, id, text) {
   var key = crypto.pbkdf2Sync(code, 'mathnotes-restore-key:' + id, 10000, 32, 'sha256'), nonce = crypto.randomBytes(12);
-  var c = crypto.createCipheriv('chacha20', key, Buffer.concat([Buffer.alloc(4), nonce])).update(Buffer.from(packTxt, 'utf8'));
+  var c = crypto.createCipheriv('chacha20', key, Buffer.concat([Buffer.alloc(4), nonce])).update(Buffer.from(text, 'utf8'));
+  return 'MATHNOTES-LOCKED 1\n' + nonce.toString('hex') + '\n' + c.toString('base64') + '\n';
+}
+function idFor(kind, code) { return crypto.createHash('sha256').update('mathnotes-' + kind + '-file:' + code).digest('hex').slice(0, 32); }
+function lockFor(code, packTxt) {
   var files = {};
-  files['restore/' + id + '.txt'] = 'MATHNOTES-LOCKED 1\n' + nonce.toString('hex') + '\n' + c.toString('base64') + '\n';
+  files['restore/' + idFor('restore', code) + '.txt'] = lockText(code, idFor('restore', code), packTxt);
   return files;
 }
 var lsrc = fresh();
@@ -170,8 +263,7 @@ ldst.restoreWithCode('k7q2-m9xa-4htd-wp3f-r8en', lockedFiles, function (said, a)
     check('a wrong code finds nothing, and says so', said2.indexOf('No notes are waiting under that code') === 0, said2);
     fresh().restoreWithCode('hello', lockedFiles, function (said3) {
       check('...and something that is not a code is told what one looks like', said3.indexOf('20 letters and numbers') >= 0, said3);
-      console.log('\n' + pass + ' passed, ' + fail + ' failed');
-      process.exit(fail ? 1 : 0);
+      driveTests();
     });
   });
 });
